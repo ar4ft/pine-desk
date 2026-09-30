@@ -1,7 +1,7 @@
-const {app,BrowserWindow,ipcMain,shell,dialog}=require('electron');
+const {app,BrowserWindow,ipcMain,shell,dialog,Menu}=require('electron');
 const path=require('node:path');
 const fs=require('node:fs/promises');
-let win;
+let win,updates;
 app.setName('Pine Desk');
 async function createWindow(){
   const {dispatch}=await import('../core/service.js');
@@ -19,6 +19,16 @@ async function createWindow(){
   win.webContents.on('will-navigate',event=>event.preventDefault());
   if(process.argv.includes('--dev'))await win.loadURL('http://127.0.0.1:5173');else await win.loadFile(path.join(__dirname,'../dist/index.html'));
 }
-app.whenReady().then(createWindow);
+app.whenReady().then(async()=>{
+  await createWindow();
+  const {createUpdates}=require('./updates.cjs');
+  updates=createUpdates({app,dialog,getWindow:()=>win});
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform==='darwin'?[{role:'appMenu'}]:[{role:'fileMenu'}]),
+    {role:'editMenu'},{role:'viewMenu'},{role:'windowMenu'},
+    {role:'help',submenu:[{label:'Check for Updates…',click:()=>updates.check()}]},
+  ]));
+});
+app.on('before-quit',()=>updates?.stop());
 app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit();});
 app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)createWindow();});

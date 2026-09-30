@@ -6,6 +6,8 @@ A local Mac trading research app built with [PineTS](https://github.com/LuxAlgo/
 
 Documentation: [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md).
 
+Signed distribution and automatic updates are prepared in the [release setup guide](docs/releases.md). Configure Apple signing/notarization secrets later, then publish a version tag.
+
 ## Run on your Mac
 
 Install Node.js **22.16+** (Node 24 recommended), then:
@@ -18,7 +20,7 @@ npm run build
 npm start
 ```
 
-For development: `npm run dev`. For a local Apple Silicon and Intel DMG/ZIP build: `npm run dist:mac`. GitHub Actions also builds both Mac architectures after tests pass; download `pine-desk-mac-unsigned` from the Actions run. These packages are unsigned and unnotarized. A Developer ID certificate and Apple notarization credentials are needed for a signed distribution build. No live trading or brokerage access is implemented.
+For development: `npm run dev`. For a local Apple Silicon and Intel DMG/ZIP build: `npm run dist:mac`. GitHub Actions also builds both Mac architectures after tests pass; download `pine-desk-mac-unsigned` from the Actions run. These packages are unsigned and unnotarized. A separate tagged release workflow signs, notarizes and publishes both architectures once Apple credentials are configured. Signed releases support automatic updates through GitHub, with a restart prompt. No live trading or brokerage access is implemented.
 
 ## What's implemented
 

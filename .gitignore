@@ -7,3 +7,8 @@ playwright-report/
 .env*
 *.log
 data/
+
+# Apple signing credentials
+*.p12
+*.p8
+*.mobileprovision
