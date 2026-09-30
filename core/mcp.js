@@ -1,0 +1,17 @@
+import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
+import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
+import {z} from 'zod';
+import {dispatch} from './service.js';
+const server=new McpServer({name:'pine-desk',version:'0.1.0'});
+const tool=(name,description,inputSchema,action,readOnly=true)=>server.registerTool(name,{description,inputSchema,annotations:{readOnlyHint:readOnly,destructiveHint:false,openWorldHint:action.startsWith('library')}},async args=>{try{return {content:[{type:'text',text:JSON.stringify(await dispatch(action,args))}]};}catch(e){return {isError:true,content:[{type:'text',text:e.message}]};}});
+tool('workspace','Read local dataset, saved scripts, and reproducible backtest runs.',{},'workspace');
+tool('load_market','Fetch up to 1,000 settled Binance candles and save the current dataset.',{symbol:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h','1d']),limit:z.number().int().min(2).max(1000).default(1000)},'loadMarket',false);
+tool('import_bars','Import OHLCV CSV (time,open,high,low,close,volume). Replaces current local dataset.',{csv:z.string().max(20000000),symbol:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h','1d'])},'importBars',false);
+tool('save_script','Save native Pine v5/v6 source locally. Preserve upstream license comments.',{name:z.string(),source:z.string().max(200000)},'saveScript',false);
+tool('run_backtest','Execute a trusted native Pine strategy on the current dataset; save source, data, settings, trades, and metrics. 30-second limit. Percent commission, percent-equity sizing, next-bar market fills.',{source:z.string().max(200000),settings:z.object({initial_capital:z.number().optional(),default_qty_value:z.number().optional(),commission_value:z.number().optional(),slippage:z.number().int().optional(),pyramiding:z.number().int().optional()}).optional()},'backtest',false);
+tool('import_trades','Import executed trade CSV: time,price,size,side. Side must be buy/sell aggressor. Replaces local trade dataset.',{csv:z.string().max(20000000),symbol:z.string()},'importTrades',false);
+tool('order_flow','Aggregate imported executed trades into footprints, delta, CVD, trade counts, and price profile. No candle-derived side estimates.',{timeframe:z.enum(['1m','5m','15m','1h','4h','1d']),tickSize:z.number().positive()},'orderflow');
+tool('library_search','Search LuxAlgo public indicator catalog over its official hosted MCP.',{query:z.string().min(1)},'librarySearch');
+tool('library_list','Browse the full LuxAlgo catalog by page.',{page:z.number().int().nonnegative().default(0)},'libraryList');
+tool('library_source','Fetch publicly served Pine source for a catalog slug. Scripts keep their own licenses.',{slug:z.string().min(1)},'librarySource');
+await server.connect(new StdioServerTransport());

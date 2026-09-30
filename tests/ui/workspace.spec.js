@@ -1,0 +1,56 @@
+import {test,expect} from '@playwright/test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+let dir,dispatch;
+test.beforeAll(async()=>{dir=await fs.mkdtemp(path.join(os.tmpdir(),'pine-desk-ui-'));process.env.PINE_DESK_DATA_DIR=dir;({dispatch}=await import('../../core/service.js'));});
+test.afterAll(async()=>{await fs.rm(dir,{recursive:true,force:true});});
+test('chart, Pine worker, actual backtest backend, analysis tabs, and order flow',async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.exposeFunction('backendCall',(action,args)=>dispatch(action,args));
+  await page.addInitScript(()=>{window.desk={call:(a,b)=>window.backendCall(a,b)};});
+  await page.goto('/');
+  await expect(page.locator('#source')).toBeVisible();
+  await expect(page.locator('#chart canvas').first()).toBeVisible();
+  await page.locator('#run-chart').click();
+  await expect(page.locator('#toast')).toContainText('Script rendered',{timeout:30000});
+  await page.locator('#run-backtest').click();
+  await expect(page.locator('#title')).toHaveText('Strategy research',{timeout:30000});
+  await expect(page.locator('#equity-plot')).toBeVisible();
+  await page.locator('[data-tab="log"]').click();
+  await expect(page.locator('tbody tr')).toHaveCount(5);
+  await page.locator('[data-tab="analysis"]').click();
+  await expect(page.locator('#trade-plot')).toBeVisible();
+  await page.locator('[data-tab="simulation"]').click();
+  await page.locator('#simulate').click();
+  await expect(page.locator('#simulation-metrics')).toContainText('Median');
+  await dispatch('importTrades',{symbol:'FIXTURE',csv:'time,price,size,side\n1767225600,65000,2,buy\n1767225601,65010,1,sell\n1767229200,65020,3,buy'});
+  await page.locator('[data-page="orderflow"]').click();await page.locator('#refresh-flow').click();
+  await expect(page.locator('#cvd-plot')).toBeVisible();
+  await page.locator('[data-page="mcp"]').click();await expect(page.getByText('MCP CLIENT CONFIGURATION')).toBeVisible();
+  await page.locator('[data-page="workspace"]').click();
+  await expect(page.locator('#chart')).toHaveAttribute('data-ready','true');
+  await page.screenshot({path:'test-results/workspace.png',fullPage:true});
+  expect(errors).toEqual([]);
+});
+test('library browse, search, import and saved Pine source',async({page})=>{
+  const source='//@version=6\nindicator("Library fixture", overlay=true)\nplot(ta.ema(close, 20), "EMA")';
+  await page.exposeFunction('backendCall',(action,args)=>{
+    if(action==='libraryList')return {total:1,indicators:[{slug:'fixture',name:'Library fixture',family:'trend',description:'A local test fixture.'}]};
+    if(action==='librarySearch')return {results:[{slug:'fixture',name:'Library fixture',family:'trend',description:'A local test fixture.'}]};
+    if(action==='librarySource')return {available:true,slug:'fixture',name:'Library fixture',source};
+    return dispatch(action,args);
+  });
+  await page.addInitScript(()=>{window.desk={call:(a,b)=>window.backendCall(a,b)};});
+  await page.goto('/');await expect(page.locator('#status')).toHaveText('Local workspace');
+  await page.locator('[data-page="library"]').click();
+  await page.locator('#browse-empty').click();
+  await expect(page.locator('.library-card h3')).toHaveText('Library fixture');
+  await page.locator('#library-query').fill('EMA');await page.locator('#search-library').click();
+  await expect(page.locator('[data-import-source]')).toBeVisible();
+  await page.locator('[data-import-source]').click();
+  await expect(page.locator('#source')).toHaveValue(source);
+  await page.locator('#run-chart').click();await expect(page.locator('#toast')).toContainText('Script rendered');
+  const workspace=await dispatch('workspace');assertSource(workspace,source);
+});
+function assertSource(workspace,source){expect(workspace.scripts.some(s=>s.source===source&&s.provenance?.slug==='fixture')).toBeTruthy();}

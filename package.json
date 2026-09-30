@@ -1,0 +1,86 @@
+{
+  "name": "pine-desk",
+  "version": "0.1.0",
+  "description": "A local Mac trading research workspace powered by PineTS and Vela",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron . --dev\"",
+    "build": "vite build",
+    "start": "electron .",
+    "test": "node --test tests/*.test.js",
+    "test:ui": "playwright test",
+    "mcp": "node core/mcp.js",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux dir",
+    "smoke:live": "node scripts/smoke-live.js",
+    "test:desktop": "npm run build && node scripts/desktop-smoke.js"
+  },
+  "keywords": [],
+  "author": "Pine Desk contributors",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "dependencies": {
+    "@luxalgo/vela": "^0.8.0",
+    "@luxalgo/vela-pinets": "^0.2.14",
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "papaparse": "^5.7.0",
+    "pinets": "^0.10.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "concurrently": "^10.0.5",
+    "electron": "^44.5.0",
+    "electron-builder": "^26.15.3",
+    "vite": "^8.3.1",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "dev.pinedesk.app",
+    "productName": "Pine Desk",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "core/**/*",
+      "package.json",
+      "LICENSE",
+      "NOTICE",
+      "README.md"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "icon": "assets/icon.png"
+    },
+    "linux": {
+      "target": "dir"
+    },
+    "asar": false
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ar4ft/pine-desk.git"
+  }
+}

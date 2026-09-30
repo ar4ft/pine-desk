@@ -1,0 +1,2 @@
+const {contextBridge,ipcRenderer}=require('electron');
+contextBridge.exposeInMainWorld('desk',{call:(action,args)=>ipcRenderer.invoke('desk:call',action,args),importCSV:()=>ipcRenderer.invoke('desk:import'),exportFile:(name,text)=>ipcRenderer.invoke('desk:export',name,text),openURL:url=>ipcRenderer.invoke('desk:open',url)});

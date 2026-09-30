@@ -1,0 +1,19 @@
+Pine Desk — independent local trading research workspace.
+
+This application incorporates:
+- PineTS by LuxAlgo and contributors, AGPL-3.0 / commercial upstream.
+  https://github.com/LuxAlgo/PineTS
+- @luxalgo/vela-pinets by LuxAlgo Global, LLC, AGPL-3.0-only.
+  https://github.com/LuxAlgo/Vela-pinets
+- Vela core by LuxAlgo Global, LLC, Apache-2.0.
+  https://github.com/LuxAlgo/Vela
+- Electron (MIT) and its Chromium/Node components under their own notices.
+- MCP TypeScript SDK (MIT), Zod (MIT), PapaParse (MIT).
+
+Dependency licenses remain in the installed packages and packaged distribution.
+Library content and Pine sources returned by the remote LuxAlgo MCP retain their
+own licenses. This repository does not redistribute the full LuxAlgo Library.
+
+Pine Script and TradingView are trademarks of TradingView, Inc. Vela and LuxAlgo
+are marks of their respective owners. This independent app is not endorsed by,
+affiliated with, or sponsored by those owners.
