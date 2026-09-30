@@ -30,7 +30,7 @@ The workflow decodes the `.p8` into a temporary runner file, restricts permissio
 
 The workflow uses GitHub's automatic `GITHUB_TOKEN` with `contents: write` in the release job; **no personal GitHub token secret is required**. Environment approval rules are optional and can be configured later in GitHub. If you enable them, GitHub will pause releases at that environment.
 
-## Publish a stable version
+## Manually publish a stable version
 
 From a clean checkout, after committing your changes:
 
@@ -41,7 +41,7 @@ git push origin main
 git push origin v0.2.0
 ```
 
-A tag push runs `.github/workflows/release.yml`. Tags must be stable `vX.Y.Z` and match `package.json`. The workflow can also be rerun manually with an **existing tag**. Do not move a published tag or overwrite an installed version: bump the version instead. Rerunning a failed build can reuse its draft release; an already published release is rejected.
+Pushing a tag does **not** sign or publish a release. Open GitHub → Actions → **Signed Mac release** → **Run workflow**, choose the main branch for the workflow, and enter the existing tag (for example `v0.2.0`). Only this manual action starts the signed release pipeline. Tags must be stable `vX.Y.Z` and match `package.json`. Do not move a published tag or overwrite an installed version: bump the version instead. Rerunning a failed build can reuse its draft release; an already published release is rejected.
 
 The workflow:
 
@@ -73,7 +73,7 @@ npm ci
 npm run dist:mac:release
 ```
 
-This signs and notarizes using the release configuration but **does not publish**. To publish, use the tagged GitHub workflow. `npm run dist:mac` continues to create ordinary development packages.
+This signs and notarizes using the release configuration but **does not publish**. To publish, manually run the Signed Mac release GitHub Action with the existing tag. `npm run dist:mac` explicitly disables signing, notarization, publishing and update metadata, including on a Mac with signing credentials installed.
 
 ## First-release acceptance checks
 

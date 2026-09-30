@@ -1,7 +1,5 @@
 name: Signed Mac release
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -11,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: signed-release-${{ inputs.tag || github.ref_name }}
+  group: signed-release-${{ inputs.tag }}
   cancel-in-progress: false
 jobs:
   verify:
@@ -19,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          ref: ${{ inputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -29,13 +27,14 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:ui
   release:
+    if: github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: macos-26-intel
     environment: release
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ inputs.tag }}
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}

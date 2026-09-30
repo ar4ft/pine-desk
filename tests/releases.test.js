@@ -54,3 +54,13 @@ test('offline manual checks show one error and allow a later retry; background e
  const h=harness({updater});await h.controller.check();assert.equal(h.messages.length,1);assert.equal(h.messages[0].type,'error');
  await h.controller.check(false);assert.equal(h.messages.length,1);await h.controller.check();assert.equal(count,3);assert.equal(h.messages.length,2);h.controller.stop();
 });
+
+test('signed pipeline is manual only and development packaging explicitly disables signing',async()=>{
+ const yaml=require('js-yaml');
+ const workflow=yaml.load(await fs.readFile(new URL('../.github/workflows/release.yml',import.meta.url),'utf8'));
+ assert.deepEqual(Object.keys(workflow.on),['workflow_dispatch']);
+ assert.equal(workflow.jobs.release.if,"github.event_name == 'workflow_dispatch'");
+ const config=require('../electron-builder.dev.cjs');
+ assert.equal(config.mac.identity,null);assert.equal(config.mac.notarize,false);assert.equal(config.forceCodeSigning,false);assert.equal(config.publish,null);assert.deepEqual(config.extraResources,[]);
+ assert.match(require('../package.json').scripts['dist:mac'],/--config electron-builder.dev.cjs/);
+});
