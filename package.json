@@ -10,8 +10,8 @@
     "test": "node --test tests/*.test.js",
     "test:ui": "playwright test",
     "mcp": "node core/mcp.js",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:linux": "npm run build && electron-builder --linux dir",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && electron-builder --linux dir --publish never",
     "smoke:live": "node scripts/smoke-live.js",
     "test:desktop": "npm run build && node scripts/desktop-smoke.js"
   },
