@@ -1,6 +1,6 @@
 {
   "name": "pine-desk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A local Mac trading research workspace powered by PineTS and Vela",
   "main": "electron/main.cjs",
   "scripts": {
@@ -22,12 +22,23 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/legacy-modes": "^6.5.4",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@lezer/highlight": "^1.2.5",
     "@luxalgo/vela": "^0.8.0",
     "@luxalgo/vela-pinets": "^0.2.14",
     "@modelcontextprotocol/sdk": "^1.31.0",
     "electron-updater": "^6.8.9",
+    "https-proxy-agent": "^9.1.0",
     "papaparse": "^5.7.0",
     "pinets": "^0.10.0",
+    "ws": "^8.22.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

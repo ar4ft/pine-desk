@@ -6,14 +6,37 @@ import {orderflow} from './orderflow.js';
 import {libraryCall} from './library.js';
 import {configureEdge,edgeConfig,edgeOverview,edgeCall} from './edge-stats.js';
 import {whaleConfig,configureWhale,whaleCall} from './whale-options.js';
+import {BinanceLive} from './live.js';
+import {ResearchJobs,compareRuns} from './research.js';
 import * as store from './store.js';
+let liveWrite=Promise.resolve();
+export const live=new BinanceLive({onClosed:dataset=>{const snapshot=structuredClone(dataset);liveWrite=liveWrite.catch(()=>{}).then(()=>store.write('bars',snapshot));liveWrite.catch(error=>console.warn('Could not persist settled live candles:',error.message));}});
+export const researchJobs=new ResearchJobs();
+export function shutdown(){live.stop();researchJobs.stop();}
+async function datasetFor(args){return structuredClone(args.dataset??(live.active?live.snapshot().dataset:null)??await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'});}
 export async function dispatch(action,args={}) {
   switch(action){
-    case 'workspace':return {dataset:await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'},scripts:[...examples,...await store.list('scripts')],runs:(await store.list('runs')).sort((a,b)=>b.createdAt-a.createdAt).slice(0,30),dataDir:store.dataDir};
-    case 'loadMarket':{const bars=await fetchBinance(args);return store.write('bars',{bars,symbol:args.symbol,timeframe:args.timeframe,origin:'Binance • closed candles',loadedAt:Date.now()});}
-    case 'importBars':{if(!durations[args.timeframe])throw new Error('Unsupported timeframe.');return store.write('bars',{bars:args.csv?parseCSV(args.csv):validateBars(args.bars),symbol:String(args.symbol||'CSV').slice(0,40),timeframe:args.timeframe,origin:'Imported OHLCV',loadedAt:Date.now()});}
+    case 'workspace':return {dataset:await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'},scripts:[...examples,...await store.list('scripts')],runs:(await store.list('runs')).sort((a,b)=>b.createdAt-a.createdAt).slice(0,30),savedStudies:(await store.list('research-index')).sort((a,b)=>b.createdAt-a.createdAt).slice(0,20).map(({id,kind,status,createdAt})=>({id,kind,status:status==='running'?(researchJobs.jobs.get(id)?.status??'unavailable'):status,createdAt})),dataDir:store.dataDir};
+    case 'loadMarket':{live.stop();await liveWrite;const bars=await fetchBinance(args);return store.write('bars',{bars,symbol:args.symbol,timeframe:args.timeframe,origin:'Binance • closed candles',loadedAt:Date.now()});}
+    case 'importBars':{live.stop();await liveWrite;if(!durations[args.timeframe])throw new Error('Unsupported timeframe.');return store.write('bars',{bars:args.csv?parseCSV(args.csv):validateBars(args.bars),symbol:String(args.symbol||'CSV').slice(0,40),timeframe:args.timeframe,origin:'Imported OHLCV',loadedAt:Date.now()});}
     case 'saveScript':{const source=validateSource(args.source),id=args.id??randomUUID();const script={id,name:String(args.name||'Untitled').slice(0,100),source,provenance:args.provenance??null,updatedAt:Date.now()};return store.write('scripts',script,id);}
-    case 'backtest':{const dataset=args.dataset??await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'};const result=await runBacktest({...dataset,source:args.source,settings:args.settings});const run={id:randomUUID(),createdAt:Date.now(),source:args.source,settings:args.settings??{},dataset,result};await store.write('runs',run,run.id);return run;}
+    case 'backtest':{const dataset=await datasetFor(args);const result=await runBacktest({...dataset,source:args.source,settings:args.settings,inputs:args.inputs});const run={id:randomUUID(),createdAt:Date.now(),source:args.source,settings:args.settings??{},inputs:args.inputs??{},dataset,result};await store.write('runs',run,run.id);return run;}
+    case 'liveStart':return live.start(args);
+    case 'liveSnapshot':return live.snapshot();
+    case 'liveStop':{const snapshot=live.stop();await liveWrite;return snapshot;}
+    case 'liveFlow':return live.flow(args);
+    case 'liveSaveTrades':return store.write('trades',live.tradeSnapshot());
+    case 'researchStart':return researchJobs.start({...args,dataset:await datasetFor(args)});
+    case 'researchGet':return researchJobs.get(args.id);
+    case 'researchCancel':return researchJobs.cancel(args.id);
+    case 'compareRuns':{if(!Array.isArray(args.ids)||new Set(args.ids).size!==args.ids.length)throw new Error('Choose distinct saved runs.');const runs=await Promise.all(args.ids.map(id=>store.read('runs',id)));if(runs.some(run=>!run))throw new Error('Saved run not found.');return compareRuns(runs);}
+    case 'researchSaveRun':{
+      const job=await researchJobs.get(args.id);if(job.status!=='completed')throw new Error('Study must complete before saving a run.');
+      const r=job.result;let result,inputs,dataset=r.dataset;
+      if(r.kind==='sweep'){const candidate=r.candidates.find(c=>c.index===args.index);if(!candidate?.result)throw new Error('Choose a completed candidate.');result=candidate.result;inputs=candidate.inputs;}
+      else{const fold=r.folds.find(f=>f.index===args.fold);if(!fold)throw new Error('Choose an existing fold.');result=fold.testResult;inputs=fold.inputs;dataset={...dataset,bars:dataset.bars.slice(fold.window.testStart,fold.window.testEnd)};}
+      const run={id:randomUUID(),createdAt:Date.now(),source:r.source,settings:r.settings,inputs:{...r.inputs,...inputs},dataset,result,researchId:job.id};return store.write('runs',run,run.id);
+    }
     case 'simulate':return simulate(args.trades,args.options);
     case 'importTrades':return store.write('trades',{trades:args.csv?parseCSV(args.csv,'trades'):validateTrades(args.trades),symbol:String(args.symbol||'CSV').slice(0,40),importedAt:Date.now()});
     case 'orderflow':{const stored=await store.read('trades');if(!stored)throw new Error('Import trade CSV first. OHLCV candles do not contain aggressor-side data.');return {...orderflow(stored.trades,args),symbol:stored.symbol};}

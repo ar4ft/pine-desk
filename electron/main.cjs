@@ -1,14 +1,14 @@
 const {app,BrowserWindow,ipcMain,shell,dialog,Menu}=require('electron');
 const path=require('node:path');
 const fs=require('node:fs/promises');
-let win,updates;
+let win,updates,shutdown;
 app.setName('Pine Desk');
 async function createWindow(){
-  const {dispatch}=await import('../core/service.js');
+  const service=await import('../core/service.js');const {dispatch}=service;shutdown=service.shutdown;
   win=new BrowserWindow({width:1510,height:980,minWidth:1100,minHeight:740,title:'Pine Desk',backgroundColor:'#0b1018',titleBarStyle:'hiddenInset',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   const trusted=event=>{const url=event.senderFrame?.url??'';return event.sender===win.webContents&&(app.isPackaged?url.startsWith('file://'):url.startsWith('file://')||url.startsWith('http://127.0.0.1:5173/'));};
   ipcMain.removeHandler('desk:call');
-  ipcMain.handle('desk:call',async(event,action,args)=>{if(!trusted(event))throw new Error('Untrusted window.');return dispatch(action,args);});
+  ipcMain.handle('desk:call',async(event,action,args)=>{if(!trusted(event))throw new Error('Untrusted window.');try{return await dispatch(action,args);}catch(error){if(error.diagnostic)throw new Error(JSON.stringify({pineDeskError:true,diagnostic:error.diagnostic}));throw error;}});
   ipcMain.removeHandler('desk:import');
   ipcMain.handle('desk:import',async(event)=>{if(!trusted(event))throw new Error('Untrusted window.');const selection=await dialog.showOpenDialog(win,{properties:['openFile'],filters:[{name:'CSV',extensions:['csv']}]});if(selection.canceled)return null;const stat=await fs.stat(selection.filePaths[0]);if(stat.size>20_000_000)throw new Error('CSV must be smaller than 20 MB.');return fs.readFile(selection.filePaths[0],'utf8');});
   ipcMain.removeHandler('desk:export');
@@ -29,6 +29,6 @@ app.whenReady().then(async()=>{
     {role:'help',submenu:[{label:'Check for Updates…',click:()=>updates.check()}]},
   ]));
 });
-app.on('before-quit',()=>updates?.stop());
+app.on('before-quit',()=>{updates?.stop();shutdown?.();});
 app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit();});
 app.on('activate',()=>{if(BrowserWindow.getAllWindows().length===0)createWindow();});

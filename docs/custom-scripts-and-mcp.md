@@ -2,7 +2,7 @@
 
 ## Write and save Pine scripts
 
-Open Workspace, replace the editor content, give it a name, and choose Save. Pine Desk supports native Pine v5/v6 through PineTS. Run chart executes through the official `@luxalgo/vela-pinets` worker addon, currently 0.2.14. Vela draws the resulting plots and exposes indicator settings. This integration was already included in the original edition; strategies now receive app sizing/cost properties on their initial chart execution.
+Open Workspace, replace the editor content, give it a name, and choose Save. The editor includes Pine syntax highlighting, line numbers, Ctrl-Space autocomplete, snippets, Tab indentation, search (Cmd/Ctrl-F) and undo. Completion covers common builtins and local variables; this is not a full Pine language server. Pine Desk supports native Pine v5/v6 through PineTS. Run chart executes through the official `@luxalgo/vela-pinets` worker addon, currently 0.2.14. Vela draws the resulting plots and exposes indicator settings. This integration was already included in the original edition; strategies now receive app sizing/cost properties on their initial chart execution.
 
 A custom indicator:
 
@@ -30,7 +30,7 @@ plot(fast)
 plot(slow)
 ```
 
-Choose Backtest to inspect trades and equity. App cost/sizing overrides are documented in the README. PineTS compatibility is not identical to TradingView; use supported features and inspect errors. Chart and backtest executions have an initial 30-second deadline. Only run trusted scripts; backtest worker isolation is not a security sandbox.
+Choose Backtest to inspect trades and equity. App cost/sizing overrides are documented in the README. PineTS compatibility is not identical to TradingView; use supported features and inspect errors. Chart and backtest executions have an initial 30-second deadline. Compilation/execution errors stay in an editor panel; when the runtime identifies a Pine line, the gutter marks it and Go to line jumps there. JavaScript stack positions are not assumed to be Pine source locations. Errors from later live chart executions are also surfaced. Only run trusted scripts; backtest worker isolation is not a security sandbox.
 
 ## Connect an LLM through MCP
 
@@ -56,3 +56,5 @@ Example agent request: “Read my current dataset. Save a Pine v6 EMA crossover 
 For Edge Stats, ask the agent to check coverage first and preserve N, Wilson CI, minimum-sample guards, normalized query and data cutoff. For Whale Options, start with status, then inspect event reasons and score components; preserve cold-start and feed-label caveats and GEX positioning assumptions. Configure those local endpoints in the desktop app first. See [Edge Stats](edge-stats.md) and [Whale Options](whale-options.md).
 
 Reference documentation: [PineTS](https://github.com/LuxAlgo/PineTS), [Vela PineTS addon](https://github.com/LuxAlgo/Vela-pinets), [Vela](https://velacharts.dev/), [LuxAlgo documentation index](https://www.luxalgo.com/llms.txt).
+
+Continuous streams and parameter research are documented in [Live data](live-data.md) and [Strategy research](strategy-research.md). The MCP server exposes their process-local controls and saved results.

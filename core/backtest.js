@@ -11,15 +11,23 @@ export function validateSettings(settings={}) {
   }
   return {...settings,default_qty_type:'percent_of_equity',commission_type:'percent',process_orders_on_close:false};
 }
-export function runBacktest({bars,source,settings={},timeframe='1h',symbol='CSV',timeoutMs=30000}) {
-  bars=validateBars(bars);source=validateSource(source);settings=validateSettings(settings);
+export function validateInputs(inputs={}) {
+  if(!inputs||typeof inputs!=='object'||Array.isArray(inputs)||Object.keys(inputs).length>50||Object.entries(inputs).some(([key,value])=>!key||key.length>100||!['string','number','boolean'].includes(typeof value)||(typeof value==='number'&&!Number.isFinite(value))||(typeof value==='string'&&value.length>1000)))throw new Error('Inputs must map Pine input titles/IDs to finite numbers, strings or booleans (maximum 50).');
+  return inputs;
+}
+export function runBacktest({bars,source,settings={},inputs={},timeframe='1h',symbol='CSV',timeoutMs=30000,signal}) {
+  bars=validateBars(bars);source=validateSource(source);settings=validateSettings(settings);inputs=validateInputs(inputs);
   if(!durations[timeframe])throw new Error('Unsupported timeframe.');
   return new Promise((resolve,reject)=>{
-    const worker=new Worker(new URL('./backtest-worker.js',import.meta.url),{execArgv:[],workerData:{bars,source,settings,timeframe,symbol},resourceLimits:{maxOldGenerationSizeMb:512}});
-    const timer=setTimeout(()=>{worker.terminate();reject(new Error('Script exceeded the 30-second execution limit.'));},timeoutMs);
-    worker.once('message',msg=>{clearTimeout(timer);worker.terminate();msg.ok?resolve(msg.result):reject(new Error(msg.error));});
-    worker.once('error',err=>{clearTimeout(timer);reject(err);});
-    worker.once('exit',code=>{clearTimeout(timer);reject(new Error(`Script worker stopped without a result (${code}).`));});
+    const worker=new Worker(new URL('./backtest-worker.js',import.meta.url),{execArgv:[],workerData:{bars,source,settings,inputs,timeframe,symbol},resourceLimits:{maxOldGenerationSizeMb:512}});
+    let timer,settled=false;
+    const finish=(error,result)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);worker.terminate();error?reject(error):resolve(result);};
+    const abort=()=>finish(new Error('Research job cancelled.'));
+    timer=setTimeout(()=>finish(new Error(`Script exceeded the ${timeoutMs/1000}-second execution limit.`)),timeoutMs);
+    if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});
+    worker.once('message',msg=>{if(msg.ok)finish(null,msg.result);else{const error=new Error(msg.error);error.diagnostic=msg.diagnostic;finish(error);}});
+    worker.once('error',err=>finish(err));
+    worker.once('exit',code=>finish(new Error(`Script worker stopped without a result (${code}).`)));
   });
 }
 export function simulate(trades,{initialCapital=10000,paths=200,seed=42}={}) {

@@ -9,6 +9,8 @@ This application incorporates:
   https://github.com/LuxAlgo/Vela
 - Electron (MIT) and its Chromium/Node components under their own notices.
 - MCP TypeScript SDK (MIT), Zod (MIT), PapaParse (MIT).
+- CodeMirror and Lezer editor packages (MIT), ws (MIT), https-proxy-agent (MIT).
+- electron-updater and electron-builder (MIT).
 
 Dependency licenses remain in the installed packages and packaged distribution.
 Library content and Pine sources returned by the remote LuxAlgo MCP retain their

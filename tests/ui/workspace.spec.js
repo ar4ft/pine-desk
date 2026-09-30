@@ -10,7 +10,7 @@ test('chart, Pine worker, actual backtest backend, analysis tabs, and order flow
   await page.exposeFunction('backendCall',(action,args)=>dispatch(action,args));
   await page.addInitScript(()=>{window.desk={call:(a,b)=>window.backendCall(a,b)};});
   await page.goto('/');
-  await expect(page.locator('#source')).toBeVisible();
+  await expect(page.locator('#pine-editor .cm-content')).toBeVisible();
   await expect(page.locator('#chart canvas').first()).toBeVisible();
   await page.locator('#run-chart').click();
   await expect(page.locator('#toast')).toContainText('Script rendered',{timeout:30000});
@@ -82,3 +82,39 @@ test('Edge Stats evidence and Whale Options audit panels preserve upstream cavea
  await expect(page.locator('#whale-panel')).toContainText('Dealer positioning is an assumption.');
  expect(errors).toEqual([]);
 });
+test('Pine editor highlights, completes, reports errors, and runs sweeps and walk-forward studies',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.exposeFunction('backendCall',(action,args)=>dispatch(action,args));await page.addInitScript(()=>{window.desk={call:(a,b)=>window.backendCall(a,b)};});
+ await page.goto('/');await expect(page.locator('#pine-editor .cm-content')).toBeVisible();
+ const editor=page.locator('#pine-editor .cm-content');await expect(page.locator('.cm-lineNumbers')).toBeVisible();
+ await editor.fill('//@version=6\nindicator("Complete")\nplot(ta.em');await editor.press('Control+Space');await expect(page.locator('.cm-tooltip-autocomplete')).toContainText('ta.ema');await editor.press('Escape');
+ await editor.fill('//@version=6\nindicator("Bad")\nplot(');await page.locator('#run-chart').click();await expect(page.locator('#editor-errors')).toContainText('error',{timeout:30000});
+ const source='//@version=6\nstrategy("Research fixture")\nexitBar = input.int(4, "Exit bar")\nif bar_index == 0\n    strategy.entry("Long", strategy.long, qty=0.01)\nif bar_index == exitBar\n    strategy.close("Long")';
+ await editor.fill(source);await page.locator('#run-backtest').click();await expect(page.locator('#research-panel')).toBeVisible();
+ await page.locator('#research-grid').fill('{"Exit bar":[2,4]}');await page.locator('#research-start').click();await expect(page.locator('#research-progress')).toContainText('completed',{timeout:30000});await expect(page.locator('[data-study-run]')).toHaveCount(2);
+ await page.locator('[data-study-run]').first().click();await expect(page.locator('#research-inputs')).toHaveValue('{"Exit bar":2}');
+ await page.locator('[data-compare-run]').first().check();await page.locator('[data-compare-run]').nth(1).check();await page.locator('#compare-runs').click();await expect(page.locator('#comparison-plot')).toBeVisible();
+ await page.locator('#research-kind').selectOption('walkForward');await page.locator('#research-trainBars').fill('200');await page.locator('#research-testBars').fill('100');await page.locator('#research-folds').fill('2');await page.locator('#research-start').click();await expect(page.locator('#research-progress')).toContainText('completed',{timeout:30000});await expect(page.locator('[data-study-fold]')).toHaveCount(2);await expect(page.locator('#research-panel')).toContainText('no pre-test warmup');
+ expect(errors).toEqual([]);await page.screenshot({path:'test-results/research.png',fullPage:true});
+});
+test('continuous live updates preserve editor drafts and drive live order flow from the backend',async({page})=>{
+ const {live}=await import('../../core/service.js');const {EventEmitter}=await import('node:events');
+ const oldHistory=live.fetchHistory,oldSocket=live.createSocket;let socket;
+ const start=Date.UTC(2026,0,1),history=[0,1].map(i=>({time:start+i*60000,open:100,high:105,low:95,close:101+i,volume:10}));
+ live.fetchHistory=async()=>history;live.createSocket=()=>{socket=new EventEmitter();socket.terminate=()=>socket.emit('close');queueMicrotask(()=>socket.emit('open'));return socket;};
+ try{
+  await page.exposeFunction('backendCall',(action,args)=>dispatch(action,args));await page.addInitScript(()=>{window.desk={call:(a,b)=>window.backendCall(a,b)};});await page.goto('/');await expect(page.locator('#status')).toHaveText('Local workspace');
+  await page.locator('#timeframe').selectOption('1m');await page.locator('#live-start').click();await expect(page.locator('#live-status')).toContainText('STREAMING',{timeout:10000});
+  const draft='//@version=6\nindicator("Live draft")\nplot(close)';await page.locator('#pine-editor .cm-content').fill(draft);
+  socket.emit('message',JSON.stringify({e:'kline',s:'BTCUSDT',k:{t:start+120000,i:'1m',o:'102',h:'110',l:'100',c:'108',v:'4',x:false}}));
+  socket.emit('message',JSON.stringify({e:'trade',s:'BTCUSDT',t:1,T:start+120001,p:'108',q:'2',m:false}));
+  socket.emit('message',JSON.stringify({e:'trade',s:'BTCUSDT',t:2,T:start+120002,p:'107',q:'1',m:true}));
+  await expect(page.locator('#market-price')).toHaveText('108.00',{timeout:10000});await expect(page.locator('#source')).toHaveValue(draft);assertBars(live.snapshot().dataset.bars,2);
+  socket.emit('message',JSON.stringify({e:'kline',s:'BTCUSDT',k:{t:start+300000,i:'1m',o:'102',h:'112',l:'100',c:'110',v:'4',x:true}}));
+  socket.emit('message',JSON.stringify({e:'kline',s:'BTCUSDT',k:{t:start+360000,i:'1m',o:'110',h:'115',l:'108',c:'112',v:'4',x:false}}));
+  await expect(page.locator('#market-price')).toHaveText('112.00');await expect(page.locator('#live-status')).not.toContainText('error');await expect(page.locator('#source')).toHaveValue(draft);
+  await page.locator('[data-page="orderflow"]').click();await page.locator('#flow-source').selectOption('live');await expect(page.locator('#cvd-plot')).toBeVisible();await expect(page.locator('.metrics')).toContainText('2');
+  await page.locator('[data-page="workspace"]').click();await page.locator('#live-stop').click();await expect(page.locator('#live-status')).toContainText('stopped');await expect(page.locator('#source')).toHaveValue(draft);
+ }finally{live.stop();live.fetchHistory=oldHistory;live.createSocket=oldSocket;}
+});
+function assertBars(bars,length){expect(bars.length).toEqual(length);}

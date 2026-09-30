@@ -4,7 +4,7 @@ A local Mac trading research app built with [PineTS](https://github.com/LuxAlgo/
 
 ![Pine Desk chart workspace](docs/workspace.png)
 
-Documentation: [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md).
+Documentation: [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md).
 
 Signed distribution and automatic updates are prepared in the [release setup guide](docs/releases.md). Configure Apple signing/notarization secrets later, then manually run the Signed Mac release Action with an existing version tag.
 
@@ -24,17 +24,18 @@ For development: `npm run dev`. For a local Apple Silicon and Intel DMG/ZIP buil
 
 ## What's implemented
 
-* **Charts:** Vela candlesticks, interactive navigation, drawings, volume, and a Pine editor with worker-based execution and a 30-second initial run deadline. Save scripts locally. Editor drafts survive restart.
-* **Data:** Fetch up to 1,000 settled Binance candles for 1m/5m/15m/1h/4h/1d. Import up to 50,000 OHLCV candles from CSV. Synthetic demo data is clearly labeled and requires no network.
+* **Charts:** Vela candlesticks, interactive navigation, drawings, volume, and a Pine editor with worker-based execution and a 30-second initial run deadline. Save scripts locally. The CodeMirror editor adds syntax highlighting, line numbers, autocomplete/snippets, search, undo, indentation and execution diagnostics. Editor drafts survive restart.
+* **Data:** Fetch up to 1,000 settled Binance candles for 1m/5m/15m/1h/4h/1d. Import up to 50,000 OHLCV candles from CSV. Start/stop a continuous public Binance spot stream for candles and raw trades, with reconnects, candle reconciliation and visible trade-gap warnings. Forming candles stay outside research snapshots. Synthetic demo data is clearly labeled and requires no network.
 * **LuxAlgo library:** Paginate the full catalog or search it through the official `https://mcp.luxalgo.com/mcp`. A live integration check returned 806 catalog entries on September 30, 2026. Fetch public source on demand, preserve it verbatim with provenance, save it, and run it in the chart. There is no bundled copy of all scripts.
 * **Backtests:** Native PineTS `strategy(...)` execution, adjustable starting capital, percent-equity sizing, percent commission, tick slippage, no pyramiding beyond the configured limit, and next-bar market orders. View mark-to-market equity, closed-trade profit, trade count, win rate, drawdown, profit factor, long/short splits, per-trade P&L, and a trade ledger. Save/export the exact source, dataset, settings, and results for reproducibility.
+* **Strategy research:** Bounded input parameter sweeps, rolling chronological walk-forward selection/testing, cancellable background jobs, saved study snapshots and 2–6 run comparisons with normalized equity. Walk-forward test windows reset state/capital without pre-test warmup; their closed P&L sum is not a continuous compounded portfolio.
 * **Simulation:** Seeded Monte Carlo resampling of closed-trade **net cash P&L** with replacement, 200 paths, profit quantiles and loss probability. This does not compound position sizes or model intra-trade drawdown or dependence between trades.
-* **Order flow:** Import executed trades with explicit aggressor sides. Compute per-bar footprints, volume delta, CVD, buy/sell trade counts, a full-import volume profile, and POC. View latest-bar footprint, profile, and CVD. No buy/sell sides are inferred from OHLCV.
+* **Order flow:** Import executed trades with explicit aggressor sides. Compute per-bar footprints, volume delta, CVD, buy/sell trade counts, a full-import volume profile, and POC. View latest-bar footprint, profile, and CVD. Live Binance order flow uses the buyer-is-maker flag for aggressor side and retains the latest 50,000 raw prints. Live CVD/profile covers that window with explicit gap warnings. No buy/sell sides are inferred from OHLCV.
 * **Edge Stats:** Official public hosted reports, coverage and freshness; optional local engine for custom DSL queries, preset parameters, grouped evidence and session-bar charts. Results retain N, Wilson confidence intervals and minimum-sample guards.
 * **Whale Options:** Optional local engine connection for options flow, score/quote audits, gamma ladders, OI changes, max pain, IV history and net premium. Synthetic feed setup and licensed provider routes are documented.
 * **MCP:** A separate local stdio server shares the app's dataset, scripts, imported trades, and saved runs. Official public LuxAlgo catalog calls are forwarded through its hosted MCP.
 
-This is a working first research edition, not full parity with the LuxAlgo platform. It does not implement TPO, session/rolling profiles, footprint imbalances, order books, all platform screeners, parameter optimization, or a standalone calendar engine, broker execution, or LuxAlgo account authentication. Library indicators are not automatically converted to strategies; specify entry/exit logic in a `strategy(...)` script.
+This is a working first research edition, not full parity with the LuxAlgo platform. It does not implement TPO, session/rolling profiles, footprint imbalances, order books, all platform screeners, nested/anchored optimization, session-aware walk-forward windows, or a standalone calendar engine, broker execution, or LuxAlgo account authentication. Library indicators are not automatically converted to strategies; specify entry/exit logic in a `strategy(...)` script.
 
 ## Chart and backtest workflow
 
@@ -87,7 +88,7 @@ With Node installed and `npm ci` completed, add this to an MCP client supporting
 
 The URL entry requires a client supporting Streamable HTTP; some clients use a different remote-server configuration shape. Public library tools need no key. The local server's stdout is reserved for MCP protocol traffic. `npm run mcp` also starts it; this is not an HTTP endpoint inside the desktop app.
 
-Additional integration tools: seven `edge_*` tools and nine `whale_*` read-only tools (documented in their setup guides). These forward to the selected upstream services; their stores are separate from the chart dataset.
+Additional tools: five `live_*` streaming/flow tools, four `research_*` study tools plus `compare_runs`, seven `edge_*` tools and nine `whale_*` read-only tools (documented in their setup guides). These forward to the selected upstream services; their stores are separate from the chart dataset.
 
 Local workspace tools: `workspace`, `load_market`, `import_bars`, `save_script`, `run_backtest`, `import_trades`, `order_flow`, `library_search`, `library_list`, `library_source`. Tool descriptions distinguish reads from local mutations. Only execute scripts you trust. Worker threads provide deadlines and memory limits, **not a security sandbox**; PineTS transpiles source into JavaScript in the local Node process. Do not expose the local server to untrusted remote callers.
 
@@ -104,7 +105,7 @@ npm run smoke:live   # optional: contacts public LuxAlgo MCP and Binance
 npm run smoke:integrations # optional: requires local Edge demo + Whale synthetic servers
 ```
 
-Tests verify known strategy fills and commissions, open-position accounting, execution deadlines, CSV validation, true-side order flow, seeded simulation, upstream MCP forwarding and result guards, MCP handshake and persistence, and browser UI flows using the real local service. UI tests use a browser bridge in place of Electron IPC. Mac packaging runs separately in CI. On Linux, the desktop smoke test uses a display (for example `xvfb-run -a npm run test:desktop`).
+Tests verify known strategy fills and commissions, open-position accounting, execution deadlines, CSV validation, true-side order flow, reconnect/buffer/dedup logic, Pine input overrides, train-only walk-forward selection, research cancellation, editor completion/errors, live UI draft preservation, seeded simulation, upstream MCP forwarding and result guards, MCP handshake and persistence, and browser UI flows using the real local service. UI tests use a browser bridge in place of Electron IPC. Mac packaging runs separately in CI. On Linux, the desktop smoke test uses a display (for example `xvfb-run -a npm run test:desktop`).
 
 ## Licensing and source access
 

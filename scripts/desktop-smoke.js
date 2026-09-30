@@ -9,7 +9,7 @@ if(process.platform==='linux')args.push('--no-sandbox');
 const app=await electron.launch({args,...(process.env.PINE_DESK_PACKAGED_PATH?{executablePath:process.env.PINE_DESK_PACKAGED_PATH}:{}),env:{...process.env,PINE_DESK_DATA_DIR:dir},timeout:30000});
 try{
   const page=await app.firstWindow();
-  await page.waitForSelector('#source');
+  await page.waitForSelector('#pine-editor .cm-content');
   const workspace=await page.evaluate(()=>window.desk.call('workspace'));
   assert.equal(workspace.dataset.bars.length,500);
   await page.locator('#run-chart').click();
@@ -18,5 +18,12 @@ try{
   await page.waitForSelector('#equity-plot',{timeout:30000});
   const saved=await page.evaluate(()=>window.desk.call('workspace'));
   assert.equal(saved.runs.length,1);assert.equal(saved.runs[0].result.metrics.totalTrades,5);
-  console.log('Desktop smoke passed: context-isolated preload, Electron IPC, Pine worker, backtest worker, and persistence.');
+  const job=await page.evaluate(source=>window.desk.call('researchStart',{kind:'sweep',source,grid:{'Fast length':[10,12],'Slow length':[26]}}),saved.runs[0].source);
+  let study;const deadline=Date.now()+30000;
+  do{study=await page.evaluate(id=>window.desk.call('researchGet',{id}),job.id);if(study.status==='running')await new Promise(resolve=>setTimeout(resolve,20));}while(study.status==='running'&&Date.now()<deadline);
+  assert.equal(study.status,'completed');assert.equal(study.result.candidates.length,2);
+  const candidate=await page.evaluate(id=>window.desk.call('researchSaveRun',{id,index:0}),job.id);
+  const comparison=await page.evaluate(ids=>window.desk.call('compareRuns',{ids}),[saved.runs[0].id,candidate.id]);assert.equal(comparison.sameData,true);
+  const diagnostic=await page.evaluate(async()=>{try{await window.desk.call('backtest',{source:'//@version=6\nstrategy("Broken")\nplot('});return null;}catch(error){return error.message;}});assert.match(diagnostic,/pineDeskError/);
+  console.log('Desktop smoke passed: CodeMirror, Pine worker, isolated IPC, backtests, research workers, comparisons, diagnostics and persistence.');
 }finally{await app.close();await fs.rm(dir,{recursive:true,force:true});}
