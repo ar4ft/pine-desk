@@ -54,3 +54,31 @@ test('library browse, search, import and saved Pine source',async({page})=>{
   const workspace=await dispatch('workspace');assertSource(workspace,source);
 });
 function assertSource(workspace,source){expect(workspace.scripts.some(s=>s.source===source&&s.provenance?.slug==='fixture')).toBeTruthy();}
+test('Edge Stats evidence and Whale Options audit panels preserve upstream caveats',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const config={mode:'local',endpoint:'http://127.0.0.1:3344/mcp'};
+ const report={n:2,successes:1,estimate:null,ci95:null,query:{dsl:'gapFill',outcome:'gapFill',symbol:'TEST',sessionKey:'rth'},guards:{lowSample:true,refused:true},disclaimer:'Historical conditional frequencies. Not predictions.',sessions:[],perYear:[]};
+ await page.exposeFunction('backendCall',async(action,args)=>{
+  if(action==='edgeConfigure')return config;
+  if(action==='edgeOverview')return {config,coverage:{symbols:[{symbol:'TEST',tf:'1m',lastBar:'2024-12-30T20:59:00Z'}],engineVersion:'0.1.0'},catalog:{presets:[{id:'gap-fill',title:'Gap Fill',summary:'Test definition'}]},retrievedAt:Date.now()};
+  if(action==='edgeReport')return {config,result:report,retrievedAt:Date.now()};
+  if(action==='whaleConfigure')return args;
+  if(action==='whaleStatus')return {result:{ticks:100,events:1,cold_start:true,live_engine:false,baseline_sessions:0,chains_available:[{underlying:'NVDA'}]}};
+  if(action==='whaleRecent')return {result:{events:[{id:'test',ts:Date.now(),underlying:'NVDA',contract:'FIXTURE',kind:'sweep',side:'unknown',premium:50000,score:60,cold_start:true}]}};
+  if(action==='whaleEvent')return {result:{id:'test',cold_start:true,legs_detail:[{nbbo_at_print:null}],score_breakdown:{missing:['volumeVsBaseline']}}};
+  if(action==='whaleGex')return {result:{snapshot_age_ms:60000,gex:{convention:'dealer-long-calls-short-puts',conventionNote:'Dealer positioning is an assumption.',totalGex:1,perStrike:[],skippedContracts:0}}};
+  return dispatch(action,args);
+ });
+ await page.addInitScript(()=>{window.desk={call:(a,b)=>window.backendCall(a,b)};});
+ await page.goto('/');await expect(page.locator('#status')).toHaveText('Local workspace');
+ await page.locator('[data-page="edge"]').click();await page.locator('#edge-mode').selectOption('local');await page.locator('#edge-connect').click();
+ await expect(page.locator('#edge-symbol')).toHaveValue('TEST');
+ await page.locator('#edge-run-report').click();await expect(page.locator('.edge-warning')).toContainText('ESTIMATE WITHHELD');
+ await expect(page.locator('.edge-metrics')).toContainText('Withheld');await expect(page.locator('.edge-metrics')).toContainText('2');
+ await page.locator('[data-page="whale"]').click();await page.locator('#whale-source').selectOption('synthetic');await page.locator('#whale-connect').click();
+ await expect(page.locator('#whale-panel')).toContainText('COLD START');await page.locator('#whale-recent').click();
+ await expect(page.locator('#whale-panel tbody')).toContainText('unknown');await page.locator('[data-whale-event]').click();
+ await expect(page.locator('#whale-panel')).toContainText('nbbo_at_print');await page.locator('[data-whale-analysis="gex"]').click();
+ await expect(page.locator('#whale-panel')).toContainText('Dealer positioning is an assumption.');
+ expect(errors).toEqual([]);
+});

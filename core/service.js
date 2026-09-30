@@ -4,6 +4,8 @@ import {examples} from './examples.js';
 import {runBacktest,simulate,validateSource} from './backtest.js';
 import {orderflow} from './orderflow.js';
 import {libraryCall} from './library.js';
+import {configureEdge,edgeConfig,edgeOverview,edgeCall} from './edge-stats.js';
+import {whaleConfig,configureWhale,whaleCall} from './whale-options.js';
 import * as store from './store.js';
 export async function dispatch(action,args={}) {
   switch(action){
@@ -19,6 +21,27 @@ export async function dispatch(action,args={}) {
     case 'librarySearch':return libraryCall('library_search',{query:args.query,type:'indicators',limit:24});
     case 'librarySource':return libraryCall('library_get_source_code',{slug:args.slug});
     case 'libraryDetail':return libraryCall('library_get_indicator',{slug:args.slug});
+    case 'edgeConfig':return edgeConfig();
+    case 'edgeConfigure':return configureEdge(args);
+    case 'edgeOverview':return edgeOverview();
+    case 'edgeCoverage':return edgeCall('coverage');
+    case 'edgePresets':return edgeCall('presets',args);
+    case 'edgeReport':return edgeCall('report',args);
+    case 'edgeQuery':return edgeCall('query',args);
+    case 'edgeFields':return edgeCall('fields',args);
+    case 'edgeSessions':return edgeCall('sessions',args);
+    case 'edgeSessionBars':return edgeCall('sessionBars',args);
+    case 'whaleConfig':return whaleConfig();
+    case 'whaleConfigure':return configureWhale(args);
+    case 'whaleStatus':return whaleCall('status');
+    case 'whaleRecent':return whaleCall('recent',args);
+    case 'whaleTop':return whaleCall('top',args);
+    case 'whaleEvent':return whaleCall('event',args);
+    case 'whaleGex':return whaleCall('gex',args);
+    case 'whaleOiDeltas':return whaleCall('oiDeltas',args);
+    case 'whaleMaxPain':return whaleCall('maxPain',args);
+    case 'whaleIvRank':return whaleCall('ivRank',args);
+    case 'whaleNetFlow':return whaleCall('netFlow',args);
     default:throw new Error('Unknown app operation.');
   }
 }

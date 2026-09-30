@@ -17,3 +17,9 @@ own licenses. This repository does not redistribute the full LuxAlgo Library.
 Pine Script and TradingView are trademarks of TradingView, Inc. Vela and LuxAlgo
 are marks of their respective owners. This independent app is not endorsed by,
 affiliated with, or sponsored by those owners.
+
+Optional external integrations (not bundled): LuxAlgo Edge Stats and Whale
+Options, MIT licensed. Edge Stats calendar/event data is CC BY 4.0; retain its
+attribution when redistributing. Market feed data remains subject to provider
+entitlements. https://github.com/LuxAlgo/edge-stats
+https://github.com/LuxAlgo/whale-options

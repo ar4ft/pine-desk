@@ -10,7 +10,7 @@ test('MCP handshake, shared persistence, strategy execution and tool errors',asy
   const client=new Client({name:'test',version:'1'});
   try{
     await client.connect(new StdioClientTransport({command:process.execPath,args:['core/mcp.js'],env:{...process.env,PINE_DESK_DATA_DIR:dir},stderr:'pipe'}));
-    const tools=await client.listTools();assert.equal(tools.tools.length,10);
+    const tools=await client.listTools();for(const name of ['workspace','edge_query','edge_session_bars','whale_event','whale_gex','whale_net_flow'])assert.ok(tools.tools.some(t=>t.name===name));
     const call=async(name,args={})=>{const r=await client.callTool({name,arguments:args});assert.ok(!r.isError,JSON.stringify(r));return JSON.parse(r.content[0].text);};
     await call('import_bars',{symbol:'FIXTURE',timeframe:'1h',csv:'time,open,high,low,close,volume\n1767225600,100,110,90,105,10\n1767229200,105,115,95,110,20\n1767232800,110,120,100,115,15'});
     const source='//@version=6\nstrategy("MCP test")\nif bar_index == 0\n    strategy.entry("Long", strategy.long, qty=1)';
