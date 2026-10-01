@@ -123,3 +123,9 @@ The current app uses public access only. When you want to expand it:
 4. **Your own licensed data provider:** obtain historical OHLCV and executed-trade/footprint data with rights for desktop use. For real delta, the feed must carry aggressor-side volume (or documented bid/ask footprints), timestamps, quantity units, and instrument tick size. CSV imports already support public or properly licensed data; a live provider adapter would be an additional implementation.
 
 LuxAlgo's licensing page describes self-hosted software components, rather than a hosted service in a licensee's data path. Software licensing and data API access are separate questions. Preserve credentials outside source control and add them through a provider-specific secure configuration when an actual API contract is available.
+
+## Options data and provider settings
+
+Enter your Unusual Whales token and Whale Options vendor credentials in **Settings**. The new **Options chart** provides signed OI GEX-by-strike bars, explicitly defined call/put walls and cumulative gamma-flip overlays, plus bounded live options-flow markers through the documented Unusual Whales WebSocket. Matching workspace charts can display the same overlays alongside Pine scripts. Credentials use operating-system encryption. Paid access/streaming entitlements are configured later with your own keys.
+
+[Options setup, calculations and limitations](docs/options.md) · [Managed Whale Options engine](docs/whale-options.md#enter-credentials-and-launch-from-settings). Underlying candles and levels refresh every 30 seconds; missed options-stream events are flagged rather than replayed. Options contract/multi-leg backtesting remains outside the underlying Pine strategy engine.

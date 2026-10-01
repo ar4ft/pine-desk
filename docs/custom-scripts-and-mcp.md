@@ -58,3 +58,5 @@ For Edge Stats, ask the agent to check coverage first and preserve N, Wilson CI,
 Reference documentation: [PineTS](https://github.com/LuxAlgo/PineTS), [Vela PineTS addon](https://github.com/LuxAlgo/Vela-pinets), [Vela](https://velacharts.dev/), [LuxAlgo documentation index](https://www.luxalgo.com/llms.txt).
 
 Continuous streams and parameter research are documented in [Live data](live-data.md) and [Strategy research](strategy-research.md). The MCP server exposes their process-local controls and saved results.
+
+Options MCP tools: `options_refresh`, `options_start`, `options_snapshot`, `options_stop`. The standalone process uses `UNUSUAL_WHALES_API_KEY`; desktop encrypted credentials cannot be unlocked by the Node server. See [provider and options documentation](options.md#credential-storage-and-mcp).

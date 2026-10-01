@@ -46,3 +46,21 @@ GEX assumes dealer positioning; the UI preserves `convention` and `conventionNot
 Nine read-only Pine Desk MCP tools forward to this engine: `whale_status`, `whale_recent`, `whale_top`, `whale_event`, `whale_gex`, `whale_oi_deltas`, `whale_max_pain`, `whale_iv_rank`, `whale_net_flow`. Desktop source settings are shared with the local stdio server. Alert CRUD, replay, audit-batch tools, FINRA context, flow series and GEX heatmaps remain available in upstream Whale Options and are not implemented in this desktop integration.
 
 The upstream project is MIT licensed. Feed data retains its provider's terms.
+
+## Enter credentials and launch from Settings
+
+Pine Desk **Settings** now stores Tradier access tokens, Massive keys, and Alpaca key ID/secret pairs using operating-system encryption. These are vendor credentials, not an Unusual Whales token or a universal LuxAlgo API key. ThetaData login remains in the separate Theta Terminal.
+
+After installing and building the upstream repository as described above:
+
+1. Save the relevant provider credentials in Settings.
+2. Enter the **absolute built repository folder** under Managed Whale Options Engine. Both `packages/cli/dist/index.js` and `packages/mcp/dist/index.js` must exist.
+3. Choose synthetic, Tradier, Massive, Alpaca or ThetaData, and a comma-separated list of 1–20 tickers. Select your actual Massive realtime/delayed and Alpaca indicative/OPRA entitlement.
+4. Optionally enter an absolute Node executable matching the Node version used to build native SQLite. Blank uses Electron's Node runtime, which can require a different native SQLite build than your terminal's Node.
+5. Click **Start engine + local MCP**. Pine Desk launches the CLI and a loopback-only MCP listener on port 8788, then sets the Whale Options panel to that endpoint. Open Whale Options and Connect / refresh to verify heartbeat, chain history and actual feed timestamps.
+
+The managed engine uses a separate database per feed under the app data directory's `whale-engine/`, plus a credential-free generated JSON configuration shared by CLI and MCP. Advanced upstream scoring/Greek settings use defaults in managed mode. Existing manually started services can still be used through the Whale Options panel; do not launch a second listener on their port. Pine Desk never stops manually started external services.
+
+Selected vendor secrets are passed in the managed process environment, without shell interpolation or command-line arguments. Process output is discarded to keep upstream logs from exposing credentials. A process exit reports a generic diagnostic covering Node/SQLite compatibility, entitlement and occupied ports. **Launched** describes subprocess state, not successful provider authentication or real-time data availability. Source labels remain labels. Stop before switching feeds; managed processes stop when Pine Desk quits.
+
+For manually managed/custom upstream configurations, continue to set credentials directly in that engine's environment; saved desktop keys are used only for an engine launched by Pine Desk. Settings does not silently configure an independently running service. See [Options and credential details](options.md).

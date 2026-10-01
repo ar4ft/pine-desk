@@ -1,9 +1,11 @@
-const {app,BrowserWindow,ipcMain,shell,dialog,Menu}=require('electron');
+const {app,BrowserWindow,ipcMain,shell,dialog,Menu,safeStorage}=require('electron');
 const path=require('node:path');
 const fs=require('node:fs/promises');
 let win,updates,shutdown;
 app.setName('Pine Desk');
 async function createWindow(){
+  const {installCredentialVault}=await import('../core/credentials.js');
+  installCredentialVault({available:()=>safeStorage.isEncryptionAvailable()&&(process.platform!=='linux'||safeStorage.getSelectedStorageBackend()!=='basic_text'),encrypt:text=>safeStorage.encryptString(text).toString('base64'),decrypt:encoded=>safeStorage.decryptString(Buffer.from(encoded,'base64'))});
   const service=await import('../core/service.js');const {dispatch}=service;shutdown=service.shutdown;
   win=new BrowserWindow({width:1510,height:980,minWidth:1100,minHeight:740,title:'Pine Desk',backgroundColor:'#0b1018',titleBarStyle:'hiddenInset',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   const trusted=event=>{const url=event.senderFrame?.url??'';return event.sender===win.webContents&&(app.isPackaged?url.startsWith('file://'):url.startsWith('file://')||url.startsWith('http://127.0.0.1:5173/'));};
@@ -14,7 +16,7 @@ async function createWindow(){
   ipcMain.removeHandler('desk:export');
   ipcMain.handle('desk:export',async(event,name,text)=>{if(!trusted(event)||typeof text!=='string'||text.length>100_000_000)throw new Error('Invalid export.');const result=await dialog.showSaveDialog(win,{defaultPath:path.basename(name)});if(!result.canceled)await fs.writeFile(result.filePath,text);return !result.canceled;});
   ipcMain.removeHandler('desk:open');
-  ipcMain.handle('desk:open',async(event,url)=>{if(!trusted(event)||!/^https:\/\/(www\.luxalgo\.com|docs\.luxalgo\.com|velacharts\.dev|github\.com)\//.test(url))throw new Error('Unsupported external link.');return shell.openExternal(url);});
+  ipcMain.handle('desk:open',async(event,url)=>{if(!trusted(event)||!/^https:\/\/(www\.luxalgo\.com|docs\.luxalgo\.com|velacharts\.dev|github\.com|api\.unusualwhales\.com|unusualwhales\.com)\//.test(url))throw new Error('Unsupported external link.');return shell.openExternal(url);});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   win.webContents.on('will-navigate',event=>event.preventDefault());
   if(process.argv.includes('--dev'))await win.loadURL('http://127.0.0.1:5173');else await win.loadFile(path.join(__dirname,'../dist/index.html'));

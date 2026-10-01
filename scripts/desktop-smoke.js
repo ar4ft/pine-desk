@@ -25,5 +25,8 @@ try{
   const candidate=await page.evaluate(id=>window.desk.call('researchSaveRun',{id,index:0}),job.id);
   const comparison=await page.evaluate(ids=>window.desk.call('compareRuns',{ids}),[saved.runs[0].id,candidate.id]);assert.equal(comparison.sameData,true);
   const diagnostic=await page.evaluate(async()=>{try{await window.desk.call('backtest',{source:'//@version=6\nstrategy("Broken")\nplot('});return null;}catch(error){return error.message;}});assert.match(diagnostic,/pineDeskError/);
+  const providerSettings=await page.evaluate(()=>window.desk.call('providerSettings'));
+  if(providerSettings.credentials.available){await page.evaluate(()=>window.desk.call('saveCredentials',{unusualWhales:'desktop-encryption-test'}));const encrypted=await fs.readFile(path.join(dir,'credentials/current.json'),'utf8');assert.ok(!encrypted.includes('desktop-encryption-test'));await page.evaluate(()=>window.desk.call('saveCredentials',{unusualWhales:null}));}else{const rejected=await page.evaluate(async()=>{try{await window.desk.call('saveCredentials',{unusualWhales:'desktop-encryption-test'});return false;}catch{return true;}});assert.equal(rejected,true);}
+  await page.locator('[data-page="settings"]').click();await page.waitForSelector('#credential-unusualWhales');
   console.log('Desktop smoke passed: CodeMirror, Pine worker, isolated IPC, backtests, research workers, comparisons, diagnostics and persistence.');
 }finally{await app.close();await fs.rm(dir,{recursive:true,force:true});}

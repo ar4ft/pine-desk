@@ -6,13 +6,18 @@ import {orderflow} from './orderflow.js';
 import {libraryCall} from './library.js';
 import {configureEdge,edgeConfig,edgeOverview,edgeCall} from './edge-stats.js';
 import {whaleConfig,configureWhale,whaleCall} from './whale-options.js';
+import {UnusualWhales} from './unusual-whales.js';
+import {credentialStatus,saveCredentials} from './credentials.js';
+import {WhaleRunner,engineConfig,configureEngine} from './whale-runner.js';
 import {BinanceLive} from './live.js';
 import {ResearchJobs,compareRuns} from './research.js';
 import * as store from './store.js';
 let liveWrite=Promise.resolve();
 export const live=new BinanceLive({onClosed:dataset=>{const snapshot=structuredClone(dataset);liveWrite=liveWrite.catch(()=>{}).then(()=>store.write('bars',snapshot));liveWrite.catch(error=>console.warn('Could not persist settled live candles:',error.message));}});
+export const optionsProvider=new UnusualWhales();
+export const whaleRunner=new WhaleRunner();
 export const researchJobs=new ResearchJobs();
-export function shutdown(){live.stop();researchJobs.stop();}
+export function shutdown(){live.stop();researchJobs.stop();optionsProvider.stop();whaleRunner.stop();}
 async function datasetFor(args){return structuredClone(args.dataset??(live.active?live.snapshot().dataset:null)??await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'});}
 export async function dispatch(action,args={}) {
   switch(action){
@@ -54,6 +59,15 @@ export async function dispatch(action,args={}) {
     case 'edgeFields':return edgeCall('fields',args);
     case 'edgeSessions':return edgeCall('sessions',args);
     case 'edgeSessionBars':return edgeCall('sessionBars',args);
+    case 'providerSettings':return {credentials:await credentialStatus(),engine:await engineConfig(),engineStatus:whaleRunner.status(),whale:await whaleConfig()};
+    case 'saveCredentials':return saveCredentials(args);
+    case 'engineConfigure':return configureEngine(args);
+    case 'engineStart':return whaleRunner.start();
+    case 'engineStop':return whaleRunner.stop();
+    case 'optionsRefresh':return optionsProvider.refresh(args);
+    case 'optionsStart':return optionsProvider.start(args);
+    case 'optionsStop':return optionsProvider.stop();
+    case 'optionsSnapshot':return optionsProvider.snapshot();
     case 'whaleConfig':return whaleConfig();
     case 'whaleConfigure':return configureWhale(args);
     case 'whaleStatus':return whaleCall('status');

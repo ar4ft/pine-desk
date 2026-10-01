@@ -1,6 +1,6 @@
 {
   "name": "pine-desk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local Mac trading research workspace powered by PineTS and Vela",
   "main": "electron/main.cjs",
   "scripts": {
