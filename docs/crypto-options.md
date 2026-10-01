@@ -1,6 +1,6 @@
 # Crypto options and interactive education
 
-Pine Desk v0.5 adds **Greeks Lab** and **Crypto options**. These work independently of Unusual Whales and the optional Whale Options engine. Deribit public data requires no key or account credentials. The integration reads market data; it does not submit orders or access positions.
+Pine Desk v0.5 introduced **Greeks Lab** and **Crypto options**. v0.6 adds [snapshot history, SABR/skew analysis and option portfolio/replay research](option-research.md), plus Bybit/OKX public REST adapters. These work independently of Unusual Whales and the optional Whale Options engine. Deribit public data requires no key or account credentials. The integration reads market data; it does not submit orders or access positions.
 
 ## Greeks Lab
 
@@ -41,11 +41,11 @@ No American exercise, stochastic volatility/jumps, inverse settlement, fees, exe
 
 A refresh requests the latest 100 currency option trades, without claiming a full session or 24-hour window. Live prints are deduplicated by trade ID and retained up to 1,000; the UI displays the latest 100, all expiries. JSON includes the retained buffer. Heartbeats, acknowledgment timeout and bounded 1–30 second reconnect backoff maintain the connection. Disconnect gaps are visible and are **not replayed**. Last ticker timestamps remain visible through disconnects; they must not be interpreted as current quotes.
 
-Failed refreshes retain prior timestamped core data with an error; no partial response becomes a new snapshot. Data is in memory unless explicitly exported. Public API access remains subject to exchange availability, regional restrictions and rate limits. This app does not bypass access restrictions.
+Failed refreshes retain prior timestamped core data with an error; no partial response becomes a new snapshot. You can now save/import snapshots locally or start the independent recorder; the contract/trade live buffer remains in memory unless exported. Public API access remains subject to exchange availability, regional restrictions and rate limits. This app does not bypass access restrictions.
 
 ## Units and calculations
 
-Only active **BTC/ETH inverse** instruments with matching base/settlement currencies are included. Linear/USDC options and other assets are not part of this adapter.
+The Deribit adapter includes active **BTC/ETH inverse** instruments with matching base/settlement currencies. Bybit uses a separately selected USDC/USDT settlement; OKX uses base-coin inverse settlement and normalizes contract multipliers. Other assets are not included.
 
 * Strikes, underlying forward and index: USD. Premium quote/settlement: BTC or ETH.
 * Option trade amount and open interest: underlying asset units. `contract_size` is metadata; do not multiply underlying-denominated amounts by it again. There is no equity-style ×100 multiplier.
@@ -55,7 +55,7 @@ Only active **BTC/ETH inverse** instruments with matching base/settlement curren
 * ATM IV averages available call/put mark IV at the nearest strike to the snapshot index, within 10%. JSON records strike and observation count. No interpolation, SABR calibration or liquidity filter is claimed.
 * Forward IV between adjacent available expiries is `sqrt((IV2²*T2 − IV1²*T1)/(T2 − T1))`, using decimal IV and years. Non-positive variance is withheld with a reason. It is a sampled term observation, not a tradable forward quote.
 
-Existing Unusual Whales GEX/walls remain equity-provider features. This adapter does not infer signed dealer GEX, call/put walls, zero gamma or calibrated trading signals from Deribit OI. Both long calls and long puts have positive model gamma; an arbitrary negative sign for puts is a positioning assumption, not exchange inventory evidence.
+Existing Unusual Whales GEX/walls remain equity-provider features. The research section adds gross modeled gamma and an explicitly hypothetical call-positive/put-negative scenario with repriced model roots. It does not infer observed dealer positions or calibrated profit probabilities from Deribit OI. Both long calls and long puts have positive model gamma; an arbitrary negative sign for puts is a positioning assumption, not exchange inventory evidence.
 
 ## MCP
 
@@ -83,11 +83,13 @@ Desktop and stdio run **separate in-memory Deribit sessions**, just like other l
 | Exchange | Public API route | Current Pine Desk status |
 | --- | --- | --- |
 | Deribit | [REST / WebSocket docs](https://docs.deribit.com/) | Implemented; BTC/ETH inverse REST + selected live ticker and currency trades verified |
-| Bybit | [V5 instruments](https://bybit-exchange.github.io/docs/v5/market/instrument), [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers), `category=option` | Candidate USDC-options adapter; public request returned HTTP 403 from this environment, not implemented |
-| OKX | [V5 public market docs](https://www.okx.com/docs-v5/en/#public-data-rest-api-get-instruments), `instType=OPTION` | Candidate adapter; public request returned HTTP 403 from this environment, not implemented |
+| Bybit | [V5 instruments](https://bybit-exchange.github.io/docs/v5/market/instrument), [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers), `category=option` | Implemented public USDC/USDT REST adapter with explicit 30-second polling; fixture validated, live endpoint returned HTTP 403 here |
+| OKX | [V5 public market docs](https://www.okx.com/docs-v5/en/#public-data-rest-api-get-instruments), `instType=OPTION` | Implemented public inverse REST adapter with explicit 30-second polling and contract normalization; fixture validated, live endpoint returned HTTP 403 here |
 
-Bybit/OKX need distinct adapters for instrument IDs, amount/contract multipliers, settlement units, expiry rules, channels and regional availability. A successful Deribit connection does not establish availability elsewhere. Public option history alone does not turn the Pine underlying-candle backtester into an options portfolio engine.
+Bybit/OKX use distinct adapters for instrument IDs, amount/contract multipliers, settlement units and expiry rules. They poll public REST, rather than claiming WebSocket parity with Deribit. A successful Deribit connection does not establish availability elsewhere. Public option history alone does not turn the Pine underlying-candle backtester into an options portfolio engine.
 
 Optional genuine network check: `npm run smoke:crypto`. This contacts production public APIs, verifies both BTC/ETH snapshots and an acknowledged live ticker, then closes its connection. It submits no orders.
 
 For the same check through native Electron IPC, run `npm run smoke:crypto:desktop` after building (requires a display on Linux). Screenshots are written to ignored `test-results/`.
+
+The generic `crypto_options_*` MCP tools now accept `exchange` (`deribit` by default, `bybit`, `okx`); `settlement` selects Bybit USDC/USDT. Additional archive, recorder, fit and portfolio tools are in the [research guide](option-research.md#mcp).

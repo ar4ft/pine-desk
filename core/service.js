@@ -1,4 +1,8 @@
-import {DeribitOptions} from './deribit.js';
+import {PublicOptionsExchange} from './crypto-exchanges.js';
+import {OptionHistory,OptionRecorder} from './option-history.js';
+import {fitSABR,deltaSkew,gammaExposure} from './option-surface.js';
+import {portfolioRisk,strategyCandidates,backtestOptions} from './option-portfolio.js';
+import {DeribitOptions,termStructure} from './deribit.js';
 import {calculateGreeks,greekCurve} from './greeks.js';
 import {watchlistQuotes} from './watchlist.js';
 import {uiConfig,configureUI,importScriptFile,saveLayout,listLayouts,readLayout,deleteLayout} from './workspace-ui.js';
@@ -19,13 +23,39 @@ import * as store from './store.js';
 let liveWrite=Promise.resolve();
 export const live=new BinanceLive({onClosed:dataset=>{const snapshot=structuredClone(dataset);liveWrite=liveWrite.catch(()=>{}).then(()=>store.write('bars',snapshot));liveWrite.catch(error=>console.warn('Could not persist settled live candles:',error.message));}});
 export const deribit=new DeribitOptions();
+export const cryptoExchanges={deribit,bybit:new PublicOptionsExchange('bybit'),okx:new PublicOptionsExchange('okx')};
+function cryptoFor(exchange='deribit'){const provider=cryptoExchanges[exchange];if(!provider)throw Error('Unsupported crypto options exchange.');return provider;}
+export const optionHistory=new OptionHistory();
+export const optionRecorder=new OptionRecorder({history:optionHistory,fetchSnapshot:async args=>{const provider=args.exchange==='deribit'?new DeribitOptions():new PublicOptionsExchange(args.exchange);try{return await provider.refresh(args);}finally{provider.stop();}}});
+async function researchSnapshot(args){if(args.snapshotId)return (await optionHistory.get(args.snapshotId)).snapshot;const snapshot=cryptoFor(args.exchange).snapshot();if(!snapshot.rows?.length)throw Error('Load a crypto option chain or choose an archived snapshot.');return snapshot;}
 export const optionsProvider=new UnusualWhales();
 export const whaleRunner=new WhaleRunner();
 export const researchJobs=new ResearchJobs();
-export function shutdown(){deribit.stop();live.stop();researchJobs.stop();optionsProvider.stop();whaleRunner.stop();}
+export function shutdown(){optionRecorder.stop();for(const provider of Object.values(cryptoExchanges))provider.stop();live.stop();researchJobs.stop();optionsProvider.stop();whaleRunner.stop();}
 async function datasetFor(args){return structuredClone(args.dataset??(live.active?live.snapshot().dataset:null)??await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'});}
 export async function dispatch(action,args={}) {
   switch(action){
+    case 'cryptoRefresh':{for(const provider of Object.values(cryptoExchanges))provider.stop();return cryptoFor(args.exchange).refresh(args);}
+    case 'cryptoSelect':return cryptoFor(args.exchange).select(args);
+    case 'cryptoStart':return cryptoFor(args.exchange).start();
+    case 'cryptoStop':return cryptoFor(args.exchange).stop();
+    case 'cryptoSnapshot':return cryptoFor(args.exchange).snapshot();
+    case 'optionHistoryList':return optionHistory.list();
+    case 'optionHistorySave':{const s=cryptoFor(args.exchange).snapshot();if(Date.now()-s.fetchedAt>60000)throw Error('Refresh the full chain before archiving; this snapshot is older than one minute.');return optionHistory.save(s);}
+    case 'optionHistoryGet':{const r=await optionHistory.get(args.id);return {...r,snapshot:{...r.snapshot,term:termStructure(r.snapshot.rows,r.snapshot.spot,r.snapshot.fetchedAt)}};}
+    case 'optionHistoryDelete':return optionHistory.remove(args.id);
+    case 'optionHistoryImport':return optionHistory.import(args.json);
+    case 'optionHistoryExport':return optionHistory.export(args.ids);
+    case 'optionHistoryCompare':return optionHistory.compare(args.ids);
+    case 'optionRecordStart':return optionRecorder.start(args);
+    case 'optionRecordStop':return optionRecorder.stop();
+    case 'optionRecordStatus':return optionRecorder.status();
+    case 'optionSurface':{const snapshot=await researchSnapshot(args);return {fit:fitSABR(snapshot,args),skew:deltaSkew(snapshot,args),gamma:gammaExposure(snapshot,args),candidates:strategyCandidates(snapshot,args.expiry)};}
+    case 'optionSkew':return deltaSkew(await researchSnapshot(args),args);
+    case 'optionPortfolio':return portfolioRisk(await researchSnapshot(args),args);
+    case 'optionBacktest':{if(!Array.isArray(args.ids)||args.ids.length<2||args.ids.length>100||new Set(args.ids).size!==args.ids.length)throw Error('Choose 2–100 distinct archived snapshots.');const records=await Promise.all(args.ids.map(id=>optionHistory.get(id)));const result=backtestOptions(records,args);const run={id:randomUUID(),createdAt:Date.now(),result};await store.write('option-runs',run,run.id);return run;}
+    case 'optionRuns':return (await store.list('option-runs')).map(({id,createdAt,result})=>({id,createdAt,basis:result.basis,metrics:result.metrics})).sort((a,b)=>b.createdAt-a.createdAt);
+    case 'optionRunGet':{const run=await store.read('option-runs',args.id);if(!run)throw Error('Option run not found.');return run;}
     case 'deribitRefresh':return deribit.refresh(args);
     case 'deribitSelect':return deribit.select(args);
     case 'deribitStart':return deribit.start();

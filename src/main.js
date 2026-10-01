@@ -13,6 +13,7 @@ import './options-style.css';
 import {newLearningState,learningView,bindLearning} from './options-learning.js';
 import {newCryptoState,cryptoView,bindCrypto,paintCrypto} from './crypto-options-view.js';
 import './options-learning.css';
+import {paintRecording} from './option-research-view.js';
 import {makeLiveChartFeed} from './live-chart-feed.js';
 import {mountPineEditor} from './pine-editor.js';
 import {executionDiagnostic} from '../core/diagnostics.js';
@@ -174,5 +175,9 @@ function bindCustomization(){const on=(id,fn)=>{const el=$('#'+id);if(el)el.oncl
 }
 
 let cryptoPolling=false;
-async function pollCrypto(){if(cryptoPolling||!state.crypto.snapshot?.active)return;cryptoPolling=true;try{state.crypto.snapshot=await call('deribitSnapshot');if(state.page==='crypto')paintCrypto(state.crypto);}catch(e){if(state.page==='crypto')toast(e.message,true);}finally{cryptoPolling=false;}}
+async function pollCrypto(){if(cryptoPolling||!state.crypto.snapshot?.active)return;cryptoPolling=true;try{state.crypto.snapshot=await call(state.crypto.exchange==='deribit'?'deribitSnapshot':'cryptoSnapshot',{exchange:state.crypto.exchange});if(state.page==='crypto')paintCrypto(state.crypto);}catch(e){if(state.page==='crypto')toast(e.message,true);}finally{cryptoPolling=false;}}
 setInterval(pollCrypto,1000);
+
+let recordPolling=false;
+async function pollOptionRecorder(){if(recordPolling||!state.crypto.research.recording.active)return;recordPolling=true;try{const previous=state.crypto.research.recording,s=await call('optionRecordStatus');state.crypto.research.recording=s;if(previous.saved!==s.saved){state.crypto.research.history=await call('optionHistoryList');state.crypto.research.refreshHistoryView?.();}if(state.page==='crypto')paintRecording(state.crypto);}catch(e){if(state.page==='crypto')toast(e.message,true);}finally{recordPolling=false;}}
+setInterval(pollOptionRecorder,2000);

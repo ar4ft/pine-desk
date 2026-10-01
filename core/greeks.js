@@ -8,7 +8,7 @@ export function normalCDF(x){
 }
 export function validateModel(input={}){
   const p={spot:100,strike:100,days:30,volatility:30,rate:4,dividend:0,type:'call',...input};
-  for(const [key,min,max] of [['spot',.01,1e9],['strike',.01,1e9],['days',.1,3650],['volatility',.1,300],['rate',-20,50],['dividend',-20,50]])
+  for(const [key,min,max] of [['spot',.01,1e9],['strike',.01,1e9],['days',.000001,3650],['volatility',.1,300],['rate',-20,50],['dividend',-20,50]])
     if(!Number.isFinite(p[key])||p[key]<min||p[key]>max)throw new Error(`${key} must be between ${min} and ${max}.`);
   if(!['call','put'].includes(p.type))throw new Error('Choose call or put.');
   return Object.fromEntries(['spot','strike','days','volatility','rate','dividend','type'].map(k=>[k,p[k]]));

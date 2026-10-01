@@ -4,7 +4,7 @@ A local Mac trading research app built with [PineTS](https://github.com/LuxAlgo/
 
 ![Pine Desk chart workspace](docs/workspace.png)
 
-Documentation: [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md) · [Crypto options & Greeks education](docs/crypto-options.md) · [Options project review](docs/options-project-review.md).
+Documentation: [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md) · [Crypto options & Greeks education](docs/crypto-options.md) · [Options project review](docs/options-project-review.md) · [Option research & replay](docs/option-research.md).
 
 Signed distribution and automatic updates are prepared in the [release setup guide](docs/releases.md). Configure Apple signing/notarization secrets later, then manually run the Signed Mac release Action with an existing version tag.
 
@@ -34,7 +34,8 @@ For development: `npm run dev`. For a local Apple Silicon and Intel DMG/ZIP buil
 * **Edge Stats:** Official public hosted reports, coverage and freshness; optional local engine for custom DSL queries, preset parameters, grouped evidence and session-bar charts. Results retain N, Wilson confidence intervals and minimum-sample guards.
 * **Whale Options:** Optional local engine connection for options flow, score/quote audits, gamma ladders, OI changes, max pain, IV history and net premium. Synthetic feed setup and licensed provider routes are documented.
 * **Greeks Lab:** Independent interactive European-option education with call/put controls, spot/time/IV sensitivity curves, first and higher Greeks, explicit units, explanations, presets and a short exercise.
-* **Crypto options:** Public Deribit BTC/ETH inverse-option chains, IV smiles, ATM/forward term structure, selected exchange-reported Greeks and acknowledged public WebSocket updates plus bounded option trade prints. No key required; snapshots and live coverage are labeled. Export JSON. Bybit/OKX are documented candidates, not implemented adapters.
+* **Crypto options:** Public Deribit BTC/ETH inverse-option chains, IV smiles, ATM/forward term structure, selected exchange-reported Greeks and acknowledged public WebSocket updates plus bounded option trade prints. No key required; snapshots and live coverage are labeled. Export JSON. Bybit USDC/USDT and OKX inverse REST adapters add explicit 30-second polling; fixture-tested because live endpoints return HTTP 403 here.
+* **Option research:** Save/import/record full-chain snapshots and compare observations. Fixed-beta SABR with held-out diagnostics, 25-delta skew brackets, modeled gamma scenarios, six strategy templates, same-expiry multi-leg payoff/Greeks analysis, and saved bid/ask quote replays with settlement-currency cash, fees/slippage, supplied funding and static margin checks. [Method and limitations](docs/option-research.md).
 * **MCP:** A separate local stdio server shares the app's dataset, scripts, imported trades, and saved runs. Official public LuxAlgo catalog calls are forwarded through its hosted MCP.
 
 This is a working first research edition, not full parity with the LuxAlgo platform. It does not implement TPO, session/rolling profiles, footprint imbalances, order books, all platform screeners, nested/anchored optimization, session-aware walk-forward windows, or a standalone calendar engine, broker execution, or LuxAlgo account authentication. Library indicators are not automatically converted to strategies; specify entry/exit logic in a `strategy(...)` script.
@@ -130,10 +131,12 @@ LuxAlgo's licensing page describes self-hosted software components, rather than 
 
 Enter your Unusual Whales token and Whale Options vendor credentials in **Settings**. The new **Options chart** provides signed OI GEX-by-strike bars, explicitly defined call/put walls and cumulative gamma-flip overlays, plus bounded live options-flow markers through the documented Unusual Whales WebSocket. Matching workspace charts can display the same overlays alongside Pine scripts. Credentials use operating-system encryption. Paid access/streaming entitlements are configured later with your own keys.
 
-[Options setup, calculations and limitations](docs/options.md) · [Managed Whale Options engine](docs/whale-options.md#enter-credentials-and-launch-from-settings). Underlying candles and levels refresh every 30 seconds; missed options-stream events are flagged rather than replayed. Options contract/multi-leg backtesting remains outside the underlying Pine strategy engine.
+[Options setup, calculations and limitations](docs/options.md) · [Managed Whale Options engine](docs/whale-options.md#enter-credentials-and-launch-from-settings). Underlying candles and levels refresh every 30 seconds; missed options-stream events are flagged rather than replayed. Options contract/multi-leg quote replay is now available through a separate archived-chain research engine; it is not implemented by the underlying Pine strategy engine.
 
 ## Customize your workspace
 
 Dark/light/macOS themes, candle colors and editor font size are available in Settings. Named layouts preserve candle snapshots, Pine/native indicators, drawings and pane arrangement; the last session restores automatically. Provider-qualified watchlists switch markets and fetch Binance quote snapshots. Import UTF-8 `.pine`/`.txt` sources directly through the native file picker. See [workspace customization](docs/workspaces.md).
 
 Crypto options and education tools are documented in [their guide](docs/crypto-options.md#mcp). The [project review](docs/options-project-review.md) records upstream revisions, license findings, included features and deferred SABR/portfolio work. Run `npm run smoke:crypto` for an optional genuine public REST/WebSocket check.
+
+Run `npm run smoke:options-research` for an isolated genuine Deribit capture, SABR/skew fit, model and two-observation replay. It submits no orders and removes its temporary store.

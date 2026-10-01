@@ -15,7 +15,7 @@ export function normalizeChain(currency,instruments,summaries,now=Date.now()){
   const quotes=new Map(summaries.map(row=>[row.instrument_name,row]));
   return instruments.filter(i=>i.kind==='option'&&i.is_active&&i.instrument_type==='reversed'&&i.base_currency===currency&&i.settlement_currency===currency&&i.expiration_timestamp>now).map(i=>{
     const s=quotes.get(i.instrument_name)??{};
-    return {instrument:i.instrument_name,type:i.option_type,strike:finite(i.strike),expiry:i.expiration_timestamp,contractSize:finite(i.contract_size),currency,
+    return {instrument:i.instrument_name,type:i.option_type,strike:finite(i.strike),expiry:i.expiration_timestamp,contractSize:finite(i.contract_size),currency,exchange:'deribit',settlement:currency,premiumCurrency:currency,payoffType:'inverse',quantityUnit:'underlying',quoteTimeKind:'API summary observation; not last quote-change time',
       bid:finite(s.bid_price),ask:finite(s.ask_price),mark:finite(s.mark_price),iv:finite(s.mark_iv),oi:finite(s.open_interest),volume:finite(s.volume),underlying:finite(s.underlying_price),quoteAt:finite(s.creation_timestamp)};
   }).filter(r=>r.strike>0&&['call','put'].includes(r.type)).sort((a,b)=>a.expiry-b.expiry||a.strike-b.strike||a.type.localeCompare(b.type));
 }
@@ -55,7 +55,7 @@ export class DeribitOptions{
       const spot=finite(index.index_price);if(!(spot>0))throw new Error('Deribit index price is missing.');
       const fetchedAt=this.now(),rows=normalizeChain(currency,instruments,summaries,fetchedAt);
       if(!rows.length)throw new Error('No active inverse option instruments returned.');
-      this.state={status:'snapshot',currency,spot,fetchedAt,rows,term:termStructure(rows,spot,fetchedAt),trades:(trades.trades??[]).map(t=>normalizeTrade(t,currency)).filter(Boolean).sort((a,b)=>a.time-b.time).slice(-100),tradesHasMore:!!trades.has_more,
+      this.state={status:'snapshot',exchange:'deribit',currency,settlement:currency,spot,fetchedAt,rows,term:termStructure(rows,spot,fetchedAt),trades:(trades.trades??[]).map(t=>normalizeTrade(t,currency)).filter(Boolean).sort((a,b)=>a.time-b.time).slice(-100),tradesHasMore:!!trades.has_more,
         tradeCoverage:'Latest 100 requested trades across all expiries; not a complete session or 24-hour history.',ticker:null,instrument:null,gaps:[],error:null,lastMessageAt:null,
         coverage:'Full REST instrument/summary snapshot; live Greeks cover one selected contract. Chain, IV curves and index remain snapshots until Refresh.'};
       return this.snapshot();
