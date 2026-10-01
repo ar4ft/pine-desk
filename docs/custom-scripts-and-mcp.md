@@ -60,3 +60,5 @@ Reference documentation: [PineTS](https://github.com/LuxAlgo/PineTS), [Vela Pine
 Continuous streams and parameter research are documented in [Live data](live-data.md) and [Strategy research](strategy-research.md). The MCP server exposes their process-local controls and saved results.
 
 Options MCP tools: `options_refresh`, `options_start`, `options_snapshot`, `options_stop`. The standalone process uses `UNUSUAL_WHALES_API_KEY`; desktop encrypted credentials cannot be unlocked by the Node server. See [provider and options documentation](options.md#credential-storage-and-mcp).
+
+Use the editor’s **Import .pine / .txt** button for native source files (UTF-8, up to 200 KB, Pine v5/v6). Imports save the source and provenance without executing it. [File import and workspace guide](workspaces.md#import-pine-and-txt-scripts).

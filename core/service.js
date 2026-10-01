@@ -1,3 +1,5 @@
+import {watchlistQuotes} from './watchlist.js';
+import {uiConfig,configureUI,importScriptFile,saveLayout,listLayouts,readLayout,deleteLayout} from './workspace-ui.js';
 import {randomUUID} from 'node:crypto';
 import {demoBars,fetchBinance,parseCSV,durations,validateBars,validateTrades} from './data.js';
 import {examples} from './examples.js';
@@ -21,6 +23,15 @@ export function shutdown(){live.stop();researchJobs.stop();optionsProvider.stop(
 async function datasetFor(args){return structuredClone(args.dataset??(live.active?live.snapshot().dataset:null)??await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'});}
 export async function dispatch(action,args={}) {
   switch(action){
+    case 'watchlistQuotes':return watchlistQuotes(args.symbols);
+    case 'uiConfig':return uiConfig();
+    case 'uiConfigure':return configureUI(args);
+    case 'importScriptFile':{const script=importScriptFile(args);return store.write('scripts',script,script.id);}
+    case 'layoutSave':return saveLayout(args);
+    case 'layoutList':return listLayouts();
+    case 'layoutRead':return readLayout(args.id);
+    case 'layoutActivate':{const saved=await readLayout(args.id);live.stop();optionsProvider.stop();await liveWrite;if(saved.snapshot.dataset){saved.snapshot.dataset={...saved.snapshot.dataset,origin:'Saved layout • '+saved.snapshot.dataset.origin};await store.write('bars',saved.snapshot.dataset);}return saved;}
+    case 'layoutDelete':return deleteLayout(args.id);
     case 'workspace':return {dataset:await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'},scripts:[...examples,...await store.list('scripts')],runs:(await store.list('runs')).sort((a,b)=>b.createdAt-a.createdAt).slice(0,30),savedStudies:(await store.list('research-index')).sort((a,b)=>b.createdAt-a.createdAt).slice(0,20).map(({id,kind,status,createdAt})=>({id,kind,status:status==='running'?(researchJobs.jobs.get(id)?.status??'unavailable'):status,createdAt})),dataDir:store.dataDir};
     case 'loadMarket':{live.stop();await liveWrite;const bars=await fetchBinance(args);return store.write('bars',{bars,symbol:args.symbol,timeframe:args.timeframe,origin:'Binance • closed candles',loadedAt:Date.now()});}
     case 'importBars':{live.stop();await liveWrite;if(!durations[args.timeframe])throw new Error('Unsupported timeframe.');return store.write('bars',{bars:args.csv?parseCSV(args.csv):validateBars(args.bars),symbol:String(args.symbol||'CSV').slice(0,40),timeframe:args.timeframe,origin:'Imported OHLCV',loadedAt:Date.now()});}

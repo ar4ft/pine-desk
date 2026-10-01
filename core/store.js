@@ -16,3 +16,5 @@ export async function list(kind) {
   let files;try{files=await fs.readdir(path.join(dataDir,validId(kind)));}catch(e){if(e.code==='ENOENT')return [];throw e;}
   return Promise.all(files.filter(f=>f.endsWith('.json')).map(f=>read(kind,f.slice(0,-5))));
 }
+
+export async function remove(kind,id){await fs.rm(path.join(dataDir,validId(kind),`${validId(id)}.json`),{force:true});}

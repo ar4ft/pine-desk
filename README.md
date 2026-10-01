@@ -129,3 +129,7 @@ LuxAlgo's licensing page describes self-hosted software components, rather than 
 Enter your Unusual Whales token and Whale Options vendor credentials in **Settings**. The new **Options chart** provides signed OI GEX-by-strike bars, explicitly defined call/put walls and cumulative gamma-flip overlays, plus bounded live options-flow markers through the documented Unusual Whales WebSocket. Matching workspace charts can display the same overlays alongside Pine scripts. Credentials use operating-system encryption. Paid access/streaming entitlements are configured later with your own keys.
 
 [Options setup, calculations and limitations](docs/options.md) · [Managed Whale Options engine](docs/whale-options.md#enter-credentials-and-launch-from-settings). Underlying candles and levels refresh every 30 seconds; missed options-stream events are flagged rather than replayed. Options contract/multi-leg backtesting remains outside the underlying Pine strategy engine.
+
+## Customize your workspace
+
+Dark/light/macOS themes, candle colors and editor font size are available in Settings. Named layouts preserve candle snapshots, Pine/native indicators, drawings and pane arrangement; the last session restores automatically. Provider-qualified watchlists switch markets and fetch Binance quote snapshots. Import UTF-8 `.pine`/`.txt` sources directly through the native file picker. See [workspace customization](docs/workspaces.md).
