@@ -62,3 +62,7 @@ Continuous streams and parameter research are documented in [Live data](live-dat
 Options MCP tools: `options_refresh`, `options_start`, `options_snapshot`, `options_stop`. The standalone process uses `UNUSUAL_WHALES_API_KEY`; desktop encrypted credentials cannot be unlocked by the Node server. See [provider and options documentation](options.md#credential-storage-and-mcp).
 
 Use the editor’s **Import .pine / .txt** button for native source files (UTF-8, up to 200 KB, Pine v5/v6). Imports save the source and provenance without executing it. [File import and workspace guide](workspaces.md#import-pine-and-txt-scripts).
+
+## Crypto options and educational calculations
+
+The six new crypto/education tools are listed in [Crypto options & Greeks Lab](crypto-options.md#mcp). Deribit public access needs no key. Desktop and stdio streams remain separate processes; tools preserve exchange units, timestamps and coverage. `options_greeks` produces hypothetical European-model values rather than pricing inverse crypto settlement.

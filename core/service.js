@@ -1,3 +1,5 @@
+import {DeribitOptions} from './deribit.js';
+import {calculateGreeks,greekCurve} from './greeks.js';
 import {watchlistQuotes} from './watchlist.js';
 import {uiConfig,configureUI,importScriptFile,saveLayout,listLayouts,readLayout,deleteLayout} from './workspace-ui.js';
 import {randomUUID} from 'node:crypto';
@@ -16,13 +18,20 @@ import {ResearchJobs,compareRuns} from './research.js';
 import * as store from './store.js';
 let liveWrite=Promise.resolve();
 export const live=new BinanceLive({onClosed:dataset=>{const snapshot=structuredClone(dataset);liveWrite=liveWrite.catch(()=>{}).then(()=>store.write('bars',snapshot));liveWrite.catch(error=>console.warn('Could not persist settled live candles:',error.message));}});
+export const deribit=new DeribitOptions();
 export const optionsProvider=new UnusualWhales();
 export const whaleRunner=new WhaleRunner();
 export const researchJobs=new ResearchJobs();
-export function shutdown(){live.stop();researchJobs.stop();optionsProvider.stop();whaleRunner.stop();}
+export function shutdown(){deribit.stop();live.stop();researchJobs.stop();optionsProvider.stop();whaleRunner.stop();}
 async function datasetFor(args){return structuredClone(args.dataset??(live.active?live.snapshot().dataset:null)??await store.read('bars')??{bars:demoBars(),symbol:'DEMO',timeframe:'1h',origin:'Synthetic demonstration'});}
 export async function dispatch(action,args={}) {
   switch(action){
+    case 'deribitRefresh':return deribit.refresh(args);
+    case 'deribitSelect':return deribit.select(args);
+    case 'deribitStart':return deribit.start();
+    case 'deribitStop':return deribit.stop();
+    case 'deribitSnapshot':return deribit.snapshot();
+    case 'optionsGreeks':return {values:calculateGreeks(args.model),curve:args.curve?greekCurve(args.model,args.curve):null};
     case 'watchlistQuotes':return watchlistQuotes(args.symbols);
     case 'uiConfig':return uiConfig();
     case 'uiConfigure':return configureUI(args);

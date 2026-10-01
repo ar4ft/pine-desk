@@ -1,9 +1,11 @@
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
 import {z} from 'zod';
+import {readFileSync} from 'node:fs';
 import {dispatch,shutdown} from './service.js';
-const server=new McpServer({name:'pine-desk',version:'0.1.0'});
-const tool=(name,description,inputSchema,action,readOnly=true)=>server.registerTool(name,{description,inputSchema,annotations:{readOnlyHint:readOnly,destructiveHint:false,openWorldHint:action.startsWith('library')||action.startsWith('edge')||action.startsWith('whale')||action.startsWith('live')||action.startsWith('options')}},async args=>{try{return {content:[{type:'text',text:JSON.stringify(await dispatch(action,args))}]};}catch(e){return {isError:true,content:[{type:'text',text:JSON.stringify({message:e.message,diagnostic:e.diagnostic??null})}]};}});
+const version=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version;
+const server=new McpServer({name:'pine-desk',version});
+const tool=(name,description,inputSchema,action,readOnly=true)=>server.registerTool(name,{description,inputSchema,annotations:{readOnlyHint:readOnly,destructiveHint:false,openWorldHint:action.startsWith('library')||action.startsWith('edge')||action.startsWith('whale')||action.startsWith('live')||action.startsWith('options')||action.startsWith('deribit')}},async args=>{try{return {content:[{type:'text',text:JSON.stringify(await dispatch(action,args))}]};}catch(e){return {isError:true,content:[{type:'text',text:JSON.stringify({message:e.message,diagnostic:e.diagnostic??null})}]};}});
 tool('workspace','Read local dataset, saved scripts, and reproducible backtest runs.',{},'workspace');
 tool('load_market','Fetch up to 1,000 settled Binance candles and save the current dataset.',{symbol:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h','1d']),limit:z.number().int().min(2).max(1000).default(1000)},'loadMarket',false);
 tool('import_bars','Import OHLCV CSV (time,open,high,low,close,volume). Replaces current local dataset.',{csv:z.string().max(20000000),symbol:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h','1d'])},'importBars',false);
@@ -46,5 +48,12 @@ tool('research_status','Read a study’s progress, errors, frozen source/data/in
 tool('research_cancel','Cancel an active study and terminate its active strategy worker.',{id:z.string()},'researchCancel',false);
 tool('research_save_run','Save a completed sweep candidate or walk-forward test fold as an ordinary backtest run.',{id:z.string(),index:z.number().int().nonnegative().optional(),fold:z.number().int().nonnegative().optional()},'researchSaveRun',false);
 tool('compare_runs','Compare 2–6 distinct saved runs with normalized equity and data-identity checks. Different datasets are descriptive comparisons.',{ids:z.array(z.string()).min(2).max(6)},'compareRuns');
+tool('crypto_options_refresh','Fetch public Deribit BTC/ETH inverse-option instruments, summary quotes, index and latest 100 trades. No key needed. OI/amount use underlying units; premium is BTC/ETH, strike USD. Does not fetch historical chains.',{currency:z.enum(['BTC','ETH']).default('BTC')},'deribitRefresh');
+tool('crypto_options_contract','Load exchange-reported Greeks for a contract in this process loaded chain. Stops the previous live subscription.',{instrument:z.string().max(100)},'deribitSelect',false);
+tool('crypto_options_start','Start two public Deribit channels in THIS process: one selected ticker and currency option trades. Chain/index/IV curves remain REST snapshots. Trade buffer 1000, disconnect gaps not replayed.',{},'deribitStart',false);
+tool('crypto_options_stop','Stop THIS process Deribit stream and retain timestamped data.',{},'deribitStop',false);
+tool('crypto_options_snapshot','Read THIS process Deribit snapshot, selected ticker, trades and disconnect gaps. Preserve source timestamps, units and snapshot/live coverage.',{},'deribitSnapshot');
+tool('options_greeks','Educational Black–Scholes–Merton price and first/higher Greeks. European exercise, quote units per underlying unit, IV/rates in percent, 365 calendar days. Vega/Rho per percentage point; Theta/Charm/Color per elapsed day. Not an inverse crypto contract or American pricing model.',{model:z.object({spot:z.number().positive(),strike:z.number().positive(),days:z.number().positive(),volatility:z.number().positive(),rate:z.number().optional(),dividend:z.number().optional(),type:z.enum(['call','put'])}),curve:z.object({metric:z.enum(['price','delta','gamma','vega','theta','rho','vanna','vomma','charm','speed','color','zomma','ultima']),axis:z.enum(['spot','days','volatility']),points:z.number().int().min(2).max(201).optional()}).optional()},'optionsGreeks');
+server.server.onclose=shutdown;
 process.once('SIGTERM',()=>{shutdown();process.exit(0);});
 await server.connect(new StdioServerTransport());

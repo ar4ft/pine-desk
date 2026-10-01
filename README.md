@@ -4,7 +4,7 @@ A local Mac trading research app built with [PineTS](https://github.com/LuxAlgo/
 
 ![Pine Desk chart workspace](docs/workspace.png)
 
-Documentation: [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md).
+Documentation: [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md) · [Crypto options & Greeks education](docs/crypto-options.md) · [Options project review](docs/options-project-review.md).
 
 Signed distribution and automatic updates are prepared in the [release setup guide](docs/releases.md). Configure Apple signing/notarization secrets later, then manually run the Signed Mac release Action with an existing version tag.
 
@@ -33,6 +33,8 @@ For development: `npm run dev`. For a local Apple Silicon and Intel DMG/ZIP buil
 * **Order flow:** Import executed trades with explicit aggressor sides. Compute per-bar footprints, volume delta, CVD, buy/sell trade counts, a full-import volume profile, and POC. View latest-bar footprint, profile, and CVD. Live Binance order flow uses the buyer-is-maker flag for aggressor side and retains the latest 50,000 raw prints. Live CVD/profile covers that window with explicit gap warnings. No buy/sell sides are inferred from OHLCV.
 * **Edge Stats:** Official public hosted reports, coverage and freshness; optional local engine for custom DSL queries, preset parameters, grouped evidence and session-bar charts. Results retain N, Wilson confidence intervals and minimum-sample guards.
 * **Whale Options:** Optional local engine connection for options flow, score/quote audits, gamma ladders, OI changes, max pain, IV history and net premium. Synthetic feed setup and licensed provider routes are documented.
+* **Greeks Lab:** Independent interactive European-option education with call/put controls, spot/time/IV sensitivity curves, first and higher Greeks, explicit units, explanations, presets and a short exercise.
+* **Crypto options:** Public Deribit BTC/ETH inverse-option chains, IV smiles, ATM/forward term structure, selected exchange-reported Greeks and acknowledged public WebSocket updates plus bounded option trade prints. No key required; snapshots and live coverage are labeled. Export JSON. Bybit/OKX are documented candidates, not implemented adapters.
 * **MCP:** A separate local stdio server shares the app's dataset, scripts, imported trades, and saved runs. Official public LuxAlgo catalog calls are forwarded through its hosted MCP.
 
 This is a working first research edition, not full parity with the LuxAlgo platform. It does not implement TPO, session/rolling profiles, footprint imbalances, order books, all platform screeners, nested/anchored optimization, session-aware walk-forward windows, or a standalone calendar engine, broker execution, or LuxAlgo account authentication. Library indicators are not automatically converted to strategies; specify entry/exit logic in a `strategy(...)` script.
@@ -133,3 +135,5 @@ Enter your Unusual Whales token and Whale Options vendor credentials in **Settin
 ## Customize your workspace
 
 Dark/light/macOS themes, candle colors and editor font size are available in Settings. Named layouts preserve candle snapshots, Pine/native indicators, drawings and pane arrangement; the last session restores automatically. Provider-qualified watchlists switch markets and fetch Binance quote snapshots. Import UTF-8 `.pine`/`.txt` sources directly through the native file picker. See [workspace customization](docs/workspaces.md).
+
+Crypto options and education tools are documented in [their guide](docs/crypto-options.md#mcp). The [project review](docs/options-project-review.md) records upstream revisions, license findings, included features and deferred SABR/portfolio work. Run `npm run smoke:crypto` for an optional genuine public REST/WebSocket check.
