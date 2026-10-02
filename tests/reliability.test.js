@@ -516,3 +516,33 @@ test("compressed archives retain hashes and can still read legacy uncompressed r
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("historical execution excludes even slightly future quote and IV timestamps", async () => {
+  const { backtestOptions } = await import("../core/option-portfolio.js");
+  const rs = records({ n: 3 });
+  const rules = { targetDTE: 30, feeBps: 0 };
+  const selected = selectOptionLegs(rs[0].snapshot, rules)[0];
+  for (const q of rs[0].snapshot.rows) q.quoteAt = rs[0].snapshot.fetchedAt + 1;
+  assert.deepEqual(selectOptionLegs(rs[0].snapshot, rules), []);
+  for (const q of rs[0].snapshot.rows) {
+    q.quoteAt = rs[0].snapshot.fetchedAt;
+    q.ivAt = rs[0].snapshot.fetchedAt + 1;
+  }
+  assert.deepEqual(selectOptionLegs(rs[0].snapshot, rules), []);
+  for (const q of rs[0].snapshot.rows) q.ivAt = q.quoteAt;
+  rs[1].snapshot.rows.find(
+    (q) => q.instrument === selected.instrument,
+  ).quoteAt = rs[1].snapshot.fetchedAt + 1;
+  assert.throws(
+    () => runOptionStrategy(rs, { rules, initialCapital: 1 }),
+    /stale quote/,
+  );
+  assert.throws(
+    () =>
+      backtestOptions(rs, {
+        legs: [{ instrument: selected.instrument, quantity: 1 }],
+        initialCapital: 1,
+      }),
+    /unusable quote/,
+  );
+});

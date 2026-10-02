@@ -313,6 +313,7 @@ export function backtestOptions(records, input = {}) {
       const r = snapshot.rows.find((r) => r.instrument === p.instrument);
       if (
         !r ||
+        r.quoteAt > snapshot.fetchedAt ||
         !quoteUsable(
           { ...r, iv: 1, ivAt: null, oi: r.oi ?? 0 },
           snapshot.fetchedAt,

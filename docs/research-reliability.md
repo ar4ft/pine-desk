@@ -40,7 +40,7 @@ Select 3–2,000 archived observations with matching exchange, underlying and se
 }
 ```
 
-Templates: long call, long put, straddle, strangle, call/put debit spreads, iron condor and call calendar. Contract selection uses the signal observation only; entry fills require a later observation even at zero configured latency. Exit triggers use the current observation, with configured delay before execution. Re-entry selects fresh contracts after closing a position. Missing, crossed or stale held quotes fail the study rather than silently filling a model price.
+Templates: long call, long put, straddle, strangle, call/put debit spreads, iron condor and call calendar. Contract selection uses the signal observation only; entry fills require a later observation even at zero configured latency. Exit triggers use the current observation, with configured delay before execution. Re-entry selects fresh contracts after closing a position. Quotes/IV timestamps after their observation are excluded, with no future clock-skew allowance in historical execution. Missing, crossed or stale held quotes fail the study rather than silently filling a model price.
 
 Quantities are signed **underlying units** across adapters, including shares for imported US options. A standard US contract is 100 shares, so use quantity 100 for one contract. Quote sizes are normalized to the same units. `ignore` assumes sufficient liquidity, `reject` requires quoted depth, and `partial` retains unfilled quantities. Independent partial fills can leave an unbalanced spread. Displayed top-of-book size is not proof of historical executable liquidity, queue position, or simultaneous leg fills.
 

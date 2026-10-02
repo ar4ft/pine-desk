@@ -106,7 +106,12 @@ export function validateOptionRules(input = {}) {
 function eligible(row, s, r) {
   return (
     row.expiry > s.fetchedAt &&
-    row.quoteAt <= s.fetchedAt + 5000 &&
+    Number.isFinite(row.quoteAt) &&
+    row.quoteAt <= s.fetchedAt &&
+    (row.ivAt == null ||
+      (Number.isFinite(row.ivAt) &&
+        row.ivAt <= s.fetchedAt &&
+        s.fetchedAt - row.ivAt <= r.maxAgeMs)) &&
     s.fetchedAt - row.quoteAt <= r.maxAgeMs &&
     row.bid > 0 &&
     row.ask >= row.bid &&
