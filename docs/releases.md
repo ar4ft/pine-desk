@@ -80,3 +80,7 @@ This signs and notarizes using the release configuration but **does not publish*
 Download each architecture's signed DMG/ZIP from the release and validate signatures and stapled tickets on a Mac. Run chart execution and backtests from `/Applications`. Publish a second, higher test release using the same team and verify that the installed first version discovers it, downloads the matching architecture and prompts before installation. Verify the Later path, offline checks, and preservation of saved work. These live Apple/update checks remain pending until credentials and two signed versions exist.
 
 Sources: [electron-builder signing](https://www.electron.build/code-signing-mac), [notarization](https://www.electron.build/mac), [electron-updater](https://www.electron.build/auto-update).
+
+## CI reliability
+
+Normal CI verifies formatting, core/browser tests and unsigned Mac packages on separate Intel (`macos-26-intel`) and Apple Silicon (`macos-26`) runners. Download `pine-desk-mac-unsigned-x64` or `pine-desk-mac-unsigned-arm64`. Desktop smoke has a 180-second watchdog, a five-minute workflow step limit, bounded shutdown and failure screenshots/logs. Mac jobs have a 25-minute deadline. None of these push/PR jobs signs or notarizes.

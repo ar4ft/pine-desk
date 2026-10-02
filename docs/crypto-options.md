@@ -26,14 +26,14 @@ The independent implementation uses Black–Scholes–Merton European pricing wi
 
 For decimal volatility, raw first/second/third derivatives are scaled by 100, 10,000 and 1,000,000 respectively. Time derivatives use elapsed time, reversing the sign of derivatives with respect to remaining maturity. Higher Greeks use analytic formulas. Standard-normal CDF uses a polynomial approximation; this is an educational calculator rather than an exchange pricing engine. Reference prices, put-call parity and **all displayed sensitivities** are tested against independent finite differences.
 
-No American exercise, stochastic volatility/jumps, inverse settlement, fees, executable spread, portfolio hedge or multi-leg fill model is implied. Delta is local sensitivity, not a guarantee of exercise or an observed probability. Large input changes need full repricing.
+American CRR pricing with optional cash dividends is available in v0.7; higher Greeks are unavailable in that mode. See [the method and limitations](research-reliability.md#education-and-process-boundaries). No stochastic volatility/jumps, inverse settlement, fees, executable spread, portfolio hedge or multi-leg fill model is implied. Delta is local sensitivity, not a guarantee of exercise or an observed probability. Large input changes need full repricing.
 
 ## Deribit workflow
 
 1. Open **Crypto options**, choose BTC or ETH, and click **Refresh chain**.
 2. Choose an expiry. Inspect the call/put mark-IV smile, ATM term structure and chain. The table shows up to 200 contracts nearest the snapshot index; JSON export includes all returned active inverse contracts.
 3. Click a contract to fetch its current ticker, including exchange-reported Delta/Gamma/Vega/Theta/Rho.
-4. Click **Start live contract & trades**. A single connection subscribes to `ticker.{instrument}.100ms` and `trades.option.{currency}.100ms`. Streaming status requires acknowledgment of both channels. No raw/authenticated channel is used.
+4. Click **Start live contract & trades**. A single connection subscribes to `ticker.{instrument}.100ms` and `trades.option.{currency}.100ms`. Optionally enable Live expiry quotes to subscribe up to 100 extra near-index contracts in that expiry. Streaming status requires acknowledgment of every channel. No raw/authenticated channel is used.
 5. Stop, switch contract or refresh to end the previous connection. A currency-selector change takes effect on Refresh; the displayed snapshot keeps its original currency until that succeeds.
 6. Export JSON to retain chain, source times, contract metadata, ticker, trades and gaps.
 

@@ -1,25 +1,207 @@
-import {newOptionResearch,optionResearchView,bindOptionResearch} from './option-research-view.js';
-import {curveSVG,formatValue as f,escapeHTML as esc} from './options-learning.js';
-const date=t=>Number.isFinite(t)?new Date(t).toISOString().replace('T',' ').slice(0,19)+' UTC':'—';
-export function newCryptoState(){return {exchange:'deribit',currency:'BTC',settlement:'USDC',expiry:null,snapshot:null,archiveId:null,research:newOptionResearch()};}
-export function cryptoView(state){
- const s=state.snapshot,expiries=[...new Set(s?.rows?.map(r=>r.expiry)??[])];if(!expiries.includes(state.expiry))state.expiry=expiries[0]??null;
- return `<div class="page-intro"><span class="eyebrow">${state.exchange.toUpperCase()} PUBLIC DATA · READ ONLY</span><h1>Explore crypto options.</h1><p>BTC and ETH options. Exchange-specific settlement units; public data requires no API key.</p></div><div class="crypto-toolbar"><label>Exchange<select id="crypto-exchange">${['deribit','bybit','okx'].map(e=>`<option value="${e}" ${e===state.exchange?'selected':''}>${e}</option>`).join('')}</select></label><label>Bybit settlement<select id="crypto-settlement" ${state.exchange==='bybit'?'':'disabled'}>${['USDC','USDT'].map(c=>`<option ${c===state.settlement?'selected':''}>${c}</option>`).join('')}</select></label><label>Currency<select id="crypto-currency">${['BTC','ETH'].map(c=>`<option ${state.currency===c?'selected':''}>${c}</option>`).join('')}</select></label><button id="crypto-refresh" class="primary">Refresh chain</button><label>Expiry<select id="crypto-expiry">${expiries.map(t=>`<option value="${t}" ${state.expiry===t?'selected':''}>${date(t).slice(0,10)}</option>`).join('')}</select></label><button id="crypto-start" ${s?.instrument?'':'disabled'}>${state.exchange==='deribit'?'Start live contract & trades':'Start 30s polling'}</button><button id="crypto-stop" ${s?.active?'':'disabled'}>Stop live</button><button id="crypto-export" ${s?'':'disabled'}>Export JSON</button></div><p id="crypto-status" aria-live="polite"></p><div id="crypto-content">${s?.rows?.length?cryptoContent(state):'<div class="empty-state"><h2>Load an exchange snapshot.</h2><p>Refresh to inspect contracts, mark IV and recent trades.<br>Choose a contract to load exchange-reported Greeks and enable its live feed.</p></div>'}</div>${optionResearchView(state)}`;
+import {
+  newOptionResearch,
+  optionResearchView,
+  bindOptionResearch,
+} from "./option-research-view.js";
+import {
+  curveSVG,
+  formatValue as f,
+  escapeHTML as esc,
+} from "./options-learning.js";
+import { qualityView } from "./research-workflow.js";
+const date = (t) =>
+  Number.isFinite(t)
+    ? new Date(t).toISOString().replace("T", " ").slice(0, 19) + " UTC"
+    : "—";
+export function newCryptoState() {
+  return {
+    exchange: "deribit",
+    currency: "BTC",
+    settlement: "USDC",
+    expiry: null,
+    liveChain: false,
+    snapshot: null,
+    archiveId: null,
+    research: newOptionResearch(),
+  };
 }
-function cryptoContent(state){
- const s=state.snapshot,premium=s.settlement??s.currency,rows=s.rows.filter(r=>r.expiry===state.expiry),visible=rows.slice().sort((a,b)=>Math.abs(a.strike-s.spot)-Math.abs(b.strike-s.spot)).slice(0,200).sort((a,b)=>a.strike-b.strike||a.type.localeCompare(b.type)),smile=['call','put'].map(type=>({name:type+' mark IV',points:rows.filter(r=>r.type===type&&r.iv>0).map(r=>({x:r.strike,y:r.iv}))}));
- return `<div class="crypto-summary"><span>${s.currency} index <strong>$${f(s.spot,2)}</strong></span><span>${s.rows.length} contracts · ${date(s.fetchedAt)}</span></div><p>${esc(s.coverage)}</p><div class="crypto-plots"><section class="plot-card"><h2>IV smile · selected expiry</h2>${curveSVG(smile,{xLabel:'Strike (USD)',yLabel:'Mark IV (%)'})}</section><section class="plot-card"><h2>ATM term structure · snapshot</h2>${curveSVG([{name:'Nearest-strike ATM IV',points:(s.term??[]).map(t=>({x:t.days,y:t.iv}))}],{xLabel:'Days remaining',yLabel:'IV (%)'})}</section></div><details class="learning-note"><summary>ATM and forward IV observations</summary><p>ATM IV averages available call/put mark IV at the nearest strike to the index, within 10%. Adjacent expiry forward IV uses the difference in total variance; non-positive variance is withheld. These overview curves use unfiltered snapshot marks. The separate research controls below apply liquidity/freshness filters and SABR calibration.</p><div class="table-wrap"><table><thead><tr><th>Expiry</th><th>Strike</th><th>ATM IV %</th><th>Quotes</th><th>Forward IV %</th><th>Note</th></tr></thead><tbody>${(s.term??[]).map(t=>`<tr><td>${date(t.expiry).slice(0,10)}</td><td>${f(t.strike,0)}</td><td>${f(t.iv,2)}</td><td>${t.observations}</td><td>${f(t.forwardIV,2)}</td><td>${esc(t.forwardReason??'From previous expiry')}</td></tr>`).join('')}</tbody></table></div></details><section class="learning-note" id="crypto-ticker">${s.ticker?tickerView(s):'<h2>Contract Greeks</h2><p>Choose a contract below to request its current ticker.</p>'}</section><h2>Option chain · ${rows.length} contracts</h2><p>Showing ${visible.length} nearest to the snapshot index. Export includes the full chain. Quotes and OI remain snapshots; contract live data appears above.</p><div class="table-wrap"><table><thead><tr><th>Contract</th><th>Strike (USD)</th><th>Type</th><th>Bid (${premium})</th><th>Ask (${premium})</th><th>Mark (${premium})</th><th>IV %</th><th>OI (${s.currency})</th></tr></thead><tbody>${visible.map(r=>`<tr><td><button class="text-btn" data-crypto-contract="${esc(r.instrument)}" ${state.archiveId?'disabled':''}>${esc(r.instrument)}</button></td><td>${f(r.strike,0)}</td><td>${r.type}</td><td>${f(r.bid,6)}</td><td>${f(r.ask,6)}</td><td>${f(r.mark,6)}</td><td>${f(r.iv,2)}</td><td>${f(r.oi,2)}</td></tr>`).join('')}</tbody></table></div><section class="learning-note"><h2>Recent option trades · all expiries</h2><p>${esc(s.tradeCoverage)} Live retention is capped at 1,000 unique prints. Sorted by time, newest first. Buy/sell is the exchange’s taker direction, not a dealer-position inference. Trade amount is normalized to underlying units. Inverse premium uses price × amount × index; stablecoin premium uses price × amount. OKX USD trade premiums use the snapshot index and are estimates. No equity-options ×100 multiplier.</p><div id="crypto-trades">${tradesView(s)}</div></section><details class="learning-note"><summary>Exchange conventions and coverage</summary><p>Snapshot provider ${s.exchange??'deribit'}; settlement ${premium}. Deribit/Bybit amounts use underlying units. OKX OI and trade contract counts are multiplied by ctVal × ctMult once; normalized OI/amount use underlying units. Premium quotes remain per underlying unit. Mark IV is percent. Stablecoin USD equivalents assume 1 USD parity.</p><p>Exchange-reported Greeks remain raw ticker values. Deribit Theta uses remaining-lifetime decay near expiry, and account net-transaction Delta differs from individual ticker Delta. Education/scenario models use standard BSM. Read exchange definitions before hedging. Archives preserve observation times and unit metadata; disconnects do not replay missed trades.</p></details>`;
+export function cryptoView(state) {
+  const s = state.snapshot,
+    expiries = [...new Set(s?.rows?.map((r) => r.expiry) ?? [])];
+  if (!expiries.includes(state.expiry)) state.expiry = expiries[0] ?? null;
+  return `<div class="page-intro"><span class="eyebrow">${state.exchange.toUpperCase()} PUBLIC DATA · READ ONLY</span><h1>Explore crypto options.</h1><p>BTC and ETH options. Exchange-specific settlement units; public data requires no API key.</p></div><div class="crypto-toolbar"><label>Exchange<select id="crypto-exchange">${["deribit", "bybit", "okx"].map((e) => `<option value="${e}" ${e === state.exchange ? "selected" : ""}>${e}</option>`).join("")}</select></label><label>Bybit settlement<select id="crypto-settlement" ${state.exchange === "bybit" ? "" : "disabled"}>${["USDC", "USDT"].map((c) => `<option ${c === state.settlement ? "selected" : ""}>${c}</option>`).join("")}</select></label><label>Currency<select id="crypto-currency">${["BTC", "ETH"].map((c) => `<option ${state.currency === c ? "selected" : ""}>${c}</option>`).join("")}</select></label><button id="crypto-refresh" class="primary">Refresh chain</button><label>Expiry<select id="crypto-expiry">${expiries.map((t) => `<option value="${t}" ${state.expiry === t ? "selected" : ""}>${date(t).slice(0, 10)}</option>`).join("")}</select></label>${state.exchange === "deribit" ? `<label><input id="crypto-chain-live" type="checkbox" ${state.liveChain ? "checked" : ""}>Live expiry quotes (up to 100 extra contracts)</label>` : ""}<button id="crypto-start" ${s?.instrument ? "" : "disabled"}>${state.exchange === "deribit" ? "Start live contract & trades" : "Start 30s polling"}</button><button id="crypto-stop" ${s?.active ? "" : "disabled"}>Stop live</button><button id="crypto-export" ${s ? "" : "disabled"}>Export JSON</button></div><p id="crypto-status" aria-live="polite"></p><div id="crypto-content">${s?.rows?.length ? cryptoContent(state) : '<div class="empty-state"><h2>Load an exchange snapshot.</h2><p>Refresh to inspect contracts, mark IV and recent trades.<br>Choose a contract to load exchange-reported Greeks and enable its live feed.</p></div>'}</div>${qualityView(s, { archive: !!state.archiveId })}${optionResearchView(state)}`;
 }
-function tickerView(s){const t=s.ticker;return `<h2>${esc(t.instrument)}</h2><p>Exchange ticker · ${date(t.timestamp)} · ${s.active?(s.exchange==='deribit'||!s.exchange?'Live subscription enabled':'30s REST polling'):'REST snapshot'}</p><div class="crypto-summary"><span>Mark ${f(t.mark,6)} ${s.settlement??s.currency}</span><span>IV ${f(t.iv,2)}%</span><span>Bid ${f(t.bid,6)} / Ask ${f(t.ask,6)}</span></div><div class="greek-cards">${Object.entries(t.greeks).map(([k,v])=>`<div><small>${k}</small><strong>${f(v,6)}</strong><span>Exchange-reported</span></div>`).join('')}</div>`;}
-function tradesView(s){return `<div class="table-wrap"><table><thead><tr><th>UTC</th><th>Contract</th><th>Taker</th><th>Amount (${s.currency})</th><th>Price (${s.currency})</th><th>Premium (USD)</th></tr></thead><tbody>${s.trades.slice().sort((a,b)=>b.time-a.time).slice(0,100).map(t=>`<tr><td>${date(t.time)}</td><td>${esc(t.instrument)}</td><td>${t.side}</td><td>${f(t.amount,2)}</td><td>${f(t.price,6)}</td><td>${f(t.premiumUSD,2)}</td></tr>`).join('')}</tbody></table></div>`;}
-export function paintCrypto(state){
- const status=document.querySelector('#crypto-status');if(!status)return;const s=state.snapshot;status.textContent=s?`${s.status} · ${s.active?(s.exchange==='deribit'||!s.exchange?'2 public WebSocket channels: selected ticker + currency option trades':'30s public REST polling'):(state.archiveId?'Archived chain':'REST snapshot')}${s.lastMessageAt?' · Connection activity '+date(s.lastMessageAt):''}${s.error?' · '+s.error:''}${s.gaps?.length?' · '+s.gaps.length+' disconnect gap(s); trades were not replayed.':''}`:'No exchange data loaded.';
- if(s?.ticker&&document.querySelector('#crypto-ticker'))document.querySelector('#crypto-ticker').innerHTML=tickerView(s);if(s?.trades&&document.querySelector('#crypto-trades'))document.querySelector('#crypto-trades').innerHTML=tradesView(s);document.querySelector('#crypto-stop').disabled=!s?.active;document.querySelector('#crypto-start').disabled=!!state.archiveId||!!s?.active||(state.exchange==='deribit'?!s?.instrument:!s?.rows?.length);
+function cryptoContent(state) {
+  const s = state.snapshot,
+    premium = s.settlement ?? s.currency,
+    rows = s.rows.filter((r) => r.expiry === state.expiry),
+    visible = rows
+      .slice()
+      .sort((a, b) => Math.abs(a.strike - s.spot) - Math.abs(b.strike - s.spot))
+      .slice(0, 200)
+      .sort((a, b) => a.strike - b.strike || a.type.localeCompare(b.type)),
+    smile = ["call", "put"].map((type) => ({
+      name: type + " mark IV",
+      points: rows
+        .filter((r) => r.type === type && r.iv > 0)
+        .map((r) => ({ x: r.strike, y: r.iv })),
+    }));
+  return `<div class="crypto-summary"><span>${s.currency} index <strong>$${f(s.spot, 2)}</strong></span><span>${s.rows.length} contracts · ${date(s.fetchedAt)}</span></div><p>${esc(s.coverage)}</p><div class="crypto-plots"><section class="plot-card"><h2>IV smile · selected expiry</h2>${curveSVG(smile, { xLabel: "Strike (USD)", yLabel: "Mark IV (%)" })}</section><section class="plot-card"><h2>ATM term structure · snapshot</h2>${curveSVG([{ name: "Nearest-strike ATM IV", points: (s.term ?? []).map((t) => ({ x: t.days, y: t.iv })) }], { xLabel: "Days remaining", yLabel: "IV (%)" })}</section></div><details class="learning-note"><summary>ATM and forward IV observations</summary><p>ATM IV averages available call/put mark IV at the nearest strike to the index, within 10%. Adjacent expiry forward IV uses the difference in total variance; non-positive variance is withheld. These overview curves use unfiltered snapshot marks. The separate research controls below apply liquidity/freshness filters and SABR calibration.</p><div class="table-wrap"><table><thead><tr><th>Expiry</th><th>Strike</th><th>ATM IV %</th><th>Quotes</th><th>Forward IV %</th><th>Note</th></tr></thead><tbody>${(s.term ?? []).map((t) => `<tr><td>${date(t.expiry).slice(0, 10)}</td><td>${f(t.strike, 0)}</td><td>${f(t.iv, 2)}</td><td>${t.observations}</td><td>${f(t.forwardIV, 2)}</td><td>${esc(t.forwardReason ?? "From previous expiry")}</td></tr>`).join("")}</tbody></table></div></details><section class="learning-note" id="crypto-ticker">${s.ticker ? tickerView(s) : "<h2>Contract Greeks</h2><p>Choose a contract below to request its current ticker.</p>"}</section><h2>Option chain · ${rows.length} contracts</h2><p>Showing ${visible.length} nearest to the snapshot index. Export includes the full chain. Quotes and OI remain snapshots; contract live data appears above.</p><div id="crypto-live-chain" class="table-wrap"><table><thead><tr><th>Contract</th><th>Strike (USD)</th><th>Type</th><th>Bid (${premium})</th><th>Ask (${premium})</th><th>Mark (${premium})</th><th>IV %</th><th>OI (${s.currency})</th></tr></thead><tbody>${visible.map((r) => `<tr><td><button class="text-btn" data-crypto-contract="${esc(r.instrument)}" ${state.archiveId ? "disabled" : ""}>${esc(r.instrument)}</button></td><td>${f(r.strike, 0)}</td><td>${r.type}</td><td>${f(r.bid, 6)}</td><td>${f(r.ask, 6)}</td><td>${f(r.mark, 6)}</td><td>${f(r.iv, 2)}</td><td>${f(r.oi, 2)}</td></tr>`).join("")}</tbody></table></div><section class="learning-note"><h2>Recent option trades · all expiries</h2><p>${esc(s.tradeCoverage)} Live retention is capped at 1,000 unique prints. Sorted by time, newest first. Buy/sell is the exchange’s taker direction, not a dealer-position inference. Trade amount is normalized to underlying units. Inverse premium uses price × amount × index; stablecoin premium uses price × amount. OKX USD trade premiums use the snapshot index and are estimates. No equity-options ×100 multiplier.</p><div id="crypto-trades">${tradesView(s)}</div></section><details class="learning-note"><summary>Exchange conventions and coverage</summary><p>Snapshot provider ${s.exchange ?? "deribit"}; settlement ${premium}. Deribit/Bybit amounts use underlying units. OKX OI and trade contract counts are multiplied by ctVal × ctMult once; normalized OI/amount use underlying units. Premium quotes remain per underlying unit. Mark IV is percent. Stablecoin USD equivalents assume 1 USD parity.</p><p>Exchange-reported Greeks remain raw ticker values. Deribit Theta uses remaining-lifetime decay near expiry, and account net-transaction Delta differs from individual ticker Delta. Education/scenario models use standard BSM. Read exchange definitions before hedging. Archives preserve observation times and unit metadata; disconnects do not replay missed trades.</p></details>`;
 }
-export function bindCrypto({state,call,task,render,exportFile}){
- if(!document.querySelector('#crypto-refresh'))return;const action=kind=>state.exchange==='deribit'?({refresh:'deribitRefresh',select:'deribitSelect',start:'deribitStart',stop:'deribitStop',snapshot:'deribitSnapshot'}[kind]):'crypto'+kind[0].toUpperCase()+kind.slice(1),args=()=>({exchange:state.exchange,currency:state.currency,settlement:state.settlement});
- document.querySelector('#crypto-exchange').onchange=e=>{const exchange=e.target.value;task(async()=>{await call(action('stop'),args());state.exchange=exchange;if(exchange==='bybit'&&!['USDC','USDT'].includes(state.settlement))state.settlement='USDC';state.snapshot=null;state.expiry=null;state.archiveId=null;state.research.surface=null;state.research.legs=[];state.research.risk=null;state.research.initialCapital=exchange==='bybit'?10000:1;render();});};
- document.querySelector('#crypto-currency').onchange=e=>{state.currency=e.target.value;};document.querySelector('#crypto-settlement').onchange=e=>{state.settlement=e.target.value;};document.querySelector('#crypto-expiry').onchange=e=>{state.expiry=Number(e.target.value);state.research.surface=null;state.research.risk=null;state.research.legs=[];render();};const run=(id,fn)=>document.querySelector('#'+id).onclick=()=>task(fn);
- run('crypto-refresh',async()=>{try{state.snapshot=await call(action('refresh'),args());state.expiry=null;state.archiveId=null;state.research.surface=null;state.research.risk=null;state.research.legs=[];render();}catch(e){state.snapshot=await call(action('snapshot'),args());render();throw e;}});run('crypto-start',async()=>{state.snapshot=await call(action('start'),args());paintCrypto(state);});run('crypto-stop',async()=>{state.snapshot=await call(action('stop'),args());paintCrypto(state);});run('crypto-export',()=>exportFile(state.exchange+'-options.json',JSON.stringify(state.snapshot,null,2)));
- document.querySelectorAll('[data-crypto-contract]').forEach(el=>el.onclick=()=>task(async()=>{state.snapshot=await call(action('select'),{...args(),instrument:el.dataset.cryptoContract});render();}));paintCrypto(state);bindOptionResearch({state,call,task,render,exportFile});
+function tickerView(s) {
+  const t = s.ticker;
+  return `<h2>${esc(t.instrument)}</h2><p>Exchange ticker · ${date(t.timestamp)} · ${s.active ? (s.exchange === "deribit" || !s.exchange ? "Live subscription enabled" : "30s REST polling") : "REST snapshot"}</p><div class="crypto-summary"><span>Mark ${f(t.mark, 6)} ${s.settlement ?? s.currency}</span><span>IV ${f(t.iv, 2)}%</span><span>Bid ${f(t.bid, 6)} / Ask ${f(t.ask, 6)}</span></div><div class="greek-cards">${Object.entries(
+    t.greeks,
+  )
+    .map(
+      ([k, v]) =>
+        `<div><small>${k}</small><strong>${f(v, 6)}</strong><span>Exchange-reported</span></div>`,
+    )
+    .join("")}</div>`;
+}
+function tradesView(s) {
+  return `<div class="table-wrap"><table><thead><tr><th>UTC</th><th>Contract</th><th>Taker</th><th>Amount (${s.currency})</th><th>Price (${s.currency})</th><th>Premium (USD)</th></tr></thead><tbody>${s.trades
+    .slice()
+    .sort((a, b) => b.time - a.time)
+    .slice(0, 100)
+    .map(
+      (t) =>
+        `<tr><td>${date(t.time)}</td><td>${esc(t.instrument)}</td><td>${t.side}</td><td>${f(t.amount, 2)}</td><td>${f(t.price, 6)}</td><td>${f(t.premiumUSD, 2)}</td></tr>`,
+    )
+    .join("")}</tbody></table></div>`;
+}
+export function paintCrypto(state) {
+  const status = document.querySelector("#crypto-status");
+  if (!status) return;
+  const s = state.snapshot;
+  if (
+    s?.chainUpdates &&
+    (!state.lastChainPaint || Date.now() - state.lastChainPaint > 1500)
+  ) {
+    const target = document.querySelector("#crypto-live-chain");
+    if (target) {
+      const fragment = document.createElement("div");
+      fragment.innerHTML = cryptoContent(state);
+      target.innerHTML = fragment.querySelector("#crypto-live-chain").innerHTML;
+      state.lastChainPaint = Date.now();
+    }
+  }
+  status.textContent = s
+    ? `${s.status} · ${s.active ? (s.exchange === "deribit" || !s.exchange ? `${2 + (s.chainSubscriptions ?? 0)} public WebSocket channels: selected ticker + currency option trades${s.chainSubscriptions ? " + bounded expiry quotes" : ""}` : "30s public REST polling") : state.archiveId ? "Archived chain" : "REST snapshot"}${s.lastMessageAt ? " · Connection activity " + date(s.lastMessageAt) : ""}${s.error ? " · " + s.error : ""}${s.gaps?.length ? " · " + s.gaps.length + " disconnect gap(s); trades were not replayed." : ""}`
+    : "No exchange data loaded.";
+  if (s?.ticker && document.querySelector("#crypto-ticker"))
+    document.querySelector("#crypto-ticker").innerHTML = tickerView(s);
+  if (s?.trades && document.querySelector("#crypto-trades"))
+    document.querySelector("#crypto-trades").innerHTML = tradesView(s);
+  document.querySelector("#crypto-stop").disabled = !s?.active;
+  document.querySelector("#crypto-start").disabled =
+    !!state.archiveId ||
+    !!s?.active ||
+    (state.exchange === "deribit" ? !s?.instrument : !s?.rows?.length);
+}
+export function bindCrypto({ state, call, task, render, exportFile }) {
+  if (!document.querySelector("#crypto-refresh")) return;
+  const action = (kind) =>
+      state.exchange === "deribit"
+        ? {
+            refresh: "deribitRefresh",
+            select: "deribitSelect",
+            start: "deribitStart",
+            stop: "deribitStop",
+            snapshot: "deribitSnapshot",
+          }[kind]
+        : "crypto" + kind[0].toUpperCase() + kind.slice(1),
+    args = () => ({
+      exchange: state.exchange,
+      currency: state.currency,
+      settlement: state.settlement,
+    });
+  document.querySelector("#crypto-exchange").onchange = (e) => {
+    const exchange = e.target.value;
+    task(async () => {
+      if (state.exchange !== "import") await call(action("stop"), args());
+      state.exchange = exchange;
+      if (!["BTC", "ETH"].includes(state.currency)) state.currency = "BTC";
+      if (exchange === "bybit" && !["USDC", "USDT"].includes(state.settlement))
+        state.settlement = "USDC";
+      state.snapshot = null;
+      state.expiry = null;
+      state.archiveId = null;
+      state.research.surface = null;
+      state.research.legs = [];
+      state.research.risk = null;
+      state.research.initialCapital = exchange === "bybit" ? 10000 : 1;
+      render();
+    });
+  };
+  document.querySelector("#crypto-currency").onchange = (e) => {
+    state.currency = e.target.value;
+  };
+  document.querySelector("#crypto-settlement").onchange = (e) => {
+    state.settlement = e.target.value;
+  };
+  document.querySelector("#crypto-expiry").onchange = (e) => {
+    state.expiry = Number(e.target.value);
+    state.research.surface = null;
+    state.research.risk = null;
+    state.research.legs = [];
+    render();
+  };
+  const run = (id, fn) =>
+    (document.querySelector("#" + id).onclick = () => task(fn));
+  run("crypto-refresh", async () => {
+    if (state.exchange === "import")
+      throw Error(
+        "Choose Deribit, Bybit or OKX to load a public chain; imported history stays in the archive.",
+      );
+    try {
+      state.snapshot = await call(action("refresh"), args());
+      state.expiry = null;
+      state.archiveId = null;
+      state.research.surface = null;
+      state.research.risk = null;
+      state.research.legs = [];
+      render();
+    } catch (e) {
+      state.snapshot = await call(action("snapshot"), args());
+      render();
+      throw e;
+    }
+  });
+  if (document.querySelector("#crypto-chain-live"))
+    document.querySelector("#crypto-chain-live").onchange = (e) => {
+      state.liveChain = e.target.checked;
+    };
+  run("crypto-start", async () => {
+    state.snapshot = await call(action("start"), {
+      ...args(),
+      ...(state.liveChain && state.exchange === "deribit"
+        ? { expiry: state.expiry, maxContracts: 100 }
+        : {}),
+    });
+    paintCrypto(state);
+  });
+  run("crypto-stop", async () => {
+    state.snapshot = await call(action("stop"), args());
+    paintCrypto(state);
+  });
+  run("crypto-export", () =>
+    exportFile(
+      state.exchange + "-options.json",
+      JSON.stringify(state.snapshot, null, 2),
+    ),
+  );
+  document.querySelector("#crypto-content").onclick = (event) => {
+    const el = event.target.closest("[data-crypto-contract]");
+    if (!el || el.disabled) return;
+    task(async () => {
+      state.snapshot = await call(action("select"), {
+        ...args(),
+        instrument: el.dataset.cryptoContract,
+      });
+      render();
+    });
+  };
+  paintCrypto(state);
+  bindOptionResearch({ state, call, task, render, exportFile });
 }

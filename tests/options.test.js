@@ -1,21 +1,246 @@
-import {test} from 'node:test';
-import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import {EventEmitter} from 'node:events';
-const dir=await fs.mkdtemp(path.join(os.tmpdir(),'pine-options-'));process.env.PINE_DESK_DATA_DIR=dir;
-const {UnusualWhales}=await import('../core/unusual-whales.js');
-const {installCredentialVault,credential,credentialStatus,saveCredentials}=await import('../core/credentials.js');
-const {validateEngineConfig,defaultEngineConfig}=await import('../core/whale-runner.js');
-const {normalizeStrike,normalizeLevels,normalizeOptionTrade,optionsBars}=await import('../core/options-model.js');
-const strike={strike:'500',call_gamma_oi:'250000',put_gamma_oi:'-200000',price:'502',time:'2026-09-30T15:00:00Z'};
-const levels={data:{call_wall:'510',put_wall:'495',gamma_flip:null,source:'oi',time:'2026-09-30T15:00:00Z',nearby_flips:[]}};
-const bars={data:[{start_time:'2026-09-30T14:30:00Z',end_time:'2026-09-30T14:35:00Z',open:'500',high:'504',low:'499',close:'502',volume:100}]};
-const trade={id:'trade-1',underlying_symbol:'SPY',executed_at:Date.parse('2026-09-30T14:32:00Z'),option_symbol:'SPY261002C00500000',option_type:'call',premium:'30000',underlying_price:'502',tags:['ask_side']};
-test('credentials are encrypted, write-only to UI, removable and fail closed without OS encryption',async()=>{installCredentialVault({available:()=>false});await assert.rejects(saveCredentials({unusualWhales:'secret-token'}),/unavailable/);installCredentialVault({available:()=>true,encrypt:s=>Buffer.from(s.split('').reverse().join('')).toString('base64'),decrypt:s=>Buffer.from(s,'base64').toString().split('').reverse().join('')});const status=await saveCredentials({unusualWhales:'secret-token'});assert.equal(status.configured.unusualWhales,true);assert.equal(JSON.stringify(status).includes('secret-token'),false);assert.equal((await fs.readFile(path.join(dir,'credentials/current.json'),'utf8')).includes('secret-token'),false);assert.equal(await credential('unusualWhales'),'secret-token');await saveCredentials({unusualWhales:null});assert.equal((await credentialStatus()).configured.unusualWhales,false);await assert.rejects(saveCredentials({bad:'key'}),/Unknown/);});
-test('options exposure preserves signs, null levels, source basis and actual trade side',()=>{assert.equal(normalizeStrike(strike).net,50000);assert.equal(normalizeLevels(levels).zeroGamma,null);assert.throws(()=>normalizeLevels({data:{source:'vol'}}),/basis/);assert.throws(()=>normalizeStrike({...strike,put_gamma_oi:''}),/missing/);assert.equal(normalizeOptionTrade(trade).side,'ask');assert.equal(normalizeOptionTrade({...trade,tags:[]}).side,'unknown');assert.equal(normalizeOptionTrade({...trade,tags:['ask_side','bid_side']}).side,'unknown');assert.equal(normalizeOptionTrade({...trade,underlying_price:''}).underlyingPrice,null);assert.equal(optionsBars(bars,'5m',Date.parse('2026-09-30T14:33:00Z'))[0].forming,true);assert.throws(()=>validateEngineConfig({...defaultEngineConfig,folder:'relative'}),/absolute/);});
-class Socket extends EventEmitter {constructor(){super();this.sent=[];}send(s){this.sent.push(JSON.parse(s));}terminate(){this.dead=true;}ping(){this.emit('pong');}}
-test('Unusual Whales paginates REST, authenticates only at fixed origin, updates strikes and deduplicates bounded live prints',async()=>{const requests=[],sockets=[];const provider=new UnusualWhales({getToken:async()=> 'test-secret',fetcher:async(url,options)=>{requests.push({url:String(url),options});let body;if(url.pathname.includes('spot-exposures'))body={data:url.searchParams.get('page')==='0'?[strike]:[]};else if(url.pathname.includes('gex-levels'))body=levels;else body=bars;return {ok:true,json:async()=>body};},socketFactory:(url,opts)=>{assert.match(url,/^wss:\/\/api.unusualwhales.com\/socket\?token=/);assert.equal(opts.headers['User-Agent'],'PineDesk/0.3.0');const socket=new Socket();sockets.push(socket);return socket;}});try{const snapshot=await provider.start({ticker:'spy',timeframe:'5m'});assert.equal(snapshot.gex.length,1);assert.equal(snapshot.levels.zeroGamma,null);assert.equal(requests.filter(r=>r.url.includes('spot-exposures')).length,2);for(const r of requests){assert.equal(new URL(r.url).origin,'https://api.unusualwhales.com');assert.equal(r.options.headers.Authorization,'Bearer test-secret');assert.equal(r.options.redirect,'error');}const socket=sockets[0];socket.emit('open');assert.deepEqual(socket.sent.map(s=>s.channel),['option_trades:SPY','gex_strike:SPY']);for(const channel of socket.sent.map(s=>s.channel))provider.ingest([channel,{status:'ok'}]);assert.equal(provider.snapshot().status,'streaming');provider.ingest(['option_trades:SPY',trade]);provider.ingest(['option_trades:SPY',trade]);assert.equal(provider.snapshot().trades.length,1);provider.ingest(['gex_strike:SPY',{...strike,time:undefined,timestamp:Date.parse('2026-09-30T16:00:00Z'),call_gamma_oi:'300000'}]);assert.equal(provider.snapshot().totalGex,100000);await provider.refresh({ticker:'SPY',timeframe:'5m'});assert.equal(provider.snapshot().totalGex,100000,'older REST must not overwrite newer stream data');for(let i=0;i<2001;i++)provider.ingest(['option_trades:SPY',{...trade,id:`print-${i}`}]);assert.equal(provider.snapshot().trades.length,2000);socket.emit('close');assert.equal(provider.snapshot().gaps.length,1);assert.equal(provider.snapshot().status,'reconnecting');provider.ingest(['option_trades:SPY',{...trade,id:'after-gap'}]);assert.ok(provider.snapshot().gaps[0].to);assert.equal(JSON.stringify(provider.snapshot()).includes('test-secret'),false);provider.stop();assert.equal(provider.snapshot().active,false);assert.ok(socket.dead);await provider.start({ticker:'SPY',timeframe:'5m'});sockets[1].emit('unexpected-response',{}, {statusCode:403,resume(){}});assert.equal(provider.snapshot().active,false);assert.equal(provider.snapshot().status,'authorization-error');assert.match(provider.snapshot().errors.connection,/403/);}finally{provider.stop();}});
-test('provider errors do not leak response bodies or tokens; missing GEX is visibly unavailable',async()=>{const provider=new UnusualWhales({getToken:async()=> 'private-key',fetcher:async()=>({ok:false,status:403,headers:{get:()=>null},json:async()=>({token:'private-key'})})});try{const s=await provider.refresh({ticker:'SPY'});assert.equal(s.gex.length,0);assert.match(s.errors.gex,/403/);assert.equal(JSON.stringify(s).includes('private-key'),false);await assert.rejects(provider.refresh({ticker:'https://evil.com'}),/ticker/);}finally{provider.stop();}});
-test.after(async()=>{await fs.rm(dir,{recursive:true,force:true});});
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { EventEmitter } from "node:events";
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pine-options-"));
+process.env.PINE_DESK_DATA_DIR = dir;
+const { UnusualWhales } = await import("../core/unusual-whales.js");
+const {
+  installCredentialVault,
+  credential,
+  credentialStatus,
+  saveCredentials,
+} = await import("../core/credentials.js");
+const { validateEngineConfig, defaultEngineConfig } = await import(
+  "../core/whale-runner.js"
+);
+const { normalizeStrike, normalizeLevels, normalizeOptionTrade, optionsBars } =
+  await import("../core/options-model.js");
+const strike = {
+  strike: "500",
+  call_gamma_oi: "250000",
+  put_gamma_oi: "-200000",
+  price: "502",
+  time: "2026-09-30T15:00:00Z",
+};
+const levels = {
+  data: {
+    call_wall: "510",
+    put_wall: "495",
+    gamma_flip: null,
+    source: "oi",
+    time: "2026-09-30T15:00:00Z",
+    nearby_flips: [],
+  },
+};
+const bars = {
+  data: [
+    {
+      start_time: "2026-09-30T14:30:00Z",
+      end_time: "2026-09-30T14:35:00Z",
+      open: "500",
+      high: "504",
+      low: "499",
+      close: "502",
+      volume: 100,
+    },
+  ],
+};
+const trade = {
+  id: "trade-1",
+  underlying_symbol: "SPY",
+  executed_at: Date.parse("2026-09-30T14:32:00Z"),
+  option_symbol: "SPY261002C00500000",
+  option_type: "call",
+  premium: "30000",
+  underlying_price: "502",
+  tags: ["ask_side"],
+};
+test("credentials are encrypted, write-only to UI, removable and fail closed without OS encryption", async () => {
+  installCredentialVault({ available: () => false });
+  await assert.rejects(
+    saveCredentials({ unusualWhales: "secret-token" }),
+    /unavailable/,
+  );
+  installCredentialVault({
+    available: () => true,
+    encrypt: (s) =>
+      Buffer.from(s.split("").reverse().join("")).toString("base64"),
+    decrypt: (s) =>
+      Buffer.from(s, "base64").toString().split("").reverse().join(""),
+  });
+  const status = await saveCredentials({ unusualWhales: "secret-token" });
+  assert.equal(status.configured.unusualWhales, true);
+  assert.equal(JSON.stringify(status).includes("secret-token"), false);
+  assert.equal(
+    (
+      await fs.readFile(path.join(dir, "credentials/current.json"), "utf8")
+    ).includes("secret-token"),
+    false,
+  );
+  assert.equal(await credential("unusualWhales"), "secret-token");
+  await saveCredentials({ unusualWhales: null });
+  assert.equal((await credentialStatus()).configured.unusualWhales, false);
+  await assert.rejects(saveCredentials({ bad: "key" }), /Unknown/);
+});
+test("options exposure preserves signs, null levels, source basis and actual trade side", () => {
+  assert.equal(normalizeStrike(strike).net, 50000);
+  assert.equal(normalizeLevels(levels).zeroGamma, null);
+  assert.throws(() => normalizeLevels({ data: { source: "vol" } }), /basis/);
+  assert.throws(
+    () => normalizeStrike({ ...strike, put_gamma_oi: "" }),
+    /missing/,
+  );
+  assert.equal(normalizeOptionTrade(trade).side, "ask");
+  assert.equal(normalizeOptionTrade({ ...trade, tags: [] }).side, "unknown");
+  assert.equal(
+    normalizeOptionTrade({ ...trade, tags: ["ask_side", "bid_side"] }).side,
+    "unknown",
+  );
+  assert.equal(
+    normalizeOptionTrade({ ...trade, underlying_price: "" }).underlyingPrice,
+    null,
+  );
+  assert.equal(
+    optionsBars(bars, "5m", Date.parse("2026-09-30T14:33:00Z"))[0].forming,
+    true,
+  );
+  assert.throws(
+    () => validateEngineConfig({ ...defaultEngineConfig, folder: "relative" }),
+    /absolute/,
+  );
+});
+class Socket extends EventEmitter {
+  constructor() {
+    super();
+    this.sent = [];
+  }
+  send(s) {
+    this.sent.push(JSON.parse(s));
+  }
+  terminate() {
+    this.dead = true;
+  }
+  ping() {
+    this.emit("pong");
+  }
+}
+test("Unusual Whales paginates REST, authenticates only at fixed origin, updates strikes and deduplicates bounded live prints", async () => {
+  const requests = [],
+    sockets = [];
+  const provider = new UnusualWhales({
+    getToken: async () => "test-secret",
+    fetcher: async (url, options) => {
+      requests.push({ url: String(url), options });
+      let body;
+      if (url.pathname.includes("spot-exposures"))
+        body = { data: url.searchParams.get("page") === "0" ? [strike] : [] };
+      else if (url.pathname.includes("gex-levels")) body = levels;
+      else body = bars;
+      return { ok: true, json: async () => body };
+    },
+    socketFactory: (url, opts) => {
+      assert.match(url, /^wss:\/\/api.unusualwhales.com\/socket\?token=/);
+      assert.equal(opts.headers["User-Agent"], "PineDesk/0.3.0");
+      const socket = new Socket();
+      sockets.push(socket);
+      return socket;
+    },
+  });
+  try {
+    const snapshot = await provider.start({ ticker: "spy", timeframe: "5m" });
+    assert.equal(snapshot.gex.length, 1);
+    assert.equal(snapshot.levels.zeroGamma, null);
+    assert.equal(
+      requests.filter((r) => r.url.includes("spot-exposures")).length,
+      2,
+    );
+    for (const r of requests) {
+      assert.equal(new URL(r.url).origin, "https://api.unusualwhales.com");
+      assert.equal(r.options.headers.Authorization, "Bearer test-secret");
+      assert.equal(r.options.redirect, "error");
+    }
+    const socket = sockets[0];
+    socket.emit("open");
+    assert.deepEqual(
+      socket.sent.map((s) => s.channel),
+      ["option_trades:SPY", "gex_strike:SPY"],
+    );
+    for (const channel of socket.sent.map((s) => s.channel))
+      provider.ingest([channel, { status: "ok" }]);
+    assert.equal(provider.snapshot().status, "streaming");
+    provider.ingest(["option_trades:SPY", trade]);
+    provider.ingest(["option_trades:SPY", trade]);
+    assert.equal(provider.snapshot().trades.length, 1);
+    provider.ingest([
+      "gex_strike:SPY",
+      {
+        ...strike,
+        time: undefined,
+        timestamp: Date.parse("2026-09-30T16:00:00Z"),
+        call_gamma_oi: "300000",
+      },
+    ]);
+    assert.equal(provider.snapshot().totalGex, 100000);
+    await provider.refresh({ ticker: "SPY", timeframe: "5m" });
+    assert.equal(
+      provider.snapshot().totalGex,
+      100000,
+      "older REST must not overwrite newer stream data",
+    );
+    for (let i = 0; i < 2001; i++)
+      provider.ingest(["option_trades:SPY", { ...trade, id: `print-${i}` }]);
+    assert.equal(provider.snapshot().trades.length, 2000);
+    socket.emit("close");
+    assert.equal(provider.snapshot().gaps.length, 1);
+    assert.equal(provider.snapshot().status, "reconnecting");
+    provider.ingest(["option_trades:SPY", { ...trade, id: "after-gap" }]);
+    assert.ok(provider.snapshot().gaps[0].to);
+    assert.equal(
+      JSON.stringify(provider.snapshot()).includes("test-secret"),
+      false,
+    );
+    provider.stop();
+    assert.equal(provider.snapshot().active, false);
+    assert.ok(socket.dead);
+    await provider.start({ ticker: "SPY", timeframe: "5m" });
+    sockets[1].emit(
+      "unexpected-response",
+      {},
+      { statusCode: 403, resume() {} },
+    );
+    assert.equal(provider.snapshot().active, false);
+    assert.equal(provider.snapshot().status, "authorization-error");
+    assert.match(provider.snapshot().errors.connection, /403/);
+  } finally {
+    provider.stop();
+  }
+});
+test("provider errors do not leak response bodies or tokens; missing GEX is visibly unavailable", async () => {
+  const provider = new UnusualWhales({
+    getToken: async () => "private-key",
+    fetcher: async () => ({
+      ok: false,
+      status: 403,
+      headers: { get: () => null },
+      json: async () => ({ token: "private-key" }),
+    }),
+  });
+  try {
+    const s = await provider.refresh({ ticker: "SPY" });
+    assert.equal(s.gex.length, 0);
+    assert.match(s.errors.gex, /403/);
+    assert.equal(JSON.stringify(s).includes("private-key"), false);
+    await assert.rejects(
+      provider.refresh({ ticker: "https://evil.com" }),
+      /ticker/,
+    );
+  } finally {
+    provider.stop();
+  }
+});
+test.after(async () => {
+  await fs.rm(dir, { recursive: true, force: true });
+});

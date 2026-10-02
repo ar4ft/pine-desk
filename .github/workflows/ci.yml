@@ -9,6 +9,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,6 +17,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run format:check
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:ui
@@ -27,9 +29,18 @@ jobs:
           path: test-results/
   mac:
     needs: test
-    runs-on: macos-26-intel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26-intel
+            arch: x64
+          - runner: macos-26
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
     env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,10 +49,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:desktop
-      - run: npm run dist:mac
+        timeout-minutes: 5
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-failure-${{ matrix.arch }}
+          path: test-results/desktop/
+      - run: npm run dist:mac -- --${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
         with:
-          name: pine-desk-mac-unsigned
+          name: pine-desk-mac-unsigned-${{ matrix.arch }}
           path: |
             release/*.dmg
             release/*.zip

@@ -30,7 +30,7 @@ plot(fast)
 plot(slow)
 ```
 
-Choose Backtest to inspect trades and equity. App cost/sizing overrides are documented in the README. PineTS compatibility is not identical to TradingView; use supported features and inspect errors. Chart and backtest executions have an initial 30-second deadline. Compilation/execution errors stay in an editor panel; when the runtime identifies a Pine line, the gutter marks it and Go to line jumps there. JavaScript stack positions are not assumed to be Pine source locations. Errors from later live chart executions are also surfaced. Only run trusted scripts; backtest worker isolation is not a security sandbox.
+Choose Backtest to inspect trades and equity. App cost/sizing overrides are documented in the README. PineTS compatibility is not identical to TradingView; use supported features and inspect errors. Chart and backtest executions have an initial 30-second deadline. Compilation/execution errors stay in an editor panel; when the runtime identifies a Pine line, the gutter marks it and Go to line jumps there. JavaScript stack positions are not assumed to be Pine source locations. Errors from later live chart executions are also surfaced. Only run trusted scripts; backtest process isolation and Node permission restrictions are not an OS security sandbox. See [process boundaries](research-reliability.md#education-and-process-boundaries).
 
 ## Connect an LLM through MCP
 
@@ -65,4 +65,6 @@ Use the editor’s **Import .pine / .txt** button for native source files (UTF-8
 
 ## Crypto options and educational calculations
 
-The six new crypto/education tools are listed in [Crypto options & Greeks Lab](crypto-options.md#mcp). Deribit public access needs no key. Desktop and stdio streams remain separate processes; tools preserve exchange units, timestamps and coverage. `options_greeks` produces hypothetical European-model values rather than pricing inverse crypto settlement.
+The six new crypto/education tools are listed in [Crypto options & Greeks Lab](crypto-options.md#mcp). Deribit public access needs no key. Desktop and stdio streams remain separate processes; tools preserve exchange units, timestamps and coverage. `options_greeks` produces hypothetical European/American-model values rather than pricing inverse crypto settlement.
+
+Research reliability tools and licensed historical-data setup are listed in the [v0.7 guide](research-reliability.md). The standalone MCP process uses `MASSIVE_API_KEY` for Massive access.

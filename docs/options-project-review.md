@@ -31,3 +31,7 @@ Follow-up work remains for historical provider backfill, executable-depth/simult
 Public market data access, open-source licenses and trading-account permissions are separate. MIT reuse is possible with the upstream copyright/license notices if code is adopted later. No upstream code was adopted in this revision.
 
 Bybit and OKX adapters are implemented with fixtures and explicit REST polling. Their production endpoints still return HTTP 403 from this environment, so live connectivity is not asserted. See [option research](option-research.md).
+
+## v0.7 follow-up
+
+Compressed archives, bounded expiry streams, rule selection/exit/calendar studies, explicit American lifecycle events, partial fills, modeled hedges and a licensed historical connector are now implemented independently. Venue margin/liquidation and historical execution verification remain open. See the [broader GitHub comparison and implementation limits](research-reliability.md#github-comparison-and-remaining-gaps).

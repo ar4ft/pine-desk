@@ -1,77 +1,795 @@
-import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
-import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js';
-import {z} from 'zod';
-import {readFileSync} from 'node:fs';
-import {dispatch,shutdown} from './service.js';
-const version=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version;
-const server=new McpServer({name:'pine-desk',version});
-const tool=(name,description,inputSchema,action,readOnly=true)=>server.registerTool(name,{description,inputSchema,annotations:{readOnlyHint:readOnly,destructiveHint:false,openWorldHint:action.startsWith('library')||action.startsWith('edge')||action.startsWith('whale')||action.startsWith('live')||action.startsWith('options')||action.startsWith('deribit')||action.startsWith('crypto')||action==='optionRecordStart'}},async args=>{try{return {content:[{type:'text',text:JSON.stringify(await dispatch(action,args))}]};}catch(e){return {isError:true,content:[{type:'text',text:JSON.stringify({message:e.message,diagnostic:e.diagnostic??null})}]};}});
-tool('workspace','Read local dataset, saved scripts, and reproducible backtest runs.',{},'workspace');
-tool('load_market','Fetch up to 1,000 settled Binance candles and save the current dataset.',{symbol:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h','1d']),limit:z.number().int().min(2).max(1000).default(1000)},'loadMarket',false);
-tool('import_bars','Import OHLCV CSV (time,open,high,low,close,volume). Replaces current local dataset.',{csv:z.string().max(20000000),symbol:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h','1d'])},'importBars',false);
-tool('save_script','Save native Pine v5/v6 source locally. Preserve upstream license comments.',{name:z.string(),source:z.string().max(200000)},'saveScript',false);
-tool('run_backtest','Execute a trusted native Pine strategy on the current dataset; save source, data, settings, trades, and metrics. 30-second limit. Percent commission, percent-equity sizing, next-bar market fills.',{source:z.string().max(200000),inputs:z.record(z.string(),z.union([z.string(),z.number(),z.boolean()])).optional(),settings:z.object({initial_capital:z.number().optional(),default_qty_value:z.number().optional(),commission_value:z.number().optional(),slippage:z.number().int().optional(),pyramiding:z.number().int().optional()}).optional()},'backtest',false);
-tool('import_trades','Import executed trade CSV: time,price,size,side. Side must be buy/sell aggressor. Replaces local trade dataset.',{csv:z.string().max(20000000),symbol:z.string()},'importTrades',false);
-tool('order_flow','Aggregate imported executed trades into footprints, delta, CVD, trade counts, and price profile. No candle-derived side estimates.',{timeframe:z.enum(['1m','5m','15m','1h','4h','1d']),tickSize:z.number().positive()},'orderflow');
-tool('library_search','Search LuxAlgo public indicator catalog over its official hosted MCP.',{query:z.string().min(1)},'librarySearch');
-tool('library_list','Browse the full LuxAlgo catalog by page.',{page:z.number().int().nonnegative().default(0)},'libraryList');
-tool('library_source','Fetch publicly served Pine source for a catalog slug. Scripts keep their own licenses.',{slug:z.string().min(1)},'librarySource');
-tool('edge_coverage','Read Edge Stats coverage and freshness from the configured source. Check the cutoff before reporting statistics.',{},'edgeCoverage');
-tool('edge_presets','List the official Edge Stats preset catalog. Hosted mode uses fixed precomputed presets; local mode includes parameters.',{category:z.string().optional()},'edgePresets');
-tool('edge_report','Run an official Edge Stats preset. Always report N, Wilson 95% CI, guards, cutoff, and disclaimer. Local mode supports parameters and filters; hosted mode accepts preset and symbol only.',{preset:z.string().min(1),symbol:z.string().min(1),params:z.record(z.string(),z.union([z.string(),z.number()])).optional(),sessionKey:z.string().optional(),since:z.string().optional(),until:z.string().optional(),groupBy:z.string().optional()},'edgeReport');
-tool('edge_query','Run a composed Edge Stats DSL query on the configured local server. Requires local mode. Preserve N, CI, guards, normalized query, and disclaimer.',{dsl:z.string().min(1).max(10000),symbol:z.string().min(1),sessionKey:z.string().optional(),since:z.string().optional(),until:z.string().optional(),groupBy:z.string().optional(),sessionsLimit:z.number().int().min(0).max(500).optional()},'edgeQuery');
-tool('edge_fields','Discover the local Edge Stats registry before composing DSL queries.',{kind:z.enum(['field','predicate','outcome']).optional()},'edgeFields');
-tool('edge_sessions','Read local derived session rows behind an Edge Stats result.',{ids:z.array(z.string()).min(1).max(500)},'edgeSessions');
-tool('edge_session_bars','Read one local session’s bars and derived levels for chart verification. Requires local mode.',{sessionId:z.string(),contextBars:z.number().int().min(0).max(240).optional()},'edgeSessionBars');
-tool('whale_status','Read local engine heartbeat, recording coverage, available chains and cold-start state. Configured source label is user supplied.',{},'whaleStatus');
-tool('whale_recent','Read recorded options events. NBBO-classified sides may be unknown; preserve cold-start flags and source.',{ticker:z.string().optional(),kind:z.enum(['sweep','block','split','print']).optional(),side:z.enum(['buy','sell','mid','unknown']).optional(),min_premium:z.number().nonnegative().optional(),limit:z.number().int().min(1).max(200).optional()},'whaleRecent');
-tool('whale_top','Read scored events with full score decomposition. Relay missing components and cold-start flags; scores are not probabilities.',{min_score:z.number().min(0).max(100).optional(),window_minutes:z.number().positive().optional(),tickers:z.array(z.string()).optional(),limit:z.number().int().min(1).max(50).optional()},'whaleTop');
-tool('whale_event','Inspect a recorded event including score components, classification reasons and per-leg NBBO at print time.',{id:z.string().min(1)},'whaleEvent');
-tool('whale_gex','Read gamma ladder. Always relay snapshot age, convention and conventionNote: dealer positioning is assumed, not observed.',{underlying:z.string().min(1),expiry:z.string().optional()},'whaleGex');
-tool('whale_oi_deltas','Read session-to-session OI changes; fewer than two recorded sessions is insufficient history.',{underlying:z.string(),sessions:z.number().int().min(2).optional(),top:z.number().int().min(1).max(200).optional(),min_oi:z.number().nonnegative().optional()},'whaleOiDeltas');
-tool('whale_max_pain','Read static OI-weighted max pain. Relay source timestamp and note; this is not a price forecast.',{underlying:z.string(),expiry:z.string().optional()},'whaleMaxPain');
-tool('whale_iv_rank','Read IV rank over actual recorded history. Relay historyDays and note; do not imply a 52-week window.',{underlying:z.string()},'whaleIvRank');
-tool('whale_net_flow','Read emitted-event premium leaderboard. Relay sign convention, unknown-side handling and emitted-events-only coverage.',{window_minutes:z.number().positive().optional(),top:z.number().int().min(1).max(100).optional()},'whaleNetFlow');
-tool('options_snapshot','Read THIS process options snapshot: OI GEX, provider cumulative gamma flip and defined walls, raw live prints, errors and gaps. Desktop credentials are encrypted and unavailable in stdio; set UNUSUAL_WHALES_API_KEY in your MCP environment.',{},'optionsSnapshot');
-tool('options_refresh','Fetch OI strike GEX, provider GEX levels and intraday underlying candles. Requires UNUSUAL_WHALES_API_KEY in stdio. Preserve per-strike timestamps and assumed positioning.',{ticker:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h']).default('5m')},'optionsRefresh');
-tool('options_start','Start THIS process Unusual Whales options-trades and GEX-strike WebSocket; bounded 2000 prints, no replay. Requires streaming entitlement. Avoid simultaneous desktop/MCP connections with the same token.',{ticker:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h']).default('5m')},'optionsStart',false);
-tool('options_stop','Stop THIS process Unusual Whales stream.',{},'optionsStop',false);
-const inputValues=z.record(z.string(),z.union([z.string(),z.number(),z.boolean()]));
-const researchSettings=z.object({initial_capital:z.number().optional(),default_qty_value:z.number().optional(),commission_value:z.number().optional(),slippage:z.number().int().optional(),pyramiding:z.number().int().optional()});
-tool('live_start','Start public Binance spot candle and raw-trade streams in THIS server process. Reconnects reconcile candles; missing trades are flagged, not reconstructed. Desktop and stdio processes own separate connections.',{symbol:z.string(),timeframe:z.enum(['1m','5m','15m','1h','4h','1d'])},'liveStart',false);
-tool('live_status','Read this process’s stream health, settled dataset, forming candle, retained trade count and coverage gaps. Research must exclude the forming candle.',{},'liveSnapshot');
-tool('live_stop','Stop this process’s stream and keep the settled candle snapshot.',{},'liveStop',false);
-tool('live_order_flow','Aggregate this process’s bounded live trade buffer. Buyer-is-maker true means SELL aggressor. Preserve trade gaps and retained-window caveats.',{timeframe:z.enum(['1m','5m','15m','1h','4h','1d']),tickSize:z.number().positive()},'liveFlow');
-tool('live_save_trades','Save the retained live trade window as the local trade dataset for offline order-flow analysis.',{},'liveSaveTrades',false);
-tool('research_start','Start a bounded, cancellable parameter sweep or chronological walk-forward study on a frozen settled dataset. Grid uses Pine input titles/IDs. Walk-forward selects on training only and resets each test window without warmup. Returns a job ID; poll research_status.',{kind:z.enum(['sweep','walkForward']),source:z.string().max(200000),grid:z.record(z.string(),z.array(z.union([z.string(),z.number(),z.boolean()])).min(1).max(25)),inputs:inputValues.optional(),settings:researchSettings.optional(),objective:z.enum(['netProfit','maxDrawdown']).optional(),windows:z.object({trainBars:z.number().int().min(20),testBars:z.number().int().min(10),folds:z.number().int().min(1).max(10)}).optional()},'researchStart',false);
-tool('research_status','Read a study’s progress, errors, frozen source/data/inputs and full results. Preserve in-sample versus test distinction and reset-window limitations.',{id:z.string()},'researchGet');
-tool('research_cancel','Cancel an active study and terminate its active strategy worker.',{id:z.string()},'researchCancel',false);
-tool('research_save_run','Save a completed sweep candidate or walk-forward test fold as an ordinary backtest run.',{id:z.string(),index:z.number().int().nonnegative().optional(),fold:z.number().int().nonnegative().optional()},'researchSaveRun',false);
-tool('compare_runs','Compare 2–6 distinct saved runs with normalized equity and data-identity checks. Different datasets are descriptive comparisons.',{ids:z.array(z.string()).min(2).max(6)},'compareRuns');
-tool('crypto_options_refresh','Fetch public BTC/ETH option chains from Deribit, Bybit or OKX. Preserve exchange-specific settlement, IV, quantity/multiplier and timestamp conventions. Bybit uses USDC/USDT; inverse venues use coin premiums. Public access may be regionally blocked.',{exchange:z.enum(['deribit','bybit','okx']).default('deribit'),currency:z.enum(['BTC','ETH']).default('BTC'),settlement:z.enum(['USDC','USDT']).default('USDC')},'cryptoRefresh');
-tool('crypto_options_contract','Load exchange-reported Greeks for a contract in this process loaded chain. Stops the previous live subscription.',{exchange:z.enum(['deribit','bybit','okx']).default('deribit'),instrument:z.string().max(100)},'cryptoSelect',false);
-tool('crypto_options_start','Start THIS process public market session: Deribit selected-ticker/trades WebSocket, or Bybit/OKX 30-second chain polling. Report the actual live coverage. No orders or private account access.',{exchange:z.enum(['deribit','bybit','okx']).default('deribit')},'cryptoStart',false);
-tool('crypto_options_stop','Stop THIS process selected exchange session and retain timestamped data.',{exchange:z.enum(['deribit','bybit','okx']).default('deribit')},'cryptoStop',false);
-tool('crypto_options_snapshot','Read THIS process selected exchange snapshot, ticker, trades and coverage gaps. Preserve source timestamps, units and snapshot/live coverage.',{exchange:z.enum(['deribit','bybit','okx']).default('deribit')},'cryptoSnapshot');
-tool('options_greeks','Educational Black–Scholes–Merton price and first/higher Greeks. European exercise, quote units per underlying unit, IV/rates in percent, 365 calendar days. Vega/Rho per percentage point; Theta/Charm/Color per elapsed day. Not an inverse crypto contract or American pricing model.',{model:z.object({spot:z.number().positive(),strike:z.number().positive(),days:z.number().positive(),volatility:z.number().positive(),rate:z.number().optional(),dividend:z.number().optional(),type:z.enum(['call','put'])}),curve:z.object({metric:z.enum(['price','delta','gamma','vega','theta','rho','vanna','vomma','charm','speed','color','zomma','ultima']),axis:z.enum(['spot','days','volatility']),points:z.number().int().min(2).max(201).optional()}).optional()},'optionsGreeks');
-const exchangeSchema=z.enum(['deribit','bybit','okx']).default('deribit'),idsSchema=z.array(z.string()).min(1).max(200),legsSchema=z.array(z.object({instrument:z.string().max(100),quantity:z.number()})).min(1).max(8);
-const surfaceArgs={exchange:exchangeSchema,snapshotId:z.string().optional(),expiry:z.number(),beta:z.number().min(0).max(1).default(.5),maxAgeMs:z.number().min(1000).max(3600000).optional(),maxSpread:z.number().positive().max(2).optional(),minOI:z.number().nonnegative().optional()};
-tool('option_history_list','List saved option-chain observations, origin, timestamps, settlement units and SHA256. Data is shared with the desktop via local storage.',{},'optionHistoryList');
-tool('option_history_read','Read one archived option chain with origin and source hash.',{id:z.string()},'optionHistoryGet');
-tool('option_history_save','Save this process loaded fresh full-chain snapshot. Capacity 200 records/100 MB; never automatically deletes history.',{exchange:exchangeSchema},'optionHistorySave',false);
-tool('option_history_import','Import schemaVersion 1 JSON with snapshots array. Imported source is unverified. Up to 25 MB; no executable code.',{json:z.string().max(25000000)},'optionHistoryImport',false);
-tool('option_history_export','Export selected archives including timestamps, units, hashes and quote evidence.',{ids:idsSchema},'optionHistoryExport');
-tool('option_history_delete','Delete a selected local snapshot. Saved replays retain their used quote evidence.',{id:z.string()},'optionHistoryDelete',false);
-tool('option_history_compare','Compare 2–6 observations from the same exchange/base/settlement. Report matched/new/removed contracts and IV/OI changes without treating incomplete sets as total market flows.',{ids:z.array(z.string()).min(2).max(6)},'optionHistoryCompare');
-tool('option_record_start','Start THIS process independent fresh full-chain snapshot recorder, 60–3600 seconds. Does not interrupt selected ticker. Stops on capacity or process shutdown; no automatic startup.',{exchange:exchangeSchema,currency:z.enum(['BTC','ETH']).default('BTC'),settlement:z.enum(['USDC','USDT']).default('USDC'),intervalSeconds:z.number().int().min(60).max(3600).default(300)},'optionRecordStart',false);
-tool('option_record_status','Read this process recorder state, saved count, last capture and errors.',{},'optionRecordStatus');
-tool('option_record_stop','Stop this process recorder; retain saved history.',{},'optionRecordStop',false);
-tool('option_surface_fit','Fixed-beta Hagan SABR on qualified OTM quotes: liquidity/age/forward-alignment gates, training/held-out RMSE, domain convexity checks, explicit residuals. Includes forward 25-delta skew, gamma scenarios and unranked strategy templates. Model deviations are not profit probabilities.',{...surfaceArgs,convention:z.enum(['gross','call-positive-put-negative']).default('gross')},'optionSurface');
-tool('option_delta_skew','25-delta call-minus-put IV, unadjusted forward Black delta. Linear interpolation brackets, no extrapolation; unavailable wings remain null.',surfaceArgs,'optionSkew');
-tool('option_portfolio_model','Model 1–8 distinct same-expiry option legs, signed underlying-unit quantities. Settlement-currency premiums, BSM USD option Greeks and inverse premium-cash delta; sampled payoff bounds are not global max loss/margin.',{exchange:exchangeSchema,snapshotId:z.string().optional(),legs:legsSchema,spotMin:z.number().positive().optional(),spotMax:z.number().positive().optional(),ivShift:z.number().min(-100).max(100).optional(),daysElapsed:z.number().nonnegative().max(3650).optional()},'optionPortfolio');
-tool('option_quote_backtest','Save fixed-leg replay of 2–100 chronological archived quotes from one exchange/base/settlement. Entry ask/bid, exit opposite side, no executable-size guarantee. Missing/stale quotes fail. Coin settlement ledger, supplied fees/funding/static margin, explicit unverified settlement fixing when crossing expiry. No broker orders.',{ids:z.array(z.string()).min(2).max(100),legs:legsSchema,initialCapital:z.number().positive().optional(),feeBps:z.number().min(0).max(1000).optional(),slippageBps:z.number().min(0).max(2000).optional(),maxAgeMs:z.number().min(1000).max(3600000).optional(),marginReserve:z.number().nonnegative().optional(),funding:z.array(z.object({time:z.number(),amount:z.number()})).max(1000).optional(),settlement:z.object({price:z.number().positive(),source:z.string().min(1).max(500)}).optional()},'optionBacktest',false);
-tool('option_replays','List saved option quote replays and settlement metrics.',{},'optionRuns');
-tool('option_replay_read','Read one saved option replay including config, fill ledger, quote evidence/hashes and limitations.',{id:z.string()},'optionRunGet');
-server.server.onclose=shutdown;
-process.once('SIGTERM',()=>{shutdown();process.exit(0);});
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import { readFileSync } from "node:fs";
+import { dispatch, shutdown } from "./service.js";
+const version = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
+const server = new McpServer({ name: "pine-desk", version });
+const tool = (name, description, inputSchema, action, readOnly = true) =>
+  server.registerTool(
+    name,
+    {
+      description,
+      inputSchema,
+      annotations: {
+        readOnlyHint: readOnly,
+        destructiveHint: false,
+        openWorldHint:
+          action.startsWith("library") ||
+          action.startsWith("edge") ||
+          action.startsWith("whale") ||
+          action.startsWith("live") ||
+          action.startsWith("options") ||
+          action.startsWith("deribit") ||
+          action.startsWith("crypto") ||
+          action === "optionRecordStart",
+      },
+    },
+    async (args) => {
+      try {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(await dispatch(action, args)),
+            },
+          ],
+        };
+      } catch (e) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                message: e.message,
+                diagnostic: e.diagnostic ?? null,
+              }),
+            },
+          ],
+        };
+      }
+    },
+  );
+tool(
+  "workspace",
+  "Read local dataset, saved scripts, and reproducible backtest runs.",
+  {},
+  "workspace",
+);
+tool(
+  "load_market",
+  "Fetch up to 50,000 settled Binance candles using bounded REST pagination and save the current dataset.",
+  {
+    symbol: z.string(),
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+    limit: z.number().int().min(2).max(50000).default(1000),
+    from: z.number().optional(),
+    to: z.number().optional(),
+  },
+  "loadMarket",
+  false,
+);
+tool(
+  "import_bars",
+  "Import OHLCV CSV (time,open,high,low,close,volume). Replaces current local dataset.",
+  {
+    csv: z.string().max(20000000),
+    symbol: z.string(),
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+  },
+  "importBars",
+  false,
+);
+tool(
+  "save_script",
+  "Save native Pine v5/v6 source locally. Preserve upstream license comments.",
+  { name: z.string(), source: z.string().max(200000) },
+  "saveScript",
+  false,
+);
+tool(
+  "run_backtest",
+  "Execute a trusted native Pine strategy on the current dataset; save source, data, settings, trades, and metrics. 30-second limit. Percent commission, percent-equity sizing, next-bar market fills.",
+  {
+    source: z.string().max(200000),
+    inputs: z
+      .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+      .optional(),
+    settings: z
+      .object({
+        initial_capital: z.number().optional(),
+        default_qty_value: z.number().optional(),
+        commission_value: z.number().optional(),
+        slippage: z.number().int().optional(),
+        pyramiding: z.number().int().optional(),
+      })
+      .optional(),
+  },
+  "backtest",
+  false,
+);
+tool(
+  "import_trades",
+  "Import executed trade CSV: time,price,size,side. Side must be buy/sell aggressor. Replaces local trade dataset.",
+  { csv: z.string().max(20000000), symbol: z.string() },
+  "importTrades",
+  false,
+);
+tool(
+  "order_flow",
+  "Aggregate imported executed trades into footprints, delta, CVD, trade counts, and price profile. No candle-derived side estimates.",
+  {
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+    tickSize: z.number().positive(),
+  },
+  "orderflow",
+);
+tool(
+  "library_search",
+  "Search LuxAlgo public indicator catalog over its official hosted MCP.",
+  { query: z.string().min(1) },
+  "librarySearch",
+);
+tool(
+  "library_list",
+  "Browse the full LuxAlgo catalog by page.",
+  { page: z.number().int().nonnegative().default(0) },
+  "libraryList",
+);
+tool(
+  "library_source",
+  "Fetch publicly served Pine source for a catalog slug. Scripts keep their own licenses.",
+  { slug: z.string().min(1) },
+  "librarySource",
+);
+tool(
+  "edge_coverage",
+  "Read Edge Stats coverage and freshness from the configured source. Check the cutoff before reporting statistics.",
+  {},
+  "edgeCoverage",
+);
+tool(
+  "edge_presets",
+  "List the official Edge Stats preset catalog. Hosted mode uses fixed precomputed presets; local mode includes parameters.",
+  { category: z.string().optional() },
+  "edgePresets",
+);
+tool(
+  "edge_report",
+  "Run an official Edge Stats preset. Always report N, Wilson 95% CI, guards, cutoff, and disclaimer. Local mode supports parameters and filters; hosted mode accepts preset and symbol only.",
+  {
+    preset: z.string().min(1),
+    symbol: z.string().min(1),
+    params: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+    sessionKey: z.string().optional(),
+    since: z.string().optional(),
+    until: z.string().optional(),
+    groupBy: z.string().optional(),
+  },
+  "edgeReport",
+);
+tool(
+  "edge_query",
+  "Run a composed Edge Stats DSL query on the configured local server. Requires local mode. Preserve N, CI, guards, normalized query, and disclaimer.",
+  {
+    dsl: z.string().min(1).max(10000),
+    symbol: z.string().min(1),
+    sessionKey: z.string().optional(),
+    since: z.string().optional(),
+    until: z.string().optional(),
+    groupBy: z.string().optional(),
+    sessionsLimit: z.number().int().min(0).max(500).optional(),
+  },
+  "edgeQuery",
+);
+tool(
+  "edge_fields",
+  "Discover the local Edge Stats registry before composing DSL queries.",
+  { kind: z.enum(["field", "predicate", "outcome"]).optional() },
+  "edgeFields",
+);
+tool(
+  "edge_sessions",
+  "Read local derived session rows behind an Edge Stats result.",
+  { ids: z.array(z.string()).min(1).max(500) },
+  "edgeSessions",
+);
+tool(
+  "edge_session_bars",
+  "Read one local session’s bars and derived levels for chart verification. Requires local mode.",
+  {
+    sessionId: z.string(),
+    contextBars: z.number().int().min(0).max(240).optional(),
+  },
+  "edgeSessionBars",
+);
+tool(
+  "whale_status",
+  "Read local engine heartbeat, recording coverage, available chains and cold-start state. Configured source label is user supplied.",
+  {},
+  "whaleStatus",
+);
+tool(
+  "whale_recent",
+  "Read recorded options events. NBBO-classified sides may be unknown; preserve cold-start flags and source.",
+  {
+    ticker: z.string().optional(),
+    kind: z.enum(["sweep", "block", "split", "print"]).optional(),
+    side: z.enum(["buy", "sell", "mid", "unknown"]).optional(),
+    min_premium: z.number().nonnegative().optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+  "whaleRecent",
+);
+tool(
+  "whale_top",
+  "Read scored events with full score decomposition. Relay missing components and cold-start flags; scores are not probabilities.",
+  {
+    min_score: z.number().min(0).max(100).optional(),
+    window_minutes: z.number().positive().optional(),
+    tickers: z.array(z.string()).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  },
+  "whaleTop",
+);
+tool(
+  "whale_event",
+  "Inspect a recorded event including score components, classification reasons and per-leg NBBO at print time.",
+  { id: z.string().min(1) },
+  "whaleEvent",
+);
+tool(
+  "whale_gex",
+  "Read gamma ladder. Always relay snapshot age, convention and conventionNote: dealer positioning is assumed, not observed.",
+  { underlying: z.string().min(1), expiry: z.string().optional() },
+  "whaleGex",
+);
+tool(
+  "whale_oi_deltas",
+  "Read session-to-session OI changes; fewer than two recorded sessions is insufficient history.",
+  {
+    underlying: z.string(),
+    sessions: z.number().int().min(2).optional(),
+    top: z.number().int().min(1).max(200).optional(),
+    min_oi: z.number().nonnegative().optional(),
+  },
+  "whaleOiDeltas",
+);
+tool(
+  "whale_max_pain",
+  "Read static OI-weighted max pain. Relay source timestamp and note; this is not a price forecast.",
+  { underlying: z.string(), expiry: z.string().optional() },
+  "whaleMaxPain",
+);
+tool(
+  "whale_iv_rank",
+  "Read IV rank over actual recorded history. Relay historyDays and note; do not imply a 52-week window.",
+  { underlying: z.string() },
+  "whaleIvRank",
+);
+tool(
+  "whale_net_flow",
+  "Read emitted-event premium leaderboard. Relay sign convention, unknown-side handling and emitted-events-only coverage.",
+  {
+    window_minutes: z.number().positive().optional(),
+    top: z.number().int().min(1).max(100).optional(),
+  },
+  "whaleNetFlow",
+);
+tool(
+  "options_snapshot",
+  "Read THIS process options snapshot: OI GEX, provider cumulative gamma flip and defined walls, raw live prints, errors and gaps. Desktop credentials are encrypted and unavailable in stdio; set UNUSUAL_WHALES_API_KEY in your MCP environment.",
+  {},
+  "optionsSnapshot",
+);
+tool(
+  "options_refresh",
+  "Fetch OI strike GEX, provider GEX levels and intraday underlying candles. Requires UNUSUAL_WHALES_API_KEY in stdio. Preserve per-strike timestamps and assumed positioning.",
+  {
+    ticker: z.string(),
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h"]).default("5m"),
+  },
+  "optionsRefresh",
+);
+tool(
+  "options_start",
+  "Start THIS process Unusual Whales options-trades and GEX-strike WebSocket; bounded 2000 prints, no replay. Requires streaming entitlement. Avoid simultaneous desktop/MCP connections with the same token.",
+  {
+    ticker: z.string(),
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h"]).default("5m"),
+  },
+  "optionsStart",
+  false,
+);
+tool(
+  "options_stop",
+  "Stop THIS process Unusual Whales stream.",
+  {},
+  "optionsStop",
+  false,
+);
+const inputValues = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean()]),
+);
+const researchSettings = z.object({
+  initial_capital: z.number().optional(),
+  default_qty_value: z.number().optional(),
+  commission_value: z.number().optional(),
+  slippage: z.number().int().optional(),
+  pyramiding: z.number().int().optional(),
+});
+tool(
+  "live_start",
+  "Start public Binance spot candle and raw-trade streams in THIS server process. Reconnects reconcile candles; missing trades are flagged, not reconstructed. Desktop and stdio processes own separate connections.",
+  {
+    symbol: z.string(),
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+  },
+  "liveStart",
+  false,
+);
+tool(
+  "live_status",
+  "Read this process’s stream health, settled dataset, forming candle, retained trade count and coverage gaps. Research must exclude the forming candle.",
+  {},
+  "liveSnapshot",
+);
+tool(
+  "live_stop",
+  "Stop this process’s stream and keep the settled candle snapshot.",
+  {},
+  "liveStop",
+  false,
+);
+tool(
+  "live_order_flow",
+  "Aggregate this process’s bounded live trade buffer. Buyer-is-maker true means SELL aggressor. Preserve trade gaps and retained-window caveats.",
+  {
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+    tickSize: z.number().positive(),
+  },
+  "liveFlow",
+);
+tool(
+  "live_save_trades",
+  "Save the retained live trade window as the local trade dataset for offline order-flow analysis.",
+  {},
+  "liveSaveTrades",
+  false,
+);
+tool(
+  "research_start",
+  "Start a bounded, cancellable parameter sweep or chronological walk-forward study on a frozen settled dataset. Grid uses Pine input titles/IDs. Walk-forward selects on training only, with optional historical warmup that blocks entries before the test boundary. Each test resets positions and capital; stitched equity is a modeled composite. Returns a job ID; poll research_status.",
+  {
+    kind: z.enum(["sweep", "walkForward"]),
+    source: z.string().max(200000),
+    grid: z.record(
+      z.string(),
+      z
+        .array(z.union([z.string(), z.number(), z.boolean()]))
+        .min(1)
+        .max(25),
+    ),
+    inputs: inputValues.optional(),
+    settings: researchSettings.optional(),
+    objective: z.enum(["netProfit", "maxDrawdown"]).optional(),
+    warmupBars: z.number().int().min(0).max(5000).optional(),
+    session: z
+      .object({
+        timeZone: z.string(),
+        startMinute: z.number().int(),
+        endMinute: z.number().int(),
+        weekdays: z.array(z.number().int()).optional(),
+        closedDates: z.array(z.string()).optional(),
+        earlyCloses: z.record(z.string(), z.number()).optional(),
+      })
+      .optional(),
+    windows: z
+      .object({
+        trainBars: z.number().int().min(20),
+        testBars: z.number().int().min(10),
+        folds: z.number().int().min(1).max(10),
+      })
+      .optional(),
+  },
+  "researchStart",
+  false,
+);
+tool(
+  "research_status",
+  "Read a study’s progress, errors, frozen source/data/inputs and full results. Preserve in-sample versus test distinction and reset-window limitations.",
+  { id: z.string() },
+  "researchGet",
+);
+tool(
+  "research_cancel",
+  "Cancel an active study and terminate its active strategy worker.",
+  { id: z.string() },
+  "researchCancel",
+  false,
+);
+tool(
+  "research_save_run",
+  "Save a completed sweep candidate or walk-forward test fold as an ordinary backtest run.",
+  {
+    id: z.string(),
+    index: z.number().int().nonnegative().optional(),
+    fold: z.number().int().nonnegative().optional(),
+  },
+  "researchSaveRun",
+  false,
+);
+tool(
+  "compare_runs",
+  "Compare 2–6 distinct saved runs with normalized equity and data-identity checks. Different datasets are descriptive comparisons.",
+  { ids: z.array(z.string()).min(2).max(6) },
+  "compareRuns",
+);
+tool(
+  "crypto_options_refresh",
+  "Fetch public BTC/ETH option chains from Deribit, Bybit or OKX. Preserve exchange-specific settlement, IV, quantity/multiplier and timestamp conventions. Bybit uses USDC/USDT; inverse venues use coin premiums. Public access may be regionally blocked.",
+  {
+    exchange: z.enum(["deribit", "bybit", "okx"]).default("deribit"),
+    currency: z.enum(["BTC", "ETH"]).default("BTC"),
+    settlement: z.enum(["USDC", "USDT"]).default("USDC"),
+  },
+  "cryptoRefresh",
+);
+tool(
+  "crypto_options_contract",
+  "Load exchange-reported Greeks for a contract in this process loaded chain. Stops the previous live subscription.",
+  {
+    exchange: z.enum(["deribit", "bybit", "okx"]).default("deribit"),
+    instrument: z.string().max(100),
+  },
+  "cryptoSelect",
+  false,
+);
+tool(
+  "crypto_options_start",
+  "Start THIS process public market session: Deribit selected-ticker/trades and optional bounded-expiry WebSocket, or Bybit/OKX 30-second chain polling. Report the actual live coverage. No orders or private account access.",
+  {
+    exchange: z.enum(["deribit", "bybit", "okx"]).default("deribit"),
+    expiry: z.number().optional(),
+    maxContracts: z.number().int().min(1).max(198).optional(),
+  },
+  "cryptoStart",
+  false,
+);
+tool(
+  "crypto_options_stop",
+  "Stop THIS process selected exchange session and retain timestamped data.",
+  { exchange: z.enum(["deribit", "bybit", "okx"]).default("deribit") },
+  "cryptoStop",
+  false,
+);
+tool(
+  "crypto_options_snapshot",
+  "Read THIS process selected exchange snapshot, ticker, trades and coverage gaps. Preserve source timestamps, units and snapshot/live coverage.",
+  { exchange: z.enum(["deribit", "bybit", "okx"]).default("deribit") },
+  "cryptoSnapshot",
+);
+tool(
+  "options_greeks",
+  "Educational Black–Scholes–Merton price and first/higher Greeks. European BSM or optional American CRR tree with explicit cash dividends. Quote units per underlying unit, IV/rates in percent, 365 calendar days. Vega/Rho per percentage point; Theta/Charm/Color per elapsed day. Not an inverse crypto settlement valuation.",
+  {
+    model: z.object({
+      spot: z.number().positive(),
+      strike: z.number().positive(),
+      days: z.number().positive(),
+      volatility: z.number().positive(),
+      rate: z.number().optional(),
+      dividend: z.number().optional(),
+      type: z.enum(["call", "put"]),
+      exerciseStyle: z.enum(["european", "american"]).optional(),
+      steps: z.number().int().min(50).max(1000).optional(),
+      cashDividends: z
+        .array(
+          z.object({
+            days: z.number().positive(),
+            amount: z.number().nonnegative(),
+          }),
+        )
+        .optional(),
+    }),
+    curve: z
+      .object({
+        metric: z.enum([
+          "price",
+          "delta",
+          "gamma",
+          "vega",
+          "theta",
+          "rho",
+          "vanna",
+          "vomma",
+          "charm",
+          "speed",
+          "color",
+          "zomma",
+          "ultima",
+        ]),
+        axis: z.enum(["spot", "days", "volatility"]),
+        points: z.number().int().min(2).max(201).optional(),
+      })
+      .optional(),
+  },
+  "optionsGreeks",
+);
+tool(
+  "option_compare_runs",
+  "Compare 2–6 options runs on identical observations and model a static weighted allocation. Shared buying power, cross-margin and aggregate execution are not simulated.",
+  {
+    ids: z.array(z.string()).min(2).max(6),
+    weights: z.array(z.number().positive()).optional(),
+    initialCapital: z.number().positive().optional(),
+  },
+  "optionCompareRuns",
+);
+tool(
+  "option_run_summary",
+  "Read a compact option run report with metrics, model assumptions, open positions and evidence counts; use option_replay_read only for full evidence.",
+  { id: z.string() },
+  "optionRunSummary",
+);
+tool(
+  "provider_capabilities",
+  "Read supported markets, actual live methods and verification limitations.",
+  {},
+  "providerCapabilities",
+);
+tool(
+  "data_quality",
+  "Inspect the current candle dataset coverage, age and gaps.",
+  {},
+  "dataQuality",
+);
+tool(
+  "strategy_validate",
+  "Run sampled prefix-invariance and startup-sensitivity checks. Up to 10,000 bars. Saves source/data/report; differences require interpretation, no proof of absence of bias.",
+  {
+    source: z.string().max(200000),
+    inputs: inputValues.optional(),
+    settings: researchSettings.optional(),
+  },
+  "strategyAudit",
+  false,
+);
+tool(
+  "option_history_coverage",
+  "Read compressed storage usage, exchange/date coverage and unusually long observation gaps. No automatic deletion.",
+  {},
+  "optionHistoryCoverage",
+);
+tool(
+  "option_strategy_backtest",
+  "Run rule-driven archived options paper research: DTE/delta selection, targets/stops, rolling entries, calendars, latency, sizes, stress margin and synthetic hedges. Uses only prior observations to select contracts. Preserve model and source caveats.",
+  {
+    ids: z.array(z.string()).min(3).max(2000),
+    initialCapital: z.number().positive().optional(),
+    rules: z.record(z.string(), z.unknown()).optional(),
+    exerciseEvents: z
+      .array(
+        z.object({
+          time: z.number(),
+          instrument: z.string(),
+          quantity: z.number(),
+          kind: z.enum(["exercise", "assignment"]),
+          source: z.string(),
+        }),
+      )
+      .optional(),
+    dividends: z
+      .array(z.object({ time: z.number(), amount: z.number().nonnegative() }))
+      .optional(),
+    funding: z
+      .array(z.object({ time: z.number(), amount: z.number() }))
+      .optional(),
+    settlements: z
+      .record(
+        z.string(),
+        z.object({ price: z.number().positive(), source: z.string() }),
+      )
+      .optional(),
+  },
+  "optionStrategy",
+  false,
+);
+tool(
+  "option_history_backfill",
+  "Fetch licensed Massive historical quotes and closed unadjusted underlying bars for up to eight explicitly specified standard option contracts. Requires MASSIVE_API_KEY in this process. Paid entitlement is unverified; IV is model-derived, OI unavailable. Archives are marked imported/unverified.",
+  {
+    underlying: z.string(),
+    contracts: z
+      .array(
+        z.object({
+          ticker: z.string(),
+          strike: z.number().positive(),
+          type: z.enum(["call", "put"]),
+          expiry: z.number(),
+          exerciseStyle: z.enum(["american", "european"]),
+          settlementType: z.enum(["cash", "physical"]),
+          contractSize: z.literal(100),
+        }),
+      )
+      .min(1)
+      .max(8),
+    from: z.number(),
+    to: z.number(),
+    intervalSeconds: z.number().int().min(60).max(3600).optional(),
+    rate: z.number().min(0).max(20).optional(),
+  },
+  "optionHistoryBackfill",
+  false,
+);
+const exchangeSchema = z.enum(["deribit", "bybit", "okx"]).default("deribit"),
+  idsSchema = z.array(z.string()).min(1).max(200),
+  legsSchema = z
+    .array(z.object({ instrument: z.string().max(100), quantity: z.number() }))
+    .min(1)
+    .max(8);
+const surfaceArgs = {
+  exchange: exchangeSchema,
+  snapshotId: z.string().optional(),
+  expiry: z.number(),
+  beta: z.number().min(0).max(1).default(0.5),
+  maxAgeMs: z.number().min(1000).max(3600000).optional(),
+  maxSpread: z.number().positive().max(2).optional(),
+  minOI: z.number().nonnegative().optional(),
+};
+tool(
+  "option_history_list",
+  "List saved option-chain observations, origin, timestamps, settlement units and SHA256. Data is shared with the desktop via local storage.",
+  {
+    exchange: z.enum(["deribit", "bybit", "okx", "import"]).optional(),
+    currency: z.string().optional(),
+    settlement: z.string().optional(),
+    from: z.number().optional(),
+    to: z.number().optional(),
+    offset: z.number().int().nonnegative().optional(),
+    limit: z.number().int().min(1).max(5000).optional(),
+  },
+  "optionHistoryList",
+);
+tool(
+  "option_history_read",
+  "Read one archived option chain with origin and source hash.",
+  { id: z.string() },
+  "optionHistoryGet",
+);
+tool(
+  "option_history_save",
+  "Save this process loaded fresh full-chain snapshot. Capacity 50,000 records/2 GB compressed payload; never automatically deletes history.",
+  { exchange: exchangeSchema },
+  "optionHistorySave",
+  false,
+);
+tool(
+  "option_history_import",
+  "Import schemaVersion 1 JSON with snapshots array. Imported source is unverified. Up to 25 MB; no executable code.",
+  { json: z.string().max(25000000) },
+  "optionHistoryImport",
+  false,
+);
+tool(
+  "option_history_export",
+  "Export selected archives including timestamps, units, hashes and quote evidence.",
+  { ids: idsSchema },
+  "optionHistoryExport",
+);
+tool(
+  "option_history_delete",
+  "Delete a selected local snapshot. Saved replays retain their used quote evidence.",
+  { id: z.string() },
+  "optionHistoryDelete",
+  false,
+);
+tool(
+  "option_history_compare",
+  "Compare 2–6 observations from the same exchange/base/settlement. Report matched/new/removed contracts and IV/OI changes without treating incomplete sets as total market flows.",
+  { ids: z.array(z.string()).min(2).max(6) },
+  "optionHistoryCompare",
+);
+tool(
+  "option_record_start",
+  "Start THIS process independent fresh full-chain snapshot recorder, 60–3600 seconds. Does not interrupt selected ticker. Stops on capacity or process shutdown; no automatic startup.",
+  {
+    exchange: exchangeSchema,
+    currency: z.enum(["BTC", "ETH"]).default("BTC"),
+    settlement: z.enum(["USDC", "USDT"]).default("USDC"),
+    intervalSeconds: z.number().int().min(60).max(3600).default(300),
+  },
+  "optionRecordStart",
+  false,
+);
+tool(
+  "option_record_status",
+  "Read this process recorder state, saved count, last capture and errors.",
+  {},
+  "optionRecordStatus",
+);
+tool(
+  "option_record_stop",
+  "Stop this process recorder; retain saved history.",
+  {},
+  "optionRecordStop",
+  false,
+);
+tool(
+  "option_surface_fit",
+  "Fixed-beta Hagan SABR on qualified OTM quotes: liquidity/age/forward-alignment gates, training/held-out RMSE, domain convexity checks, explicit residuals. Includes forward 25-delta skew, gamma scenarios and unranked strategy templates. Model deviations are not profit probabilities.",
+  {
+    ...surfaceArgs,
+    convention: z
+      .enum(["gross", "call-positive-put-negative"])
+      .default("gross"),
+  },
+  "optionSurface",
+);
+tool(
+  "option_delta_skew",
+  "25-delta call-minus-put IV, unadjusted forward Black delta. Linear interpolation brackets, no extrapolation; unavailable wings remain null.",
+  surfaceArgs,
+  "optionSkew",
+);
+tool(
+  "option_portfolio_model",
+  "Model 1–8 distinct same-expiry option legs, signed underlying-unit quantities. Settlement-currency premiums, BSM USD option Greeks and inverse premium-cash delta; sampled payoff bounds are not global max loss/margin.",
+  {
+    exchange: exchangeSchema,
+    snapshotId: z.string().optional(),
+    legs: legsSchema,
+    spotMin: z.number().positive().optional(),
+    spotMax: z.number().positive().optional(),
+    ivShift: z.number().min(-100).max(100).optional(),
+    daysElapsed: z.number().nonnegative().max(3650).optional(),
+  },
+  "optionPortfolio",
+);
+tool(
+  "option_quote_backtest",
+  "Save fixed-leg replay of 2–100 chronological archived quotes from one exchange/base/settlement. Entry ask/bid, exit opposite side, no executable-size guarantee. Missing/stale quotes fail. Coin settlement ledger, supplied fees/funding/static margin, explicit unverified settlement fixing when crossing expiry. No broker orders.",
+  {
+    ids: z.array(z.string()).min(2).max(100),
+    legs: legsSchema,
+    initialCapital: z.number().positive().optional(),
+    feeBps: z.number().min(0).max(1000).optional(),
+    slippageBps: z.number().min(0).max(2000).optional(),
+    maxAgeMs: z.number().min(1000).max(3600000).optional(),
+    marginReserve: z.number().nonnegative().optional(),
+    funding: z
+      .array(z.object({ time: z.number(), amount: z.number() }))
+      .max(1000)
+      .optional(),
+    settlement: z
+      .object({
+        price: z.number().positive(),
+        source: z.string().min(1).max(500),
+      })
+      .optional(),
+  },
+  "optionBacktest",
+  false,
+);
+tool(
+  "option_replays",
+  "List saved option quote replays and settlement metrics.",
+  {},
+  "optionRuns",
+);
+tool(
+  "option_replay_read",
+  "Read one saved option replay including config, fill ledger, quote evidence/hashes and limitations.",
+  { id: z.string() },
+  "optionRunGet",
+);
+server.server.onclose = shutdown;
+process.once("SIGTERM", () => {
+  shutdown();
+  process.exit(0);
+});
 await server.connect(new StdioServerTransport());

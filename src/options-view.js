@@ -1,8 +1,168 @@
-import {wallDefinitions} from '../core/options-model.js';
-const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),num=n=>Number.isFinite(n)?n.toLocaleString('en-US',{maximumFractionDigits:2}):'Unavailable';
-export function newOptionsState(){return {snapshot:null,ticker:'SPY',timeframe:'5m',minPremium:25000,levels:true,markers:true};}
-export function retainOptionsDraft(o){for(const k of ['ticker','timeframe','minPremium'])if($('#options-'+k))o[k]=$('#options-'+k).value;for(const k of ['levels','markers'])if($('#options-'+k))o[k]=$('#options-'+k).checked;}
-export function optionsView(o){return `<div id="options-panel"><div class="page-intro tight"><span class="eyebrow">UNUSUAL WHALES · OPTIONS</span><h1>Exposure meets the tape.</h1><p>OI-based gamma by strike, provider-defined levels and live options prints on their underlying's chart.</p></div><div class="edge-form"><label>Underlying<input id="options-ticker" value="${esc(o.ticker)}" maxlength="15"></label><label>Chart interval<select id="options-timeframe">${['1m','5m','15m','1h','4h'].map(t=>`<option ${t===o.timeframe?'selected':''}>${t}</option>`).join('')}</select></label><label>Marker premium floor ($)<input id="options-minPremium" type="number" min="0" value="${esc(o.minPremium)}"></label><button id="options-refresh">Load / refresh snapshot</button><button id="options-start" class="primary">Start live options</button><button id="options-stop">Stop</button><button id="options-export">Export snapshot</button></div><div class="options-toggles"><label><input id="options-levels" type="checkbox" ${o.levels?'checked':''}> Wall and gamma-flip overlays</label><label><input id="options-markers" type="checkbox" ${o.markers?'checked':''}> Live flow markers</label><button data-page="settings">API settings →</button></div><p id="options-status" class="footnote"></p><div id="options-errors" class="editor-errors"></div><section class="chart-panel"><div class="panel-heading"><span>UNDERLYING PRICE + OPTIONS CONTEXT</span><span id="options-chart-counts"></span></div><div id="options-chart"></div><p class="footnote">Underlying OHLC includes the forming candle for display; it refreshes every 30 seconds while connected. Research datasets are separate. Markers show up to 500 qualifying prints within actual displayed candle spans.</p></section><section class="plot-card"><div class="panel-heading"><span>GAMMA EXPOSURE BY STRIKE · OPEN INTEREST</span><span>Call / put / net · dollars per 1% spot move</span></div><div id="options-summary" class="metrics"></div><p class="footnote">${esc(wallDefinitions)}</p><div id="options-gex"></div><p id="options-provenance" class="footnote"></p></section><section class="plot-card"><div class="panel-heading"><span>RETAINED LIVE OPTIONS FLOW</span><span>Ask / bid / mid / unknown</span></div><p class="footnote">Colors describe execution side, not trade intent. The buffer retains 2,000 prints; the table shows the latest 100 above the premium floor. No reconnect replay.</p><div id="options-trades"></div></section></div>`;}
-export function paintOptions(o){const s=o.snapshot;const status=$('#options-status');if(!status)return;status.textContent=s?`${s.provider??'Unusual Whales'} · ${s.ticker??'No ticker'} · ${s.status} · ${s.trades?.length??0} retained prints · ${s.gaps?.length??0} disconnect gaps${s.lastEventAt?` · last event ${new Date(s.lastEventAt).toISOString()}`:''}`:'Add your API token in Settings, then load a snapshot or start live options.';$('#options-errors').textContent=s?Object.entries(s.errors??{}).map(([key,error])=>`${key}: ${error}`).join('\n'):'';if(!s)return;const l=s.levels;$('#options-summary').innerHTML=[['Total OI GEX',s.gex?.length?num(s.totalGex):'Unavailable'],['Call wall',num(l?.callWall)],['Put wall',num(l?.putWall)],['Gamma flip',num(l?.zeroGamma)]].map(([label,v])=>`<div><span>${label}</span><strong>${v}</strong></div>`).join('');$('#options-gex').innerHTML=gexGraph(s.gex??[]);const times=(s.gex??[]).map(r=>r.time).filter(Number.isFinite),oldest=times.length?Math.min(...times):null,newest=times.length?Math.max(...times):null;$('#options-provenance').textContent=`${s.coverage??''} ${oldest?`Strike calculation range: ${new Date(oldest).toISOString()} — ${new Date(newest).toISOString()}.`:''} ${l?.time?`Levels snapshot: ${new Date(l.time).toISOString()}; source ${l.source}; ${l.method}`:''} ${l?.nearbyFlips?.length?`Nearby cumulative crossings: ${l.nearbyFlips.map(num).join(', ')}.`:''} ${s.gaps?.length?`Gaps: ${s.gaps.map(g=>`${new Date(g.from).toISOString()} → ${g.to?new Date(g.to).toISOString():'open'}`).join('; ')}`:''}`;const trades=(s.trades??[]).filter(t=>t.premium>=Number(o.minPremium)).slice(-100).reverse();$('#options-trades').innerHTML=`<div class="table-wrap"><table><thead><tr><th>UTC</th><th>Contract</th><th>Type / side</th><th>Premium</th><th>Underlying</th></tr></thead><tbody>${trades.map(t=>`<tr><td>${esc(new Date(t.time).toISOString())}</td><td>${esc(t.contract)}</td><td>${esc(t.type)} / ${esc(t.side)}</td><td>$${num(t.premium)}</td><td>${num(t.underlyingPrice)}</td></tr>`).join('')}</tbody></table></div>`;}
-export function gexGraph(rows){if(!rows.length)return '<p class="footnote">No exposure snapshot available.</p>';const spot=rows.filter(r=>Number.isFinite(r.spot)).sort((a,b)=>(b.time??0)-(a.time??0))[0]?.spot;const visible=(spot?[...rows].sort((a,b)=>Math.abs(a.strike-spot)-Math.abs(b.strike-spot)):rows).slice(0,200).sort((a,b)=>a.strike-b.strike),max=Math.max(1,...visible.flatMap(r=>[Math.abs(r.call),Math.abs(r.put),Math.abs(r.net)])),w=780,h=visible.length*28+35,center=425,scale=300/max;return `<p class="footnote">${rows.length} strikes returned${rows.length>200?'; showing 200 nearest the latest reported spot (or first 200 when spot is unavailable)':''}. Green = calls · red = puts · gold = net. Hover bars for values. All strikes are included in JSON exports.</p><div class="gex-scroll"><svg role="img" aria-label="Gamma exposure by strike" viewBox="0 0 ${w} ${h}" width="100%"><line x1="${center}" x2="${center}" y1="10" y2="${h}" stroke="#44516a"/>${visible.map((r,i)=>{const y=25+i*28;return `<text x="10" y="${y+8}" fill="#aab9cc" font-size="12">${num(r.strike)}</text>${[['call','#63dfbd',0],['put','#f17789',7],['net','#f6cc70',14]].map(([key,color,offset])=>`<rect x="${Math.min(center,center+r[key]*scale)}" y="${y+offset}" width="${Math.max(.5,Math.abs(r[key])*scale)}" height="5" fill="${color}"><title>${num(r.strike)} ${key}: ${num(r[key])}</title></rect>`).join('')}`;}).join('')}</svg></div>`;}
-export function bindOptions({options:o,call,task,render,exportFile,refreshChart}){if(!$('#options-panel'))return;const args=()=>{retainOptionsDraft(o);const min=Number(o.minPremium);if(!Number.isFinite(min)||min<0)throw new Error('Premium floor must be nonnegative.');return {ticker:o.ticker,timeframe:o.timeframe};};for(const [id,action]of [['refresh','optionsRefresh'],['start','optionsStart']])$('#options-'+id).onclick=()=>task(async()=>{const config=args();if(o.snapshot?.active&&(o.snapshot.ticker!==config.ticker.toUpperCase()||o.snapshot.timeframe!==config.timeframe))await call('optionsStop');o.snapshot=await call(action,config);o.ticker=o.snapshot.ticker;render();});$('#options-stop').onclick=()=>task(async()=>{o.snapshot=await call('optionsStop');paintOptions(o);});$('#options-export').onclick=()=>task(()=>exportFile('pine-desk-options.json',JSON.stringify(o.snapshot,null,2)));for(const id of ['levels','markers','minPremium'])$('#options-'+id).onchange=()=>{retainOptionsDraft(o);if(!Number.isFinite(Number(o.minPremium))||Number(o.minPremium)<0)return;paintOptions(o);refreshChart();};}
+import { wallDefinitions } from "../core/options-model.js";
+const $ = (s) => document.querySelector(s),
+  esc = (s) =>
+    String(s ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    ),
+  num = (n) =>
+    Number.isFinite(n)
+      ? n.toLocaleString("en-US", { maximumFractionDigits: 2 })
+      : "Unavailable";
+export function newOptionsState() {
+  return {
+    snapshot: null,
+    ticker: "SPY",
+    timeframe: "5m",
+    minPremium: 25000,
+    levels: true,
+    markers: true,
+  };
+}
+export function retainOptionsDraft(o) {
+  for (const k of ["ticker", "timeframe", "minPremium"])
+    if ($("#options-" + k)) o[k] = $("#options-" + k).value;
+  for (const k of ["levels", "markers"])
+    if ($("#options-" + k)) o[k] = $("#options-" + k).checked;
+}
+export function optionsView(o) {
+  return `<div id="options-panel"><div class="page-intro tight"><span class="eyebrow">UNUSUAL WHALES · OPTIONS</span><h1>Exposure meets the tape.</h1><p>OI-based gamma by strike, provider-defined levels and live options prints on their underlying's chart.</p></div><div class="edge-form"><label>Underlying<input id="options-ticker" value="${esc(o.ticker)}" maxlength="15"></label><label>Chart interval<select id="options-timeframe">${["1m", "5m", "15m", "1h", "4h"].map((t) => `<option ${t === o.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Marker premium floor ($)<input id="options-minPremium" type="number" min="0" value="${esc(o.minPremium)}"></label><button id="options-refresh">Load / refresh snapshot</button><button id="options-start" class="primary">Start live options</button><button id="options-stop">Stop</button><button id="options-export">Export snapshot</button></div><div class="options-toggles"><label><input id="options-levels" type="checkbox" ${o.levels ? "checked" : ""}> Wall and gamma-flip overlays</label><label><input id="options-markers" type="checkbox" ${o.markers ? "checked" : ""}> Live flow markers</label><button data-page="settings">API settings →</button></div><p id="options-status" class="footnote"></p><div id="options-errors" class="editor-errors"></div><section class="chart-panel"><div class="panel-heading"><span>UNDERLYING PRICE + OPTIONS CONTEXT</span><span id="options-chart-counts"></span></div><div id="options-chart"></div><p class="footnote">Underlying OHLC includes the forming candle for display; it refreshes every 30 seconds while connected. Research datasets are separate. Markers show up to 500 qualifying prints within actual displayed candle spans.</p></section><section class="plot-card"><div class="panel-heading"><span>GAMMA EXPOSURE BY STRIKE · OPEN INTEREST</span><span>Call / put / net · dollars per 1% spot move</span></div><div id="options-summary" class="metrics"></div><p class="footnote">${esc(wallDefinitions)}</p><div id="options-gex"></div><p id="options-provenance" class="footnote"></p></section><section class="plot-card"><div class="panel-heading"><span>RETAINED LIVE OPTIONS FLOW</span><span>Ask / bid / mid / unknown</span></div><p class="footnote">Colors describe execution side, not trade intent. The buffer retains 2,000 prints; the table shows the latest 100 above the premium floor. No reconnect replay.</p><div id="options-trades"></div></section></div>`;
+}
+export function paintOptions(o) {
+  const s = o.snapshot;
+  const status = $("#options-status");
+  if (!status) return;
+  status.textContent = s
+    ? `${s.provider ?? "Unusual Whales"} · ${s.ticker ?? "No ticker"} · ${s.status} · ${s.trades?.length ?? 0} retained prints · ${s.gaps?.length ?? 0} disconnect gaps${s.lastEventAt ? ` · last event ${new Date(s.lastEventAt).toISOString()}` : ""}`
+    : "Add your API token in Settings, then load a snapshot or start live options.";
+  $("#options-errors").textContent = s
+    ? Object.entries(s.errors ?? {})
+        .map(([key, error]) => `${key}: ${error}`)
+        .join("\n")
+    : "";
+  if (!s) return;
+  const l = s.levels;
+  $("#options-summary").innerHTML = [
+    ["Total OI GEX", s.gex?.length ? num(s.totalGex) : "Unavailable"],
+    ["Call wall", num(l?.callWall)],
+    ["Put wall", num(l?.putWall)],
+    ["Gamma flip", num(l?.zeroGamma)],
+  ]
+    .map(
+      ([label, v]) => `<div><span>${label}</span><strong>${v}</strong></div>`,
+    )
+    .join("");
+  $("#options-gex").innerHTML = gexGraph(s.gex ?? []);
+  const times = (s.gex ?? []).map((r) => r.time).filter(Number.isFinite),
+    oldest = times.length ? Math.min(...times) : null,
+    newest = times.length ? Math.max(...times) : null;
+  $("#options-provenance").textContent =
+    `${s.coverage ?? ""} ${oldest ? `Strike calculation range: ${new Date(oldest).toISOString()} — ${new Date(newest).toISOString()}.` : ""} ${l?.time ? `Levels snapshot: ${new Date(l.time).toISOString()}; source ${l.source}; ${l.method}` : ""} ${l?.nearbyFlips?.length ? `Nearby cumulative crossings: ${l.nearbyFlips.map(num).join(", ")}.` : ""} ${s.gaps?.length ? `Gaps: ${s.gaps.map((g) => `${new Date(g.from).toISOString()} → ${g.to ? new Date(g.to).toISOString() : "open"}`).join("; ")}` : ""}`;
+  const trades = (s.trades ?? [])
+    .filter((t) => t.premium >= Number(o.minPremium))
+    .slice(-100)
+    .reverse();
+  $("#options-trades").innerHTML =
+    `<div class="table-wrap"><table><thead><tr><th>UTC</th><th>Contract</th><th>Type / side</th><th>Premium</th><th>Underlying</th></tr></thead><tbody>${trades.map((t) => `<tr><td>${esc(new Date(t.time).toISOString())}</td><td>${esc(t.contract)}</td><td>${esc(t.type)} / ${esc(t.side)}</td><td>$${num(t.premium)}</td><td>${num(t.underlyingPrice)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+export function gexGraph(rows) {
+  if (!rows.length)
+    return '<p class="footnote">No exposure snapshot available.</p>';
+  const spot = rows
+    .filter((r) => Number.isFinite(r.spot))
+    .sort((a, b) => (b.time ?? 0) - (a.time ?? 0))[0]?.spot;
+  const visible = (
+      spot
+        ? [...rows].sort(
+            (a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot),
+          )
+        : rows
+    )
+      .slice(0, 200)
+      .sort((a, b) => a.strike - b.strike),
+    max = Math.max(
+      1,
+      ...visible.flatMap((r) => [
+        Math.abs(r.call),
+        Math.abs(r.put),
+        Math.abs(r.net),
+      ]),
+    ),
+    w = 780,
+    h = visible.length * 28 + 35,
+    center = 425,
+    scale = 300 / max;
+  return `<p class="footnote">${rows.length} strikes returned${rows.length > 200 ? "; showing 200 nearest the latest reported spot (or first 200 when spot is unavailable)" : ""}. Green = calls · red = puts · gold = net. Hover bars for values. All strikes are included in JSON exports.</p><div class="gex-scroll"><svg role="img" aria-label="Gamma exposure by strike" viewBox="0 0 ${w} ${h}" width="100%"><line x1="${center}" x2="${center}" y1="10" y2="${h}" stroke="#44516a"/>${visible
+    .map((r, i) => {
+      const y = 25 + i * 28;
+      return `<text x="10" y="${y + 8}" fill="#aab9cc" font-size="12">${num(r.strike)}</text>${[
+        ["call", "#63dfbd", 0],
+        ["put", "#f17789", 7],
+        ["net", "#f6cc70", 14],
+      ]
+        .map(
+          ([key, color, offset]) =>
+            `<rect x="${Math.min(center, center + r[key] * scale)}" y="${y + offset}" width="${Math.max(0.5, Math.abs(r[key]) * scale)}" height="5" fill="${color}"><title>${num(r.strike)} ${key}: ${num(r[key])}</title></rect>`,
+        )
+        .join("")}`;
+    })
+    .join("")}</svg></div>`;
+}
+export function bindOptions({
+  options: o,
+  call,
+  task,
+  render,
+  exportFile,
+  refreshChart,
+}) {
+  if (!$("#options-panel")) return;
+  const args = () => {
+    retainOptionsDraft(o);
+    const min = Number(o.minPremium);
+    if (!Number.isFinite(min) || min < 0)
+      throw new Error("Premium floor must be nonnegative.");
+    return { ticker: o.ticker, timeframe: o.timeframe };
+  };
+  for (const [id, action] of [
+    ["refresh", "optionsRefresh"],
+    ["start", "optionsStart"],
+  ])
+    $("#options-" + id).onclick = () =>
+      task(async () => {
+        const config = args();
+        if (
+          o.snapshot?.active &&
+          (o.snapshot.ticker !== config.ticker.toUpperCase() ||
+            o.snapshot.timeframe !== config.timeframe)
+        )
+          await call("optionsStop");
+        o.snapshot = await call(action, config);
+        o.ticker = o.snapshot.ticker;
+        render();
+      });
+  $("#options-stop").onclick = () =>
+    task(async () => {
+      o.snapshot = await call("optionsStop");
+      paintOptions(o);
+    });
+  $("#options-export").onclick = () =>
+    task(() =>
+      exportFile("pine-desk-options.json", JSON.stringify(o.snapshot, null, 2)),
+    );
+  for (const id of ["levels", "markers", "minPremium"])
+    $("#options-" + id).onchange = () => {
+      retainOptionsDraft(o);
+      if (!Number.isFinite(Number(o.minPremium)) || Number(o.minPremium) < 0)
+        return;
+      paintOptions(o);
+      refreshChart();
+    };
+}

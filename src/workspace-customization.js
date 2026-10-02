@@ -1,9 +1,147 @@
-const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export const defaultAppearance={theme:'system',upColor:'#63dfbd',downColor:'#f17789',editorFontSize:12};
-export const resolvedTheme=a=>a.theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):a.theme;
-export function applyAppearance(a){document.documentElement.dataset.theme=resolvedTheme(a);document.documentElement.style.setProperty('--green',a.upColor);document.documentElement.style.setProperty('--red',a.downColor);document.documentElement.style.setProperty('--editor-font-size',`${a.editorFontSize}px`);document.documentElement.style.colorScheme=resolvedTheme(a);}
-export function appearanceView(a){return `<section id="appearance-panel" class="plot-card"><div class="panel-heading"><span>APPEARANCE</span><span>Saved on this Mac</span></div><div class="edge-form"><label>Theme<select id="appearance-theme">${['system','dark','light'].map(t=>`<option ${t===a.theme?'selected':''}>${t}</option>`).join('')}</select></label><label>Up candles<input id="appearance-upColor" type="color" value="${esc(a.upColor)}"></label><label>Down candles<input id="appearance-downColor" type="color" value="${esc(a.downColor)}"></label><label>Editor font size<input id="appearance-editorFontSize" type="number" min="10" max="22" value="${a.editorFontSize}"></label><button id="appearance-save" class="primary">Apply appearance</button><button id="appearance-reset">Restore defaults</button></div><p class="footnote">System follows macOS appearance changes. Theme and candle changes preserve chart calculations and editor drafts.</p></section>`;}
-export function layoutView(layouts){return `<div class="layout-toolbar"><span>WORKSPACE LAYOUTS</span><input id="layout-name" placeholder="Layout name" maxlength="100" aria-label="Layout name"><button id="layout-save">Save layout</button><select id="layout-select" aria-label="Saved layout"><option value="">Choose layout (${layouts.length})…</option>${layouts.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}</select><button id="layout-load">Open</button><button id="layout-delete">Delete</button><small>Last workspace restores automatically</small></div>`;}
-export function watchlistView(items,quotes){return `<details class="watchlist-panel" open><summary>Watchlist · ${items.length} markets</summary><div class="edge-form"><label>Provider<select id="watch-provider"><option value="binance">Binance spot</option><option value="unusualWhales">Unusual Whales</option></select></label><label>Symbol<input id="watch-symbol" placeholder="BTCUSDT or SPY" maxlength="24"></label><label>Timeframe<select id="watch-timeframe">${['1m','5m','15m','1h','4h','1d'].map(t=>`<option ${t==='1h'?'selected':''}>${t}</option>`).join('')}</select></label><button id="watch-add">Add market</button><button id="watch-refresh">Refresh Binance quotes</button></div><div class="watch-items">${items.map((i,index)=>{const q=quotes[i.symbol];return `<div class="watch-item"><button data-watch-open="${index}"><strong>${esc(i.symbol)}</strong><small>${i.provider==='binance'?'Binance spot':'Unusual Whales'} · ${esc(i.timeframe)}</small>${i.provider==='binance'?`<span>${q?`${q.price.toLocaleString()} · ${q.change>=0?'+':''}${q.change.toFixed(2)}%`:'Quote not loaded'}</span>`:'<span>Open options context</span>'}</button><button data-watch-remove="${index}" aria-label="Remove ${esc(i.symbol)}">×</button></div>`;}).join('')||'<p class="footnote">Add markets for quick switching. Opening a market loads a snapshot; it does not start a live stream.</p>'}</div><p id="watch-quote-status" class="footnote">Prices use the market’s quote asset units. Quotes refresh on request; price change is Binance’s rolling 24-hour percentage. Each response carries its retrieval time. Unusual Whales quotes load when opening its options chart.</p></details>`;}
-export function captureChart(chart,dataset){const handles=chart.indicators().filter(i=>i.nativeType!=='pine-desk-options-levels');return {symbol:dataset.symbol,timeframe:dataset.timeframe,range:chart.getVisibleRange(),drawings:chart.drawings.toJSON(),indicators:handles.map(i=>({source:i.source??null,nativeType:i.nativeType??null,inputs:i.inputValues(),props:i.propValues(),visible:i.visible})),panes:chart.panes.list().map(p=>({id:p.id,kind:p.kind,order:p.order,collapsed:p.collapsed,maximized:p.maximized,indices:p.indicators.map(i=>handles.findIndex(h=>h.id===i.id)).filter(i=>i>=0)}))};}
-export async function restoreChart(chart,doc,onError){if(!doc)return;if(doc.range)chart.setVisibleRange(doc.range);const handles=[];for(const i of doc.indicators??[]){try{let h;if(i.source){const result=await chart.runIndicator(i.source,{inputs:i.inputs,props:i.props});if(!result.ok)throw new Error(result.error?.message??String(result.error));h=result.handle;}else h=chart.addNativeIndicator(i.nativeType,{inputs:i.inputs});h.on('error',({error})=>onError(error));h.setVisible(i.visible!==false);handles.push(h);}catch(e){handles.push(null);onError(e);}}await Promise.resolve();const groups=[],paneMap={price:'price'};for(const p of doc.panes??[]){const group=p.indices.map(i=>handles[i]).filter(Boolean);if(!group.length)continue;if(p.kind==='price'){group.forEach(h=>h.moveTo('price'));continue;}const first=group[0];let pane=chart.panes.list().find(p=>p.indicators.some(i=>i.id===first.id));if(!pane||pane.kind==='price'){first.moveTo({newPane:{}});pane=chart.panes.list().find(p=>p.indicators.some(i=>i.id===first.id));}if(!pane)continue;group.slice(1).forEach(h=>h.moveTo({pane:pane.id}));if(p.id)paneMap[p.id]=pane.id;groups.push({...p,id:pane.id});}for(const p of groups.sort((a,b)=>a.order-b.order)){for(let n=0;n<12;n++){const current=chart.panes.list().find(x=>x.id===p.id);if(!current||current.order<=p.order)break;chart.panes.move(p.id,'up');}chart.panes.collapse(p.id,p.collapsed);if(p.maximized)chart.panes.maximize(p.id);}if(doc.drawings)chart.drawings.fromJSON({...doc.drawings,drawings:doc.drawings.drawings.map(d=>({...d,paneId:paneMap[d.paneId]??'price'}))});}
+const $ = (s) => document.querySelector(s),
+  esc = (s) =>
+    String(s ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
+export const defaultAppearance = {
+  theme: "system",
+  upColor: "#63dfbd",
+  downColor: "#f17789",
+  editorFontSize: 12,
+};
+export const resolvedTheme = (a) =>
+  a.theme === "system"
+    ? matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light"
+    : a.theme;
+export function applyAppearance(a) {
+  document.documentElement.dataset.theme = resolvedTheme(a);
+  document.documentElement.style.setProperty("--green", a.upColor);
+  document.documentElement.style.setProperty("--red", a.downColor);
+  document.documentElement.style.setProperty(
+    "--editor-font-size",
+    `${a.editorFontSize}px`,
+  );
+  document.documentElement.style.colorScheme = resolvedTheme(a);
+}
+export function appearanceView(a) {
+  return `<section id="appearance-panel" class="plot-card"><div class="panel-heading"><span>APPEARANCE</span><span>Saved on this Mac</span></div><div class="edge-form"><label>Theme<select id="appearance-theme">${["system", "dark", "light"].map((t) => `<option ${t === a.theme ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Up candles<input id="appearance-upColor" type="color" value="${esc(a.upColor)}"></label><label>Down candles<input id="appearance-downColor" type="color" value="${esc(a.downColor)}"></label><label>Editor font size<input id="appearance-editorFontSize" type="number" min="10" max="22" value="${a.editorFontSize}"></label><button id="appearance-save" class="primary">Apply appearance</button><button id="appearance-reset">Restore defaults</button></div><p class="footnote">System follows macOS appearance changes. Theme and candle changes preserve chart calculations and editor drafts.</p></section>`;
+}
+export function layoutView(layouts) {
+  return `<div class="layout-toolbar"><span>WORKSPACE LAYOUTS</span><input id="layout-name" placeholder="Layout name" maxlength="100" aria-label="Layout name"><button id="layout-save">Save layout</button><select id="layout-select" aria-label="Saved layout"><option value="">Choose layout (${layouts.length})…</option>${layouts.map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join("")}</select><button id="layout-load">Open</button><button id="layout-delete">Delete</button><small>Last workspace restores automatically</small></div>`;
+}
+export function watchlistView(items, quotes) {
+  return `<details class="watchlist-panel" open><summary>Watchlist · ${items.length} markets</summary><div class="edge-form"><label>Provider<select id="watch-provider"><option value="binance">Binance spot</option><option value="unusualWhales">Unusual Whales</option></select></label><label>Symbol<input id="watch-symbol" placeholder="BTCUSDT or SPY" maxlength="24"></label><label>Timeframe<select id="watch-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === "1h" ? "selected" : ""}>${t}</option>`).join("")}</select></label><button id="watch-add">Add market</button><button id="watch-refresh">Refresh Binance quotes</button></div><div class="watch-items">${
+    items
+      .map((i, index) => {
+        const q = quotes[i.symbol];
+        return `<div class="watch-item"><button data-watch-open="${index}"><strong>${esc(i.symbol)}</strong><small>${i.provider === "binance" ? "Binance spot" : "Unusual Whales"} · ${esc(i.timeframe)}</small>${i.provider === "binance" ? `<span>${q ? `${q.price.toLocaleString()} · ${q.change >= 0 ? "+" : ""}${q.change.toFixed(2)}%` : "Quote not loaded"}</span>` : "<span>Open options context</span>"}</button><button data-watch-remove="${index}" aria-label="Remove ${esc(i.symbol)}">×</button></div>`;
+      })
+      .join("") ||
+    '<p class="footnote">Add markets for quick switching. Opening a market loads a snapshot; it does not start a live stream.</p>'
+  }</div><p id="watch-quote-status" class="footnote">Prices use the market’s quote asset units. Quotes refresh on request; price change is Binance’s rolling 24-hour percentage. Each response carries its retrieval time. Unusual Whales quotes load when opening its options chart.</p></details>`;
+}
+export function captureChart(chart, dataset) {
+  const handles = chart
+    .indicators()
+    .filter((i) => i.nativeType !== "pine-desk-options-levels");
+  return {
+    symbol: dataset.symbol,
+    timeframe: dataset.timeframe,
+    range: chart.getVisibleRange(),
+    drawings: chart.drawings.toJSON(),
+    indicators: handles.map((i) => ({
+      source: i.source ?? null,
+      nativeType: i.nativeType ?? null,
+      inputs: i.inputValues(),
+      props: i.propValues(),
+      visible: i.visible,
+    })),
+    panes: chart.panes.list().map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      order: p.order,
+      collapsed: p.collapsed,
+      maximized: p.maximized,
+      indices: p.indicators
+        .map((i) => handles.findIndex((h) => h.id === i.id))
+        .filter((i) => i >= 0),
+    })),
+  };
+}
+export async function restoreChart(chart, doc, onError) {
+  if (!doc) return;
+  if (doc.range) chart.setVisibleRange(doc.range);
+  const handles = [];
+  for (const i of doc.indicators ?? []) {
+    try {
+      let h;
+      if (i.source) {
+        const result = await chart.runIndicator(i.source, {
+          inputs: i.inputs,
+          props: i.props,
+        });
+        if (!result.ok)
+          throw new Error(result.error?.message ?? String(result.error));
+        h = result.handle;
+      } else h = chart.addNativeIndicator(i.nativeType, { inputs: i.inputs });
+      h.on("error", ({ error }) => onError(error));
+      h.setVisible(i.visible !== false);
+      handles.push(h);
+    } catch (e) {
+      handles.push(null);
+      onError(e);
+    }
+  }
+  await Promise.resolve();
+  const groups = [],
+    paneMap = { price: "price" };
+  for (const p of doc.panes ?? []) {
+    const group = p.indices.map((i) => handles[i]).filter(Boolean);
+    if (!group.length) continue;
+    if (p.kind === "price") {
+      group.forEach((h) => h.moveTo("price"));
+      continue;
+    }
+    const first = group[0];
+    let pane = chart.panes
+      .list()
+      .find((p) => p.indicators.some((i) => i.id === first.id));
+    if (!pane || pane.kind === "price") {
+      first.moveTo({ newPane: {} });
+      pane = chart.panes
+        .list()
+        .find((p) => p.indicators.some((i) => i.id === first.id));
+    }
+    if (!pane) continue;
+    group.slice(1).forEach((h) => h.moveTo({ pane: pane.id }));
+    if (p.id) paneMap[p.id] = pane.id;
+    groups.push({ ...p, id: pane.id });
+  }
+  for (const p of groups.sort((a, b) => a.order - b.order)) {
+    for (let n = 0; n < 12; n++) {
+      const current = chart.panes.list().find((x) => x.id === p.id);
+      if (!current || current.order <= p.order) break;
+      chart.panes.move(p.id, "up");
+    }
+    chart.panes.collapse(p.id, p.collapsed);
+    if (p.maximized) chart.panes.maximize(p.id);
+  }
+  if (doc.drawings)
+    chart.drawings.fromJSON({
+      ...doc.drawings,
+      drawings: doc.drawings.drawings.map((d) => ({
+        ...d,
+        paneId: paneMap[d.paneId] ?? "price",
+      })),
+    });
+}

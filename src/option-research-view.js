@@ -1,29 +1,512 @@
-import {curveSVG,formatValue as f,escapeHTML as esc} from './options-learning.js';
-const date=t=>new Date(t).toISOString().replace('T',' ').slice(0,19)+' UTC';
-export function newOptionResearch(){return {history:null,ids:[],recording:{active:false},surface:null,legs:[],risk:null,comparison:null,run:null,runs:[],beta:.5,minOI:1,maxSpread:.5,maxAgeMs:60000,intervalSeconds:300,initialCapital:1,feeBps:10,slippageBps:0,marginReserve:0,funding:'[]',settlementPrice:'',settlementSource:'',ivShift:0,daysElapsed:0};}
-export function optionResearchView(state){
- const r=state.research,s=state.snapshot,rows=s?.rows?.filter(q=>q.expiry===state.expiry)??[];
- return `<section class="option-research"><div class="page-intro tight"><span class="eyebrow">SURFACE & PORTFOLIO RESEARCH</span><h2>Keep the observations. Test the assumptions.</h2><p id="option-research-source">${state.archiveId?'Archived snapshot '+esc(state.archiveId):'Current full-chain snapshot'}. No broker orders are submitted.</p></div><div class="crypto-toolbar"><label>Fixed SABR β<input id="surface-beta" type="number" min="0" max="1" step=".1" value="${r.beta}"></label><label>Minimum OI<input id="surface-oi" type="number" min="0" value="${r.minOI}"></label><label>Max spread / mid<input id="surface-spread" type="number" min=".01" max="2" step=".05" value="${r.maxSpread}"></label><label>Max observation age (sec)<input id="surface-age" type="number" min="1" max="3600" value="${r.maxAgeMs/1000}"></label><label>Gamma scenario<select id="surface-gamma"><option value="gross" ${r.convention!=='call-positive-put-negative'?'selected':''}>Gross long-option</option><option value="call-positive-put-negative" ${r.convention==='call-positive-put-negative'?'selected':''}>Assumed call + / put −</option></select></label><button id="surface-fit" ${s?.rows?.length?'':'disabled'}>Fit SABR & analyze expiry</button></div><div id="surface-results">${r.surface?surfaceView(r.surface):''}</div><section class="learning-note"><h2>Multi-leg builder · same expiry</h2><p>Signed quantity is in underlying ${s?.currency??state.currency} units: positive buys, negative sells. OKX quantities are converted from contracts in the adapter. Scenarios use BSM option valuation and the settlement-currency premium ledger.</p><div class="option-legs">${r.legs.map((l,i)=>`<div><select data-leg-contract="${i}" aria-label="Leg ${i+1} contract">${rows.map(q=>`<option value="${esc(q.instrument)}" ${q.instrument===l.instrument?'selected':''}>${esc(q.instrument)}</option>`).join('')}</select><input data-leg-quantity="${i}" aria-label="Leg ${i+1} quantity" type="number" step=".01" value="${l.quantity}"><button data-leg-remove="${i}">Remove</button></div>`).join('')}</div><div class="crypto-toolbar"><button id="option-leg-add" ${rows.length&&r.legs.length<8?'':'disabled'}>Add leg</button><label>IV shift (points)<input id="portfolio-iv" type="number" min="-100" max="100" value="${r.ivShift}"></label><label>Days elapsed<input id="portfolio-days" type="number" min="0" value="${r.daysElapsed}"></label><button id="portfolio-model" ${r.legs.length?'':'disabled'}>Model payoff & Greeks</button></div><div id="portfolio-results">${r.risk?portfolioView(r.risk):''}</div></section><section class="learning-note"><h2>Snapshot history</h2><p>Record fresh full chains independently of the live contract. Storage stops at 200 snapshots or 100 MB; existing history is retained. Recording runs only after you start it and stops on app/MCP shutdown.</p><div class="crypto-toolbar"><button id="option-history-save" ${s?.rows?.length&&!state.archiveId?'':'disabled'}>Save current snapshot</button><label>Record interval (seconds)<input id="option-record-interval" type="number" min="60" max="3600" value="${r.intervalSeconds}"></label><button id="option-record-start">Start recording</button><button id="option-record-stop">Stop recording</button><button id="option-history-refresh">Refresh history</button><button id="option-history-import">Import archive JSON</button><button id="option-history-export">Export selected</button><button id="option-history-compare">Compare selected (2–6)</button></div><p id="option-record-status" aria-live="polite"></p><div id="option-history-table">${historyView(state)}</div><div id="option-comparison">${r.comparison?comparisonView(r.comparison):''}</div></section><section class="learning-note"><h2>Historical option replay</h2><p>Select 2–100 history rows from the same exchange/base/settlement. The builder’s contracts must exist at entry. Entry buys at ask/sells at bid; exit uses the opposite side. Missing or stale quotes stop the run. USD equity on inverse venues includes coin collateral price exposure.</p><div class="crypto-toolbar"><label>Capital (${s?.settlement??s?.currency??state.currency})<input id="option-capital" type="number" min=".0001" value="${r.initialCapital}"></label><label>Premium fee (bps)<input id="option-fee" type="number" min="0" max="1000" value="${r.feeBps}"></label><label>Adverse slippage (bps)<input id="option-slippage" type="number" min="0" max="2000" value="${r.slippageBps}"></label><label>Static margin reserve<input id="option-margin" type="number" min="0" value="${r.marginReserve}"></label><button id="option-replay" ${r.legs.length?'':'disabled'}>Run & save replay</button></div><details><summary>Funding and expiry settlement inputs</summary><p>Funding is a supplied settlement-currency ledger, not a fetched/perpetual estimate. Crossing expiry requires an explicit official settlement price/source; snapshot spot cannot replace the exchange settlement fixing. Supplied settlement data is marked unverified.</p><label>Funding JSON: [{"time": Unix milliseconds, "amount": signed settlement units}]<textarea id="option-funding" rows="3">${esc(r.funding)}</textarea></label><div class="crypto-toolbar"><label>Official settlement price (optional)<input id="option-settlement-price" type="number" min="0" value="${esc(r.settlementPrice)}"></label><label>Settlement price source<input id="option-settlement-source" value="${esc(r.settlementSource)}"></label></div></details><div id="option-run-results">${r.run?runView(r.run):''}</div><div class="crypto-toolbar"><button id="option-runs-load">List saved replays</button><select id="option-saved-run"><option value="">Choose a saved replay…</option>${r.runs.map(run=>`<option value="${run.id}">${date(run.createdAt)} · ${run.basis.exchange} · ${f(run.metrics.netPnLSettlement)} ${run.basis.settlement}</option>`).join('')}</select><button id="option-run-export" ${r.run?'':'disabled'}>Export replay</button></div></section></section>`;
+import {
+  curveSVG,
+  formatValue as f,
+  escapeHTML as esc,
+} from "./options-learning.js";
+const date = (t) =>
+  new Date(t).toISOString().replace("T", " ").slice(0, 19) + " UTC";
+export function newOptionResearch() {
+  return {
+    history: null,
+    historyFrom: "",
+    historyTo: "",
+    historyOffset: 0,
+    coverage: null,
+    allocation: null,
+    backfillUnderlying: "SPY",
+    backfillFrom: "",
+    backfillTo: "",
+    backfillContracts: "[]",
+    backfillReport: null,
+    runIds: [],
+    historySource: "",
+    historyUnderlying: "",
+    exerciseEvents: "[]",
+    dividends: "[]",
+    settlements: "{}",
+    rules:
+      '{"template":"long-call","targetDTE":30,"minDTE":7,"maxDTE":60,"targetDelta":0.5,"maxHoldDays":7,"exitDTE":2,"profitTarget":0.5,"stopLoss":1,"sizePolicy":"ignore","latencyMs":0}',
+    ids: [],
+    recording: { active: false },
+    surface: null,
+    legs: [],
+    risk: null,
+    comparison: null,
+    run: null,
+    runs: [],
+    beta: 0.5,
+    minOI: 1,
+    maxSpread: 0.5,
+    maxAgeMs: 60000,
+    intervalSeconds: 300,
+    initialCapital: 1,
+    feeBps: 10,
+    slippageBps: 0,
+    marginReserve: 0,
+    funding: "[]",
+    settlementPrice: "",
+    settlementSource: "",
+    ivShift: 0,
+    daysElapsed: 0,
+  };
 }
-function surfaceView(s){const fit=s.fit,skew=s.skew,g=s.gamma;
- return `<div class="learning-note"><div class="crypto-summary"><span>${fit.qualified} qualified OTM strikes · ${fit.excluded} excluded</span><span>Training RMSE ${f(fit.trainRMSE,3)} IV pts</span><span>Held-out RMSE ${f(fit.holdoutRMSE,3)} IV pts</span><span>Converged ${fit.converged?'yes':'no'}</span></div><p>α ${f(fit.params.alpha)} · β ${f(fit.params.beta)} · ρ ${f(fit.params.rho)} · ν ${f(fit.params.nu)} · Forward ${f(fit.F)} · ${esc(fit.interpretation)}</p>${fit.warnings.map(w=>`<p class="negative">${esc(w)}</p>`).join('')}${curveSVG([{name:'Qualified observed IV',points:fit.residuals.map(r=>({x:r.strike,y:r.iv}))},{name:'SABR model',points:fit.curve.map(r=>({x:r.strike,y:r.iv}))}],{xLabel:'Strike',yLabel:'IV (%)'})}<div class="crypto-summary"><span>25Δ Call IV ${f(skew.call25?.iv,2)}%</span><span>25Δ Put IV ${f(skew.put25?.iv,2)}%</span><span>Call − Put RR ${f(skew.riskReversal,2)} IV pts</span></div><p>${esc(skew.convention)}. A missing bracket gives an unavailable value.</p><details><summary>25Δ interpolation brackets</summary><pre>${esc(JSON.stringify({call:skew.call25?.bracket,put:skew.put25?.bracket},null,2))}</pre></details><div class="table-wrap"><table><thead><tr><th>Contract</th><th>Use</th><th>Market IV</th><th>Model IV</th><th>Residual pts</th><th>Model premium</th><th>Outside spread?</th></tr></thead><tbody>${fit.residuals.map(q=>`<tr><td>${esc(q.instrument)}</td><td>${q.usedFor}</td><td>${f(q.iv,2)}</td><td>${f(q.fitted,2)}</td><td>${f(q.residual,2)}</td><td>${f(q.fittedPremium,6)}</td><td>${q.outsideSpread?'yes':'no'}</td></tr>`).join('')}</tbody></table></div><p>Model premiums use the undiscounted expiry forward and snapshot index conversion. Outside-spread residuals are research hypotheses, without execution-cost or profit guarantees.</p><h3>Gamma by strike · ${esc(g.convention)}</h3><p>${esc(g.positioning)} ${esc(g.units)}. ${g.qualified} qualified contracts; ${g.excluded} excluded.</p>${curveSVG([{name:'Qualified strike gamma',points:g.rows.map(r=>({x:r.strike,y:r.net}))}],{xLabel:'Strike',yLabel:'USD / 1% move'})}<details><summary>Gamma repricing scenario and model roots</summary><p>${esc(g.method)} Roots: ${g.roots.length?g.roots.map(v=>f(v,2)).join(', '):'None in sampled range'}.</p>${curveSVG([{name:'Modeled gamma scenario',points:g.curve.map(q=>({x:q.spot,y:q.gex}))}],{xLabel:'Hypothetical spot',yLabel:'USD / 1% move'})}</details><h3>Strategy templates</h3><p>Templates use qualified quotes. They are not ranked recommendations or calibrated probabilities.</p><div class="learning-presets">${s.candidates.map((c,i)=>`<button data-option-candidate="${i}">${esc(c.name)} · ${f(c.entryPremium,5)} ${esc(c.settlement)}</button>`).join('')}</div></div>`;
+export function optionResearchView(state) {
+  const r = state.research,
+    s = state.snapshot,
+    rows = s?.rows ?? [];
+  let draftRules;
+  try {
+    draftRules = JSON.parse(r.rules);
+  } catch {
+    draftRules = {};
+  }
+  return `<section class="option-research"><div class="page-intro tight"><span class="eyebrow">SURFACE & PORTFOLIO RESEARCH</span><h2>Keep the observations. Test the assumptions.</h2><p id="option-research-source">${state.archiveId ? "Archived snapshot " + esc(state.archiveId) : "Current full-chain snapshot"}. No broker orders are submitted.</p></div><div class="crypto-toolbar"><label>Fixed SABR β<input id="surface-beta" type="number" min="0" max="1" step=".1" value="${r.beta}"></label><label>Minimum OI<input id="surface-oi" type="number" min="0" value="${r.minOI}"></label><label>Max spread / mid<input id="surface-spread" type="number" min=".01" max="2" step=".05" value="${r.maxSpread}"></label><label>Max observation age (sec)<input id="surface-age" type="number" min="1" max="3600" value="${r.maxAgeMs / 1000}"></label><label>Gamma scenario<select id="surface-gamma"><option value="gross" ${r.convention !== "call-positive-put-negative" ? "selected" : ""}>Gross long-option</option><option value="call-positive-put-negative" ${r.convention === "call-positive-put-negative" ? "selected" : ""}>Assumed call + / put −</option></select></label><button id="surface-fit" ${s?.rows?.length ? "" : "disabled"}>Fit SABR & analyze expiry</button></div><div id="surface-results">${r.surface ? surfaceView(r.surface) : ""}</div><section class="learning-note"><h2>Multi-leg scenario builder</h2><p>Signed quantity is in underlying ${s?.currency ?? state.currency} units: positive buys, negative sells. OKX quantities are converted from contracts in the adapter. Scenarios use European BSM or American tree option valuation and the settlement-currency premium ledger.</p><div class="option-legs">${r.legs.map((l, i) => `<div><select data-leg-contract="${i}" aria-label="Leg ${i + 1} contract">${rows.map((q) => `<option value="${esc(q.instrument)}" ${q.instrument === l.instrument ? "selected" : ""}>${esc(q.instrument)}</option>`).join("")}</select><input data-leg-quantity="${i}" aria-label="Leg ${i + 1} quantity" type="number" step=".01" value="${l.quantity}"><button data-leg-remove="${i}">Remove</button></div>`).join("")}</div><div class="crypto-toolbar"><button id="option-leg-add" ${rows.length && r.legs.length < 8 ? "" : "disabled"}>Add leg</button><label>IV shift (points)<input id="portfolio-iv" type="number" min="-100" max="100" value="${r.ivShift}"></label><label>Days elapsed<input id="portfolio-days" type="number" min="0" value="${r.daysElapsed}"></label><button id="portfolio-model" ${r.legs.length ? "" : "disabled"}>Model payoff & Greeks</button></div><div id="portfolio-results">${r.risk ? portfolioView(r.risk) : ""}</div></section><section class="learning-note"><h2>Snapshot history</h2><p>Record fresh full chains independently of the live contract. Storage stops at 50,000 snapshots or 2 GB of compressed payloads; existing history is retained. Recording runs only after you start it and stops on app/MCP shutdown.</p><div class="crypto-toolbar"><button id="option-history-save" ${s?.rows?.length && !state.archiveId ? "" : "disabled"}>Save current snapshot</button><label>Record interval (seconds)<input id="option-record-interval" type="number" min="60" max="3600" value="${r.intervalSeconds}"></label><button id="option-record-start">Start recording</button><button id="option-record-stop">Stop recording</button><button id="option-history-refresh">Refresh history</button><button id="option-history-import">Import archive JSON</button><button id="option-history-export">Export selected</button><button id="option-history-compare">Compare selected (2–6)</button></div><details class="learning-note"><summary>Licensed historical quote backfill · Massive</summary><p>Uses the Massive key in Settings. Requires historical options quotes and stock aggregates entitlements. Select up to eight standard contracts and seven days; adjusted deliverables are rejected. Enter the exact expiry timestamp rather than assuming AM/PM settlement. No historical full chain or OI is reconstructed.</p><div class="crypto-toolbar"><label>Underlying<input id="backfill-underlying" value="${esc(r.backfillUnderlying)}"></label><label>From (UTC)<input id="backfill-from" type="datetime-local" value="${esc(r.backfillFrom)}"></label><label>To (UTC)<input id="backfill-to" type="datetime-local" value="${esc(r.backfillTo)}"></label></div><label>Contract specifications JSON<textarea id="backfill-contracts" placeholder='[{"ticker":"O:…","strike":100,"type":"call","expiry":1793385600000,"exerciseStyle":"american","settlementType":"physical","contractSize":100}]'>${esc(r.backfillContracts)}</textarea></label><button id="option-backfill">Fetch & archive licensed history</button><p>${r.backfillReport ? `${r.backfillReport.saved} observations archived. ${esc(r.backfillReport.warnings.join(" "))}` : "Live paid access remains unverified until you configure a key. IV is fitted from quoted midpoint under zero-rate/dividend assumptions; it is not provider-reported IV."}</p></details><p id="option-record-status" aria-live="polite"></p><div class="crypto-toolbar"><label>Source<select id="history-source"><option value="">All sources</option>${["deribit", "bybit", "okx", "import"].map((e) => `<option value="${e}" ${r.historySource === e ? "selected" : ""}>${e}</option>`).join("")}</select></label><label>Underlying<input id="history-underlying" value="${esc(r.historyUnderlying)}" placeholder="BTC, ETH, SPY…"></label><label>From (UTC)<input id="history-from" type="datetime-local" value="${esc(r.historyFrom)}"></label><label>To (UTC)<input id="history-to" type="datetime-local" value="${esc(r.historyTo)}"></label><button id="history-previous">Previous page</button><button id="history-next">Next page</button></div><p id="history-coverage">${r.coverage ? `${r.coverage.count} observations · ${(r.coverage.storedBytes / 1000000).toFixed(1)} MB stored · page ${Math.floor(r.historyOffset / 500) + 1}` : "History coverage not loaded"}</p><div id="option-history-table">${historyView(state)}</div><div id="option-comparison">${r.comparison ? comparisonView(r.comparison) : ""}</div></section><section class="learning-note"><h2>Historical option replay</h2><details class="learning-note"><summary>Rule-driven options strategy</summary><p>Choose at least three observations. Contract selection uses only the signal snapshot; entry fills occur at a later observation. Supported templates: long-call, long-put, long-straddle, long-strangle, call-debit, put-debit, iron-condor and call-calendar. Rules support DTE/delta selection, rolling re-entry, targets, stops, quoted size, latency, stress margin and synthetic delta hedges.</p><div class="crypto-toolbar"><label>Template<select id="rules-template">${["long-call", "long-put", "long-straddle", "long-strangle", "call-debit", "put-debit", "iron-condor", "call-calendar"].map((t) => `<option ${draftRules.template === t ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Target DTE<input id="rules-dte" type="number" value="${draftRules.targetDTE ?? 30}"></label><label>Target absolute delta<input id="rules-delta" type="number" min=".01" max=".99" step=".05" value="${draftRules.targetDelta ?? 0.5}"></label><label>Underlying quantity<input id="rules-quantity" type="number" value="${draftRules.quantity ?? 1}"></label></div><details><summary>Advanced rules and lifecycle inputs</summary><label>Strategy rules JSON<textarea id="option-rules" rows="8">${esc(r.rules)}</textarea></label><label>Settlement fixings by expiry timestamp (JSON)<textarea id="option-rule-settlements">${esc(r.settlements)}</textarea></label><label>Exercise/assignment events (JSON)<textarea id="option-exercise-events">${esc(r.exerciseEvents)}</textarea></label><label>Cash dividend ledger (JSON)<textarea id="option-dividends">${esc(r.dividends)}</textarea></label></details><button id="option-strategy-run">Run & save rule strategy</button><p>Advanced fields include entryEvery, quantity, wingPercent, sizePolicy (ignore/reject/partial), liquidityFraction, feeModel (premium/underlying-capped), underlyingRate, premiumCap, marginModel (static/stress), stressDown, stressUp, hedgeDelta and hedgeFeeBps. All models are paper assumptions.</p></details><p>Select 2–100 history rows from the same exchange/base/settlement. The builder’s contracts must exist at entry. Entry buys at ask/sells at bid; exit uses the opposite side. Missing or stale quotes stop the run. USD equity on inverse venues includes coin collateral price exposure.</p><div class="crypto-toolbar"><label>Capital (${s?.settlement ?? s?.currency ?? state.currency})<input id="option-capital" type="number" min=".0001" value="${r.initialCapital}"></label><label>Premium fee (bps)<input id="option-fee" type="number" min="0" max="1000" value="${r.feeBps}"></label><label>Adverse slippage (bps)<input id="option-slippage" type="number" min="0" max="2000" value="${r.slippageBps}"></label><label>Static margin reserve<input id="option-margin" type="number" min="0" value="${r.marginReserve}"></label><button id="option-replay" ${r.legs.length ? "" : "disabled"}>Run & save replay</button></div><details><summary>Funding and expiry settlement inputs</summary><p>Funding is a supplied settlement-currency ledger, not a fetched/perpetual estimate. Crossing expiry requires an explicit official settlement price/source; snapshot spot cannot replace the exchange settlement fixing. Supplied settlement data is marked unverified.</p><label>Funding JSON: [{"time": Unix milliseconds, "amount": signed settlement units}]<textarea id="option-funding" rows="3">${esc(r.funding)}</textarea></label><div class="crypto-toolbar"><label>Official settlement price (optional)<input id="option-settlement-price" type="number" min="0" value="${esc(r.settlementPrice)}"></label><label>Settlement price source<input id="option-settlement-source" value="${esc(r.settlementSource)}"></label></div></details><div id="option-run-results">${r.run ? runView(r.run) : ""}</div><div class="crypto-toolbar"><button id="option-runs-load">List saved replays</button><select id="option-saved-run"><option value="">Choose a saved replay…</option>${r.runs.map((run) => `<option value="${run.id}">${date(run.createdAt)} · ${run.basis.exchange} · ${f(run.metrics.netPnLSettlement)} ${run.basis.settlement}</option>`).join("")}</select><button id="option-run-export" ${r.run ? "" : "disabled"}>Export replay</button></div><details class="learning-note" ${r.allocation ? "open" : ""}><summary>Compare saved option strategies and allocation</summary><label>Select 2–6 saved runs<select id="option-allocation-runs" multiple size="5">${r.runs.map((run) => `<option value="${run.id}" ${r.runIds.includes(run.id) ? "selected" : ""}>${date(run.createdAt)} · ${f(run.metrics.netPnLSettlement)} ${run.basis.settlement}</option>`).join("")}</select></label><button id="option-allocation-compare">Compare equal allocation</button>${r.allocation ? `<p>Modeled allocation return ${f(r.allocation.metrics.returnPercent)}% · drawdown ${f(r.allocation.metrics.maxDrawdownSettlement, 6)} ${r.allocation.basis.settlement}.</p><p>${esc(r.allocation.warnings.join(" "))}</p>` : ""}</details></section></section>`;
 }
-function portfolioView(r){return `<p>Scenario: IV shift ${r.configuration.ivShift} points · ${r.configuration.daysElapsed} days elapsed. Entry premium ${f(r.entryPremium,6)} ${esc(r.settlement)} (${f(r.entryPremiumUSD,2)} USD equivalent); negative is credit. ${esc(r.riskScope)}</p><div class="crypto-summary">${Object.entries(r.greeks).map(([k,v])=>`<span>${k} ${f(v)}</span>`).join('')}<span>Premium cash Δ ${f(r.cashDelta)}</span><span>Total modeled Δ ${f(r.totalDelta)}</span></div>${curveSVG([{name:'Scenario model P&L',points:r.scenarios.map(s=>({x:s.spot,y:s.modelPnLSettlement}))},{name:'At expiry P&L',points:r.scenarios.map(s=>({x:s.spot,y:s.expiryPnLSettlement}))}],{xLabel:'Hypothetical spot',yLabel:'P&L ('+r.settlement+')'})}<p>${esc(r.greekBasis)} ${esc(r.assumptions)}</p>`;}
-function historyView(state){const r=state.research;return r.history?.length?`<div class="table-wrap"><table><thead><tr><th>Select</th><th>Observed UTC</th><th>Exchange</th><th>Base / settlement</th><th>Index</th><th>Contracts</th><th>Origin</th><th>Actions</th></tr></thead><tbody>${r.history.map(h=>`<tr><td><input type="checkbox" data-history-select="${h.id}" aria-label="Select snapshot ${h.id}" ${r.ids.includes(h.id)?'checked':''}></td><td>${date(h.fetchedAt)}</td><td>${h.exchange}</td><td>${h.currency} / ${h.settlement}</td><td>${f(h.spot,2)}</td><td>${h.contracts}</td><td>${esc(h.origin)}</td><td><button data-history-use="${h.id}">Use</button><button data-history-delete="${h.id}">Delete</button></td></tr>`).join('')}</tbody></table></div>`:'<p>No snapshots saved yet. Refresh and save a chain or import an archive.</p>';}
-function comparisonView(c){return `<p>${c.records.length} observations · ${c.basis.exchange} ${c.basis.currency}/${c.basis.settlement}. Changes are relative to the earliest selected snapshot.</p>${curveSVG([{name:'Snapshot index',points:c.records.map((r,i)=>({x:i+1,y:r.spot}))}],{xLabel:'Chronological observation',yLabel:'Index'})}${c.changes.map(change=>`<details><summary>${date(change.at)} · index ${f(change.spotChangePercent)}% · ${change.matched} matched / ${change.added} added / ${change.removed} removed</summary><div class="table-wrap"><table><thead><tr><th>Contract</th><th>IV change pts</th><th>OI change (underlying)</th></tr></thead><tbody>${change.rows.map(q=>`<tr><td>${esc(q.instrument)}</td><td>${f(q.ivChange,2)}</td><td>${f(q.oiChange)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}`;}
-function runView(run){const r=run.result;return `<div class="crypto-summary"><span>Net P&L ${f(r.metrics.netPnLSettlement,6)} ${r.basis.settlement}</span><span>USD equivalent ${f(r.metrics.netPnLUSD,2)}</span><span>Drawdown ${f(r.metrics.maxDrawdownSettlement,6)} ${r.basis.settlement}</span><span>Fees ${f(r.metrics.feesSettlement,6)}</span><span>Margin breaches ${r.metrics.marginBreaches}</span></div>${curveSVG([{name:'Archived option/cash-flow P&L',points:r.curve.map((q,i)=>({x:i+1,y:q.pnlSettlement}))}],{xLabel:'Observation / settlement step',yLabel:'P&L ('+r.basis.settlement+')'})}<details><summary>Fill ledger and assumptions</summary><pre>${esc(JSON.stringify(r.fills,null,2))}</pre>${r.warnings.map(w=>`<p>${esc(w)}</p>`).join('')}</details>`;}
-export function paintRecording(state){const el=document.querySelector('#option-record-status');if(!el)return;const r=state.research.recording;el.textContent=`Recorder ${r.status??'stopped'} · ${r.saved??0} saved this session${r.exchange?' · '+r.exchange+' '+r.currency:''}${r.lastSavedAt?' · last '+date(r.lastSavedAt):''}${r.error?' · '+r.error:''}`;}
-export function bindOptionResearch({state,call,task,render,exportFile}){
- if(!document.querySelector('#surface-fit'))return;const r=state.research,args=()=>({exchange:state.exchange,...(state.archiveId?{snapshotId:state.archiveId}:{}),expiry:state.expiry}),on=(id,fn)=>document.querySelector('#'+id).onclick=()=>task(fn);
- const load=async()=>{r.history=await call('optionHistoryList');const table=document.querySelector('#option-history-table');if(table){table.innerHTML=historyView(state);bindHistory();}};
- const bindHistory=()=>{document.querySelectorAll('[data-history-select]').forEach(el=>el.onchange=()=>{r.ids=el.checked?[...new Set([...r.ids,el.dataset.historySelect])]:r.ids.filter(id=>id!==el.dataset.historySelect);});document.querySelectorAll('[data-history-use]').forEach(el=>el.onclick=()=>task(async()=>{await call(state.exchange==='deribit'?'deribitStop':'cryptoStop',{exchange:state.exchange});const saved=await call('optionHistoryGet',{id:el.dataset.historyUse});state.exchange=saved.snapshot.exchange;state.currency=saved.snapshot.currency;state.settlement=saved.snapshot.settlement;r.initialCapital=['USDC','USDT'].includes(saved.snapshot.settlement)?10000:1;state.archiveId=saved.id;state.snapshot={...saved.snapshot,status:'archive',active:false,trades:[],tradeCoverage:'Archive contains chain quotes, not a complete options trade history.',coverage:saved.snapshot.coverage+' · Archived '+saved.origin};state.expiry=null;r.surface=null;r.risk=null;r.legs=[];render();}));document.querySelectorAll('[data-history-delete]').forEach(el=>el.onclick=()=>task(async()=>{if(!window.confirm('Delete this saved option snapshot? Saved replays retain their used quote evidence.'))return;await call('optionHistoryDelete',{id:el.dataset.historyDelete});r.ids=r.ids.filter(id=>id!==el.dataset.historyDelete);await load();}));};
- r.refreshHistoryView=()=>{const table=document.querySelector('#option-history-table');if(table){table.innerHTML=historyView(state);bindHistory();}};
- for(const [id,key,scale] of [['surface-beta','beta',1],['surface-oi','minOI',1],['surface-spread','maxSpread',1],['surface-age','maxAgeMs',1000],['option-record-interval','intervalSeconds',1],['portfolio-iv','ivShift',1],['portfolio-days','daysElapsed',1],['option-capital','initialCapital',1],['option-fee','feeBps',1],['option-slippage','slippageBps',1],['option-margin','marginReserve',1]])document.querySelector('#'+id).oninput=e=>{r[key]=Number(e.target.value)*scale;};document.querySelector('#surface-gamma').onchange=e=>{r.convention=e.target.value;};for(const [id,key] of [['option-funding','funding'],['option-settlement-price','settlementPrice'],['option-settlement-source','settlementSource']])document.querySelector('#'+id).oninput=e=>{r[key]=e.target.value;};
- on('surface-fit',async()=>{r.surface=await call('optionSurface',{...args(),beta:r.beta,minOI:r.minOI,maxSpread:r.maxSpread,maxAgeMs:r.maxAgeMs,convention:r.convention??'gross'});render();});document.querySelectorAll('[data-option-candidate]').forEach(el=>el.onclick=()=>{r.legs=structuredClone(r.surface.candidates[Number(el.dataset.optionCandidate)].legs);r.risk=null;render();});
- on('option-leg-add',()=>{const row=state.snapshot.rows.find(q=>q.expiry===state.expiry&&!r.legs.some(l=>l.instrument===q.instrument));if(row){r.legs.push({instrument:row.instrument,quantity:row.quantityUnit==='contracts'?row.contractSize:1});render();}});document.querySelectorAll('[data-leg-contract]').forEach(el=>el.onchange=()=>{r.legs[Number(el.dataset.legContract)].instrument=el.value;r.risk=null;});document.querySelectorAll('[data-leg-quantity]').forEach(el=>el.oninput=()=>{r.legs[Number(el.dataset.legQuantity)].quantity=Number(el.value);r.risk=null;});document.querySelectorAll('[data-leg-remove]').forEach(el=>el.onclick=()=>{r.legs.splice(Number(el.dataset.legRemove),1);r.risk=null;render();});
- on('portfolio-model',async()=>{r.risk=await call('optionPortfolio',{...args(),legs:r.legs,ivShift:r.ivShift,daysElapsed:r.daysElapsed});render();});
- on('option-history-save',async()=>{await call('optionHistorySave',{exchange:state.exchange});await load();});on('option-history-refresh',load);on('option-history-export',async()=>exportFile('pine-desk-option-history.json',JSON.stringify(await call('optionHistoryExport',{ids:r.ids}),null,2)));
- on('option-history-import',async()=>{let json;if(window.desk?.importOptionsArchive)json=await window.desk.importOptionsArchive();else json=await new Promise(resolve=>{const input=document.createElement('input');input.type='file';input.accept='.json';input.onchange=async()=>resolve(input.files[0]?await input.files[0].text():null);input.oncancel=()=>resolve(null);input.click();});if(json){await call('optionHistoryImport',{json});await load();}});
- on('option-history-compare',async()=>{r.comparison=await call('optionHistoryCompare',{ids:r.ids});render();});on('option-record-start',async()=>{r.recording=await call('optionRecordStart',{exchange:state.exchange,currency:state.currency,settlement:state.settlement,intervalSeconds:r.intervalSeconds});paintRecording(state);});on('option-record-stop',async()=>{r.recording=await call('optionRecordStop');paintRecording(state);await load();});
- on('option-replay',async()=>{let funding;try{funding=JSON.parse(r.funding);}catch{throw Error('Funding must be a JSON array.');}r.run=await call('optionBacktest',{ids:r.ids,legs:r.legs,initialCapital:r.initialCapital,feeBps:r.feeBps,slippageBps:r.slippageBps,maxAgeMs:r.maxAgeMs,marginReserve:r.marginReserve,funding,...(r.settlementPrice?{settlement:{price:Number(r.settlementPrice),source:r.settlementSource}}:{})});render();});on('option-run-export',()=>exportFile('pine-desk-option-replay.json',JSON.stringify(r.run,null,2)));on('option-runs-load',async()=>{r.runs=await call('optionRuns');render();});document.querySelector('#option-saved-run').onchange=e=>{if(e.target.value)task(async()=>{r.run=await call('optionRunGet',{id:e.target.value});render();});};bindHistory();paintRecording(state);if(r.history===null&&window.desk)load().catch(e=>{const el=document.querySelector('#option-history-table');if(el)el.textContent=e.message;});
+function surfaceView(s) {
+  const fit = s.fit,
+    skew = s.skew,
+    g = s.gamma;
+  return `<div class="learning-note"><div class="crypto-summary"><span>${fit.qualified} qualified OTM strikes · ${fit.excluded} excluded</span><span>Training RMSE ${f(fit.trainRMSE, 3)} IV pts</span><span>Held-out RMSE ${f(fit.holdoutRMSE, 3)} IV pts</span><span>Converged ${fit.converged ? "yes" : "no"}</span></div><p>α ${f(fit.params.alpha)} · β ${f(fit.params.beta)} · ρ ${f(fit.params.rho)} · ν ${f(fit.params.nu)} · Forward ${f(fit.F)} · ${esc(fit.interpretation)}</p>${fit.warnings.map((w) => `<p class="negative">${esc(w)}</p>`).join("")}${curveSVG(
+    [
+      {
+        name: "Qualified observed IV",
+        points: fit.residuals.map((r) => ({ x: r.strike, y: r.iv })),
+      },
+      {
+        name: "SABR model",
+        points: fit.curve.map((r) => ({ x: r.strike, y: r.iv })),
+      },
+    ],
+    { xLabel: "Strike", yLabel: "IV (%)" },
+  )}<div class="crypto-summary"><span>25Δ Call IV ${f(skew.call25?.iv, 2)}%</span><span>25Δ Put IV ${f(skew.put25?.iv, 2)}%</span><span>Call − Put RR ${f(skew.riskReversal, 2)} IV pts</span></div><p>${esc(skew.convention)}. A missing bracket gives an unavailable value.</p><details><summary>25Δ interpolation brackets</summary><pre>${esc(JSON.stringify({ call: skew.call25?.bracket, put: skew.put25?.bracket }, null, 2))}</pre></details><div class="table-wrap"><table><thead><tr><th>Contract</th><th>Use</th><th>Market IV</th><th>Model IV</th><th>Residual pts</th><th>Model premium</th><th>Outside spread?</th></tr></thead><tbody>${fit.residuals.map((q) => `<tr><td>${esc(q.instrument)}</td><td>${q.usedFor}</td><td>${f(q.iv, 2)}</td><td>${f(q.fitted, 2)}</td><td>${f(q.residual, 2)}</td><td>${f(q.fittedPremium, 6)}</td><td>${q.outsideSpread ? "yes" : "no"}</td></tr>`).join("")}</tbody></table></div><p>Model premiums use the undiscounted expiry forward and snapshot index conversion. Outside-spread residuals are research hypotheses, without execution-cost or profit guarantees.</p><h3>Gamma by strike · ${esc(g.convention)}</h3><p>${esc(g.positioning)} ${esc(g.units)}. ${g.qualified} qualified contracts; ${g.excluded} excluded.</p>${curveSVG([{ name: "Qualified strike gamma", points: g.rows.map((r) => ({ x: r.strike, y: r.net })) }], { xLabel: "Strike", yLabel: "USD / 1% move" })}<details><summary>Gamma repricing scenario and model roots</summary><p>${esc(g.method)} Roots: ${g.roots.length ? g.roots.map((v) => f(v, 2)).join(", ") : "None in sampled range"}.</p>${curveSVG([{ name: "Modeled gamma scenario", points: g.curve.map((q) => ({ x: q.spot, y: q.gex })) }], { xLabel: "Hypothetical spot", yLabel: "USD / 1% move" })}</details><h3>Strategy templates</h3><p>Templates use qualified quotes. They are not ranked recommendations or calibrated probabilities.</p><div class="learning-presets">${s.candidates.map((c, i) => `<button data-option-candidate="${i}">${esc(c.name)} · ${f(c.entryPremium, 5)} ${esc(c.settlement)}</button>`).join("")}</div></div>`;
+}
+function portfolioView(r) {
+  return `<p>Scenario: IV shift ${r.configuration.ivShift} points · ${r.configuration.daysElapsed} days elapsed. Entry premium ${f(r.entryPremium, 6)} ${esc(r.settlement)} (${f(r.entryPremiumUSD, 2)} USD equivalent); negative is credit. ${esc(r.riskScope)}</p><div class="crypto-summary">${Object.entries(
+    r.greeks,
+  )
+    .map(([k, v]) => `<span>${k} ${f(v)}</span>`)
+    .join(
+      "",
+    )}<span>Premium cash Δ ${f(r.cashDelta)}</span><span>Total modeled Δ ${f(r.totalDelta)}</span></div>${curveSVG(
+    [
+      {
+        name: "Scenario model P&L",
+        points: r.scenarios.map((s) => ({
+          x: s.spot,
+          y: s.modelPnLSettlement,
+        })),
+      },
+      {
+        name: "At expiry P&L",
+        points: r.scenarios.map((s) => ({
+          x: s.spot,
+          y: s.expiryPnLSettlement,
+        })),
+      },
+    ],
+    { xLabel: "Hypothetical spot", yLabel: "P&L (" + r.settlement + ")" },
+  )}<p>${esc(r.greekBasis)} ${esc(r.assumptions)}</p>`;
+}
+function historyView(state) {
+  const r = state.research;
+  return r.history?.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Select</th><th>Observed UTC</th><th>Exchange</th><th>Base / settlement</th><th>Index</th><th>Contracts</th><th>Origin</th><th>Actions</th></tr></thead><tbody>${r.history.map((h) => `<tr><td><input type="checkbox" data-history-select="${h.id}" aria-label="Select snapshot ${h.id}" ${r.ids.includes(h.id) ? "checked" : ""}></td><td>${date(h.fetchedAt)}</td><td>${h.exchange}</td><td>${h.currency} / ${h.settlement}</td><td>${f(h.spot, 2)}</td><td>${h.contracts}</td><td>${esc(h.origin)}</td><td><button data-history-use="${h.id}">Use</button><button data-history-delete="${h.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
+    : "<p>No snapshots saved yet. Refresh and save a chain or import an archive.</p>";
+}
+function comparisonView(c) {
+  return `<p>${c.records.length} observations · ${c.basis.exchange} ${c.basis.currency}/${c.basis.settlement}. Changes are relative to the earliest selected snapshot.</p>${curveSVG([{ name: "Snapshot index", points: c.records.map((r, i) => ({ x: i + 1, y: r.spot })) }], { xLabel: "Chronological observation", yLabel: "Index" })}${c.changes.map((change) => `<details><summary>${date(change.at)} · index ${f(change.spotChangePercent)}% · ${change.matched} matched / ${change.added} added / ${change.removed} removed</summary><div class="table-wrap"><table><thead><tr><th>Contract</th><th>IV change pts</th><th>OI change (underlying)</th></tr></thead><tbody>${change.rows.map((q) => `<tr><td>${esc(q.instrument)}</td><td>${f(q.ivChange, 2)}</td><td>${f(q.oiChange)}</td></tr>`).join("")}</tbody></table></div></details>`).join("")}`;
+}
+function runView(run) {
+  const r = run.result;
+  return `<div class="crypto-summary" data-option-run="${esc(run.id)}"><span>${esc(r.kind)} · Net P&L ${f(r.metrics.netPnLSettlement, 6)} ${r.basis.settlement}</span><span>USD equivalent ${f(r.metrics.netPnLUSD, 2)}</span><span>Drawdown ${f(r.metrics.maxDrawdownSettlement, 6)} ${r.basis.settlement}</span><span>Fees ${f(r.metrics.feesSettlement, 6)}</span><span>Margin breaches ${r.metrics.marginBreaches ?? 0}</span></div>${curveSVG([{ name: "Archived option/cash-flow P&L", points: r.curve.map((q, i) => ({ x: i + 1, y: q.pnlSettlement })) }], { xLabel: "Observation / settlement step", yLabel: "P&L (" + r.basis.settlement + ")" })}<details><summary>Fill ledger and assumptions</summary><pre>${esc(JSON.stringify(r.fills, null, 2))}</pre>${r.warnings.map((w) => `<p>${esc(w)}</p>`).join("")}</details>`;
+}
+export function paintRecording(state) {
+  const el = document.querySelector("#option-record-status");
+  if (!el) return;
+  const r = state.research.recording;
+  el.textContent = `Recorder ${r.status ?? "stopped"} · ${r.saved ?? 0} saved this session${r.exchange ? " · " + r.exchange + " " + r.currency : ""}${r.lastSavedAt ? " · last " + date(r.lastSavedAt) : ""}${r.error ? " · " + r.error : ""}`;
+}
+export function bindOptionResearch({ state, call, task, render, exportFile }) {
+  if (!document.querySelector("#surface-fit")) return;
+  const r = state.research,
+    args = () => ({
+      exchange: state.exchange,
+      ...(state.archiveId ? { snapshotId: state.archiveId } : {}),
+      expiry: state.expiry,
+    }),
+    on = (id, fn) =>
+      (document.querySelector("#" + id).onclick = () => task(fn));
+  const load = async () => {
+    const request = (r.historyRequest = (r.historyRequest ?? 0) + 1);
+    const query = {
+      ...(r.historySource ? { exchange: r.historySource } : {}),
+      ...(r.historyUnderlying ? { currency: r.historyUnderlying } : {}),
+      offset: r.historyOffset,
+      limit: 500,
+      ...(r.historyFrom ? { from: Date.parse(r.historyFrom + "Z") } : {}),
+      ...(r.historyTo ? { to: Date.parse(r.historyTo + "Z") } : {}),
+    };
+    const history = await call("optionHistoryList", query);
+    const coverageReport = await call("optionHistoryCoverage", query);
+    if (request !== r.historyRequest) return;
+    r.history = history;
+    r.coverage = coverageReport;
+    const coverage = document.querySelector("#history-coverage");
+    if (coverage)
+      coverage.textContent = `${r.coverage.count} observations · ${(r.coverage.storedBytes / 1000000).toFixed(1)} MB stored · page ${Math.floor(r.historyOffset / 500) + 1}`;
+    const table = document.querySelector("#option-history-table");
+    if (table) {
+      table.innerHTML = historyView(state);
+      bindHistory();
+    }
+  };
+  const bindHistory = () => {
+    document.querySelectorAll("[data-history-select]").forEach(
+      (el) =>
+        (el.onchange = () => {
+          r.ids = el.checked
+            ? [...new Set([...r.ids, el.dataset.historySelect])]
+            : r.ids.filter((id) => id !== el.dataset.historySelect);
+        }),
+    );
+    document.querySelectorAll("[data-history-use]").forEach(
+      (el) =>
+        (el.onclick = () =>
+          task(async () => {
+            if (state.exchange !== "import")
+              await call(
+                state.exchange === "deribit" ? "deribitStop" : "cryptoStop",
+                { exchange: state.exchange },
+              );
+            const saved = await call("optionHistoryGet", {
+              id: el.dataset.historyUse,
+            });
+            state.exchange = saved.snapshot.exchange;
+            state.currency = saved.snapshot.currency;
+            state.settlement = saved.snapshot.settlement;
+            r.initialCapital = ["USD", "USDC", "USDT"].includes(
+              saved.snapshot.settlement,
+            )
+              ? 10000
+              : 1;
+            state.archiveId = saved.id;
+            state.snapshot = {
+              ...saved.snapshot,
+              status: "archive",
+              active: false,
+              trades: [],
+              tradeCoverage:
+                "Archive contains chain quotes, not a complete options trade history.",
+              coverage: saved.snapshot.coverage + " · Archived " + saved.origin,
+            };
+            state.expiry = null;
+            r.surface = null;
+            r.risk = null;
+            r.legs = [];
+            render();
+          })),
+    );
+    document.querySelectorAll("[data-history-delete]").forEach(
+      (el) =>
+        (el.onclick = () =>
+          task(async () => {
+            if (
+              !window.confirm(
+                "Delete this saved option snapshot? Saved replays retain their used quote evidence.",
+              )
+            )
+              return;
+            await call("optionHistoryDelete", { id: el.dataset.historyDelete });
+            r.ids = r.ids.filter((id) => id !== el.dataset.historyDelete);
+            await load();
+          })),
+    );
+  };
+  r.refreshHistoryView = () => {
+    const table = document.querySelector("#option-history-table");
+    if (table) {
+      table.innerHTML = historyView(state);
+      bindHistory();
+    }
+  };
+  for (const [id, key, scale] of [
+    ["surface-beta", "beta", 1],
+    ["surface-oi", "minOI", 1],
+    ["surface-spread", "maxSpread", 1],
+    ["surface-age", "maxAgeMs", 1000],
+    ["option-record-interval", "intervalSeconds", 1],
+    ["portfolio-iv", "ivShift", 1],
+    ["portfolio-days", "daysElapsed", 1],
+    ["option-capital", "initialCapital", 1],
+    ["option-fee", "feeBps", 1],
+    ["option-slippage", "slippageBps", 1],
+    ["option-margin", "marginReserve", 1],
+  ])
+    document.querySelector("#" + id).oninput = (e) => {
+      r[key] = Number(e.target.value) * scale;
+    };
+  document.querySelector("#surface-gamma").onchange = (e) => {
+    r.convention = e.target.value;
+  };
+  for (const [id, key] of [
+    ["option-funding", "funding"],
+    ["option-settlement-price", "settlementPrice"],
+    ["option-settlement-source", "settlementSource"],
+  ])
+    document.querySelector("#" + id).oninput = (e) => {
+      r[key] = e.target.value;
+    };
+  for (const [id, key] of [
+    ["history-from", "historyFrom"],
+    ["history-to", "historyTo"],
+    ["option-rules", "rules"],
+    ["history-source", "historySource"],
+    ["history-underlying", "historyUnderlying"],
+    ["option-rule-settlements", "settlements"],
+    ["option-exercise-events", "exerciseEvents"],
+    ["option-dividends", "dividends"],
+  ])
+    document.querySelector("#" + id).oninput = (e) => {
+      r[key] = e.target.value;
+      if (id.startsWith("history-")) r.historyOffset = 0;
+    };
+  for (const id of [
+    "history-source",
+    "history-underlying",
+    "history-from",
+    "history-to",
+  ]) {
+    document.querySelector("#" + id).onchange = () =>
+      task(async () => {
+        if (["history-source", "history-underlying"].includes(id)) r.ids = [];
+        await load();
+      });
+  }
+  on("history-previous", async () => {
+    r.historyOffset = Math.max(0, r.historyOffset - 500);
+    await load();
+  });
+  on("history-next", async () => {
+    if (r.history?.length === 500) {
+      r.historyOffset += 500;
+      await load();
+    }
+  });
+  on("option-strategy-run", async () => {
+    r.run = await call("optionStrategy", {
+      ids: r.ids,
+      initialCapital: r.initialCapital,
+      rules: JSON.parse(r.rules),
+      funding: JSON.parse(r.funding),
+      settlements: JSON.parse(r.settlements),
+      exerciseEvents: JSON.parse(r.exerciseEvents),
+      dividends: JSON.parse(r.dividends),
+    });
+    render();
+  });
+  for (const [id, key] of [
+    ["rules-template", "template"],
+    ["rules-dte", "targetDTE"],
+    ["rules-delta", "targetDelta"],
+    ["rules-quantity", "quantity"],
+  ])
+    document.querySelector("#" + id).onchange = (e) => {
+      const rules = JSON.parse(r.rules);
+      rules[key] = key === "template" ? e.target.value : Number(e.target.value);
+      r.rules = JSON.stringify(rules, null, 2);
+      document.querySelector("#option-rules").value = r.rules;
+    };
+  document.querySelector("#option-allocation-runs").onchange = (e) => {
+    r.runIds = [...e.target.selectedOptions].map((o) => o.value);
+  };
+  on("option-allocation-compare", async () => {
+    r.allocation = await call("optionCompareRuns", { ids: r.runIds });
+    render();
+  });
+  for (const [id, key] of [
+    ["backfill-underlying", "backfillUnderlying"],
+    ["backfill-contracts", "backfillContracts"],
+    ["backfill-from", "backfillFrom"],
+    ["backfill-to", "backfillTo"],
+  ])
+    document.querySelector("#" + id).oninput = (e) => {
+      r[key] = e.target.value;
+    };
+  on("option-backfill", async () => {
+    r.backfillReport = await call("optionHistoryBackfill", {
+      underlying: r.backfillUnderlying,
+      contracts: JSON.parse(r.backfillContracts),
+      from: Date.parse(r.backfillFrom + "Z"),
+      to: Date.parse(r.backfillTo + "Z"),
+      intervalSeconds: r.intervalSeconds,
+    });
+    await load();
+    render();
+  });
+  on("surface-fit", async () => {
+    r.surface = await call("optionSurface", {
+      ...args(),
+      beta: r.beta,
+      minOI: r.minOI,
+      maxSpread: r.maxSpread,
+      maxAgeMs: r.maxAgeMs,
+      convention: r.convention ?? "gross",
+    });
+    render();
+  });
+  document.querySelectorAll("[data-option-candidate]").forEach(
+    (el) =>
+      (el.onclick = () => {
+        r.legs = structuredClone(
+          r.surface.candidates[Number(el.dataset.optionCandidate)].legs,
+        );
+        r.risk = null;
+        render();
+      }),
+  );
+  on("option-leg-add", () => {
+    const row = state.snapshot.rows.find(
+      (q) =>
+        q.expiry === state.expiry &&
+        !r.legs.some((l) => l.instrument === q.instrument),
+    );
+    if (row) {
+      r.legs.push({
+        instrument: row.instrument,
+        quantity: row.quantityUnit === "contracts" ? row.contractSize : 1,
+      });
+      render();
+    }
+  });
+  document.querySelectorAll("[data-leg-contract]").forEach(
+    (el) =>
+      (el.onchange = () => {
+        r.legs[Number(el.dataset.legContract)].instrument = el.value;
+        r.risk = null;
+      }),
+  );
+  document.querySelectorAll("[data-leg-quantity]").forEach(
+    (el) =>
+      (el.oninput = () => {
+        r.legs[Number(el.dataset.legQuantity)].quantity = Number(el.value);
+        r.risk = null;
+      }),
+  );
+  document.querySelectorAll("[data-leg-remove]").forEach(
+    (el) =>
+      (el.onclick = () => {
+        r.legs.splice(Number(el.dataset.legRemove), 1);
+        r.risk = null;
+        render();
+      }),
+  );
+  on("portfolio-model", async () => {
+    r.risk = await call("optionPortfolio", {
+      ...args(),
+      legs: r.legs,
+      ivShift: r.ivShift,
+      daysElapsed: r.daysElapsed,
+    });
+    render();
+  });
+  on("option-history-save", async () => {
+    await call("optionHistorySave", { exchange: state.exchange });
+    await load();
+  });
+  on("option-history-refresh", load);
+  on("option-history-export", async () =>
+    exportFile(
+      "pine-desk-option-history.json",
+      JSON.stringify(
+        await call("optionHistoryExport", { ids: r.ids }),
+        null,
+        2,
+      ),
+    ),
+  );
+  on("option-history-import", async () => {
+    let json;
+    if (window.desk?.importOptionsArchive)
+      json = await window.desk.importOptionsArchive();
+    else
+      json = await new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+        input.onchange = async () =>
+          resolve(input.files[0] ? await input.files[0].text() : null);
+        input.oncancel = () => resolve(null);
+        input.click();
+      });
+    if (json) {
+      await call("optionHistoryImport", { json });
+      await load();
+    }
+  });
+  on("option-history-compare", async () => {
+    r.comparison = await call("optionHistoryCompare", { ids: r.ids });
+    render();
+  });
+  on("option-record-start", async () => {
+    r.recording = await call("optionRecordStart", {
+      exchange: state.exchange,
+      currency: state.currency,
+      settlement: state.settlement,
+      intervalSeconds: r.intervalSeconds,
+    });
+    paintRecording(state);
+  });
+  on("option-record-stop", async () => {
+    r.recording = await call("optionRecordStop");
+    paintRecording(state);
+    await load();
+  });
+  on("option-replay", async () => {
+    let funding;
+    try {
+      funding = JSON.parse(r.funding);
+    } catch {
+      throw Error("Funding must be a JSON array.");
+    }
+    r.run = await call("optionBacktest", {
+      ids: r.ids,
+      legs: r.legs,
+      initialCapital: r.initialCapital,
+      feeBps: r.feeBps,
+      slippageBps: r.slippageBps,
+      maxAgeMs: r.maxAgeMs,
+      marginReserve: r.marginReserve,
+      funding,
+      ...(r.settlementPrice
+        ? {
+            settlement: {
+              price: Number(r.settlementPrice),
+              source: r.settlementSource,
+            },
+          }
+        : {}),
+    });
+    render();
+  });
+  on("option-run-export", () =>
+    exportFile("pine-desk-option-replay.json", JSON.stringify(r.run, null, 2)),
+  );
+  on("option-runs-load", async () => {
+    r.runs = await call("optionRuns");
+    render();
+  });
+  document.querySelector("#option-saved-run").onchange = (e) => {
+    if (e.target.value)
+      task(async () => {
+        r.run = await call("optionRunGet", { id: e.target.value });
+        render();
+      });
+  };
+  bindHistory();
+  paintRecording(state);
+  if (r.history === null && window.desk)
+    load().catch((e) => {
+      const el = document.querySelector("#option-history-table");
+      if (el) el.textContent = e.message;
+    });
 }

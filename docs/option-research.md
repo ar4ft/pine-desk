@@ -1,12 +1,12 @@
 # Option research and historical quote replay
 
-Pine Desk v0.6 adds persistent chain history, an independent snapshot recorder, surface calibration, multi-leg models and a separate option quote-replay engine. Open **Crypto options** and scroll below the market explorer. This extends the useful public-data/research concepts from the [reviewed projects](options-project-review.md); no upstream Python app, trading executor or notification service is bundled.
+Pine Desk adds persistent chain history, an independent snapshot recorder, surface calibration, multi-leg models and a separate option quote-replay engine. Open **Crypto options** and scroll below the market explorer. This extends the useful public-data/research concepts from the [reviewed projects](options-project-review.md); no upstream Python app, trading executor or notification service is bundled.
 
 ## Exchanges and units
 
 | Provider | Supported series | Premium/settlement | Amount and OI normalization | Updates |
 | --- | --- | --- | --- | --- |
-| Deribit | BTC/ETH inverse options | BTC/ETH | Already underlying units; do not multiply by contract size again | Selected ticker + currency option-trades WebSocket; full chain remains snapshot |
+| Deribit | BTC/ETH inverse options | BTC/ETH | Already underlying units; do not multiply by contract size again | Selected ticker + currency option-trades WebSocket; optional bounded expiry ticker subscriptions |
 | Bybit | BTC/ETH options with selected USDC or USDT settlement | Selected stablecoin | Underlying units; IV decimal converted to percent | Full public REST chain/trades, optional 30-second polling |
 | OKX | BTC-USD / ETH-USD inverse options | BTC/ETH | Contract counts × `ctVal` × `ctMult` once; retain original OI/count | Full public REST chain, optional 30-second polling; trades only for selected contract |
 
@@ -18,7 +18,7 @@ Switch exchange, base and (Bybit) settlement, then Refresh. No connection starts
 
 **Save current snapshot** persists the currently loaded complete chain; refresh first if it is older than one minute. **Start recording** fetches fresh full chains at 60–3,600-second intervals (default five minutes), independently of the selected live ticker. Recorder status reports captures and errors. Stop or quit to end recording; it does not restart automatically. A stopped capture will not begin a later save, though a save already in progress can finish.
 
-History is shared between desktop and local MCP through the same data directory. Atomic documents and an interprocess writer lock prevent concurrent recorder/index updates from losing records. Storage stops at **200 snapshots or 100 MB**; it does not automatically delete previous history. Export and delete selected rows to free space. Recording status and market connections belong to each process separately.
+History is shared between desktop and local MCP through the same data directory. Atomic documents and an interprocess writer lock prevent concurrent recorder/index updates from losing records. Storage stops at **50,000 snapshots or 2 GB of compressed payloads**; it does not automatically delete previous history. Export and delete selected rows to free space. Recording status and market connections belong to each process separately.
 
 Choose history rows to export, compare, or replay. **Use** displays an archived chain and makes it the fit/model source; live connection controls remain disabled until Refresh. Imported data is marked **source not verified**. Saved quote replays freeze the used contract rows, source hashes, timestamps, configuration and fill ledger, so deleting source archives does not erase a replay's evidence.
 
@@ -50,7 +50,7 @@ Archives are UTF-8 JSON (native file picker, maximum 25 MB):
 
 These illustrative prices are synthetic. Actual app exports include record IDs, hashes and source metadata; the importer accepts either exported record wrappers or bare snapshots. Each chain must have at least one active contract **at its observation time**, consistent base/settlement, distinct contract IDs and finite non-negative fields. Unknown fields are discarded. Missing bid/ask/IV/OI stays null, not zero. Crossed or otherwise unusable quotes can remain as evidence; research filters exclude them.
 
-No historical lookback is downloaded or fabricated. The recorder starts collecting now. Public recent trades do not reconstruct historical chains; import properly sourced archived bid/ask observations for longer backtests.
+Public recording does not download historical lookback. Licensed Massive historical backfill is separately prepared; see the [v0.7 guide](research-reliability.md#licensed-us-history-preparation). The recorder starts collecting now. Public recent trades do not reconstruct historical chains; import properly sourced archived bid/ask observations for longer backtests.
 
 ## Surface fits, skew and gamma
 
@@ -70,13 +70,13 @@ Residuals include observed/model IV, premium under the undiscounted-forward mode
 
 ## Strategy templates and multi-leg scenarios
 
-Qualified quotes can create six unranked templates where strikes exist: long straddle, long strangle, call debit vertical, put debit vertical, risk reversal and equally spaced call butterfly. Templates are structural examples, not trading recommendations. Choose one or add up to eight distinct **same-expiry** legs manually.
+Qualified quotes can create six unranked templates where strikes exist: long straddle, long strangle, call debit vertical, put debit vertical, risk reversal and equally spaced call butterfly. Templates are structural examples, not trading recommendations. Choose one or add up to eight distinct legs manually, including mixed expiries.
 
 Quantities are signed **underlying units** on every exchange: positive buys, negative sells. For OKX, one contract means the normalized contract size in underlying units. Arbitrary model quantities are not a promise of an exchange-valid lot size.
 
-Entry premium uses ask for buys and bid for sells. Scenarios use standard European BSM at zero rate/yield, per-leg fixed IV plus the requested shift and elapsed time. Premium ledger and P&L are in settlement units. For inverse contracts, modeled USD value is divided by scenario spot before applying coin-premium cash flows. Displayed Greeks are modeled USD option sensitivities for the selected IV/time scenario at snapshot spot; inverse premium-cash delta is separate. Terminal payoff kinks show unavailable sensitivities rather than inventing a derivative.
+Entry premium uses ask for buys and bid for sells. Scenarios use European BSM or approximate American CRR per contract at zero rate/yield, per-leg fixed IV plus the requested shift and elapsed time. Premium ledger and P&L are in settlement units. For inverse contracts, modeled USD value is divided by scenario spot before applying coin-premium cash flows. Displayed Greeks are modeled USD option sensitivities for the selected IV/time scenario at snapshot spot; inverse premium-cash delta is separate. Terminal payoff kinks show unavailable sensitivities rather than inventing a derivative.
 
-The graph's best/worst values cover only its sampled spot range. They are **not global maximum loss, margin or liquidation bounds**. No American exercise, dynamic hedge or calendar-spread model is claimed.
+The graph's best/worst values cover only its sampled spot range. They are **not global maximum loss, margin or liquidation bounds**. Mixed-expiry scenarios assume the same terminal spot at each fixing and do not represent a full path-dependent calendar outcome. American pricing is approximate. Rule-driven replay supports separate explicit lifecycle events and synthetic hedges; see the v0.7 guide.
 
 ## Historical replay and accounting
 
@@ -110,3 +110,7 @@ Fit/model calls accept `snapshotId` to use saved evidence, or `exchange` to use 
 Tests cover independent QuantLib SABR references, known-parameter recovery, held-out separation, stale/missing filters, interpolation and missing wings, gamma sign conventions, storage validation/provenance/quota/concurrent writers, recorder lifecycle, Bybit/OKX units/polling/errors, known cash/fill/commission/funding accounting, explicit settlement and preserved quote evidence. Browser and native Electron checks exercise archive import, calibration, candidates, modeling, comparisons and saved replays.
 
 `npm run smoke:options-research` optionally checks genuine Deribit quotes, qualified fitting/skew, fresh disk capture, modeling and two-observation replay in an isolated temporary directory. A live check on October 1, 2026 qualified 39 ETH OTM strikes with training RMSE ~0.695 and held-out RMSE ~0.704 IV points. No synthetic history was substituted. Bybit/OKX remain fixture-validated because production access was blocked here.
+
+## Rule-driven studies and licensed data
+
+See [v0.7 workflows, schemas, execution assumptions, historical provider setup and limitations](research-reliability.md). Fixed-leg replay remains available; physical delivery and partial fills use the rule-driven engine.

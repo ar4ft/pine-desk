@@ -1,65 +1,229 @@
-const $=selector=>document.querySelector(selector);
-const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const number=(value,places=0)=>Number.isFinite(value)?value.toLocaleString('en-US',{maximumFractionDigits:places}):'—';
-const percentage=value=>value===null||!Number.isFinite(value)?'Withheld':`${number(value*100,2)}%`;
-const interval=ci=>Array.isArray(ci)?`${percentage(ci[0])} – ${percentage(ci[1])}`:'Withheld';
-const options=(items,value,key='symbol',label=key)=>items.map(item=>`<option value="${esc(item[key])}" ${item[key]===value?'selected':''}>${esc(item[label])}</option>`).join('');
+const $ = (selector) => document.querySelector(selector);
+const esc = (value) =>
+  String(value ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+const number = (value, places = 0) =>
+  Number.isFinite(value)
+    ? value.toLocaleString("en-US", { maximumFractionDigits: places })
+    : "—";
+const percentage = (value) =>
+  value === null || !Number.isFinite(value)
+    ? "Withheld"
+    : `${number(value * 100, 2)}%`;
+const interval = (ci) =>
+  Array.isArray(ci)
+    ? `${percentage(ci[0])} – ${percentage(ci[1])}`
+    : "Withheld";
+const options = (items, value, key = "symbol", label = key) =>
+  items
+    .map(
+      (item) =>
+        `<option value="${esc(item[key])}" ${item[key] === value ? "selected" : ""}>${esc(item[label])}</option>`,
+    )
+    .join("");
 
-export function newEdgeState(){return {config:{mode:'hosted',endpoint:'http://127.0.0.1:3344/mcp'},overview:null,response:null,session:null,fields:null,draft:{symbol:'',preset:'gap-fill',dsl:'gapFill WHERE dayOfWeek = Tue',params:'{}',sessionKey:'',since:'',until:'',groupBy:''}};}
-export function retainEdgeDraft(edge){
-  for(const key of Object.keys(edge.draft)){const field=$(`#edge-${key}`);if(field)edge.draft[key]=field.value;}
+export function newEdgeState() {
+  return {
+    config: { mode: "hosted", endpoint: "http://127.0.0.1:3344/mcp" },
+    overview: null,
+    response: null,
+    session: null,
+    fields: null,
+    draft: {
+      symbol: "",
+      preset: "gap-fill",
+      dsl: "gapFill WHERE dayOfWeek = Tue",
+      params: "{}",
+      sessionKey: "",
+      since: "",
+      until: "",
+      groupBy: "",
+    },
+  };
 }
-export function edgeView(edge){
-  const overview=edge.overview,local=edge.config.mode==='local',symbols=overview?.coverage?.symbols??[],presets=overview?.catalog?.presets??[];
-  const r=edge.response?.result,selection=presets.find(p=>p.id===edge.draft.preset);
+export function retainEdgeDraft(edge) {
+  for (const key of Object.keys(edge.draft)) {
+    const field = $(`#edge-${key}`);
+    if (field) edge.draft[key] = field.value;
+  }
+}
+export function edgeView(edge) {
+  const overview = edge.overview,
+    local = edge.config.mode === "local",
+    symbols = overview?.coverage?.symbols ?? [],
+    presets = overview?.catalog?.presets ?? [];
+  const r = edge.response?.result,
+    selection = presets.find((p) => p.id === edge.draft.preset);
   return `<div id="edge-panel"><div class="page-intro"><span class="eyebrow">LUXALGO EDGE STATS</span><h1>Ask how often it happened.</h1><p>Conditional session statistics from the official engine, with sample sizes, confidence intervals, and the sessions behind the result.</p></div>
-    <div class="edge-connection searchbar"><label>Data source<select id="edge-mode"><option value="hosted" ${local?'':'selected'}>Public hosted reports</option><option value="local" ${local?'selected':''}>My local Edge Stats server</option></select></label><label class="edge-endpoint">Local MCP URL<input id="edge-endpoint" value="${esc(edge.config.endpoint)}" ${local?'':'disabled'}></label><button id="edge-connect" class="primary">${local?'Connect local server':'Load public reports'}</button><button data-link="https://github.com/ar4ft/pine-desk/blob/main/docs/edge-stats.md">Setup guide ↗</button></div>
-    <p class="footnote">${local?'Your own Edge Stats store. Start the official local MCP server, then connect. Pine Desk chart CSVs are separate from that store.':'Hosted reports use LuxAlgo’s nightly derived store. They do not run on the chart’s candles, and do not include raw bars or custom filters.'}</p>
-    ${overview?`<section class="plot-card edge-coverage"><div class="panel-heading"><span>DATA COVERAGE & FRESHNESS</span><span>Retrieved ${esc(new Date(overview.retrievedAt).toISOString())}</span></div><div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Base bars</th><th>Last bar (UTC)</th><th>Session coverage</th></tr></thead><tbody>${symbols.map(s=>`<tr><td>${esc(s.symbol)}</td><td>${esc(s.tf)}</td><td>${esc(s.lastBar??'No bars')}</td><td>${esc((s.sessions??[]).map(w=>`${w.sessionKey}: ${w.sessions} sessions (${w.firstDay} – ${w.lastDay})`).join(' · ')||s.defaultSession||'See store metadata')}</td></tr>`).join('')}</tbody></table></div><p class="footnote">Engine ${esc(overview.coverage.engineVersion??'unknown')} · ${overview.coverage.builtAt?`Hosted build ${esc(overview.coverage.builtAt)}`:`Store fingerprint ${esc(overview.coverage.storeFingerprint??'unknown')}`} · ${presets.length} report presets. Check the cutoff before interpreting results.</p></section>
-    <div class="edge-query-builder plot-card"><div class="panel-heading"><span>REPORT BUILDER</span><span>${local?'Local engine':'Hosted • fixed parameters'}</span></div><div class="edge-form"><label>Symbol<select id="edge-symbol">${options(symbols,edge.draft.symbol)}</select></label><label class="edge-preset">Preset<select id="edge-preset">${options(presets,edge.draft.preset,'id','title')}</select></label><button id="edge-run-report" class="primary">Run report</button><button id="edge-export" ${r?'':'disabled'}>Export JSON ↓</button></div><p class="footnote" id="edge-preset-description">${esc(selection?.summary??'Select a report to read its definition.')}</p>${local?localForm(edge):''}</div>
-    ${edge.fields?`<details class="plot-card edge-registry"><summary>Field / predicate / outcome registry</summary><pre>${esc(JSON.stringify(edge.fields.result,null,2))}</pre></details>`:''}
-    ${r?resultView(edge):'<div class="empty-state"><span class="empty-icon">∑</span><h2>Pick a question, then inspect the evidence.</h2><p>Every result retains the engine’s minimum-sample guards.<br>Historical frequencies describe this sample; they are not predictions.</p></div>'}`:
-    `<div class="empty-state"><span class="empty-icon">∑</span><h2>Session research, alongside your strategies.</h2><p>Load public reports for immediate access, or connect your local store<br>for arbitrary conditions, your own markets, and session-bar drill-down.</p></div>`}</div>`;
+    <div class="edge-connection searchbar"><label>Data source<select id="edge-mode"><option value="hosted" ${local ? "" : "selected"}>Public hosted reports</option><option value="local" ${local ? "selected" : ""}>My local Edge Stats server</option></select></label><label class="edge-endpoint">Local MCP URL<input id="edge-endpoint" value="${esc(edge.config.endpoint)}" ${local ? "" : "disabled"}></label><button id="edge-connect" class="primary">${local ? "Connect local server" : "Load public reports"}</button><button data-link="https://github.com/ar4ft/pine-desk/blob/main/docs/edge-stats.md">Setup guide ↗</button></div>
+    <p class="footnote">${local ? "Your own Edge Stats store. Start the official local MCP server, then connect. Pine Desk chart CSVs are separate from that store." : "Hosted reports use LuxAlgo’s nightly derived store. They do not run on the chart’s candles, and do not include raw bars or custom filters."}</p>
+    ${
+      overview
+        ? `<section class="plot-card edge-coverage"><div class="panel-heading"><span>DATA COVERAGE & FRESHNESS</span><span>Retrieved ${esc(new Date(overview.retrievedAt).toISOString())}</span></div><div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Base bars</th><th>Last bar (UTC)</th><th>Session coverage</th></tr></thead><tbody>${symbols.map((s) => `<tr><td>${esc(s.symbol)}</td><td>${esc(s.tf)}</td><td>${esc(s.lastBar ?? "No bars")}</td><td>${esc((s.sessions ?? []).map((w) => `${w.sessionKey}: ${w.sessions} sessions (${w.firstDay} – ${w.lastDay})`).join(" · ") || s.defaultSession || "See store metadata")}</td></tr>`).join("")}</tbody></table></div><p class="footnote">Engine ${esc(overview.coverage.engineVersion ?? "unknown")} · ${overview.coverage.builtAt ? `Hosted build ${esc(overview.coverage.builtAt)}` : `Store fingerprint ${esc(overview.coverage.storeFingerprint ?? "unknown")}`} · ${presets.length} report presets. Check the cutoff before interpreting results.</p></section>
+    <div class="edge-query-builder plot-card"><div class="panel-heading"><span>REPORT BUILDER</span><span>${local ? "Local engine" : "Hosted • fixed parameters"}</span></div><div class="edge-form"><label>Symbol<select id="edge-symbol">${options(symbols, edge.draft.symbol)}</select></label><label class="edge-preset">Preset<select id="edge-preset">${options(presets, edge.draft.preset, "id", "title")}</select></label><button id="edge-run-report" class="primary">Run report</button><button id="edge-export" ${r ? "" : "disabled"}>Export JSON ↓</button></div><p class="footnote" id="edge-preset-description">${esc(selection?.summary ?? "Select a report to read its definition.")}</p>${local ? localForm(edge) : ""}</div>
+    ${edge.fields ? `<details class="plot-card edge-registry"><summary>Field / predicate / outcome registry</summary><pre>${esc(JSON.stringify(edge.fields.result, null, 2))}</pre></details>` : ""}
+    ${r ? resultView(edge) : '<div class="empty-state"><span class="empty-icon">∑</span><h2>Pick a question, then inspect the evidence.</h2><p>Every result retains the engine’s minimum-sample guards.<br>Historical frequencies describe this sample; they are not predictions.</p></div>'}`
+        : `<div class="empty-state"><span class="empty-icon">∑</span><h2>Session research, alongside your strategies.</h2><p>Load public reports for immediate access, or connect your local store<br>for arbitrary conditions, your own markets, and session-bar drill-down.</p></div>`
+    }</div>`;
 }
-function localForm(edge){return `<div class="edge-local-form"><div class="edge-form"><label>Session key (optional)<input id="edge-sessionKey" value="${esc(edge.draft.sessionKey)}" placeholder="Symbol default"></label><label>From<input id="edge-since" type="date" value="${esc(edge.draft.since)}"></label><label>Until<input id="edge-until" type="date" value="${esc(edge.draft.until)}"></label><label>Group by<input id="edge-groupBy" value="${esc(edge.draft.groupBy)}" placeholder="e.g. dayOfWeek"></label></div><div class="edge-form"><label class="edge-preset">Preset parameters (JSON)<input id="edge-params" value="${esc(edge.draft.params)}" placeholder='{"minGapPct":0.3,"dir":"down"}'></label><button id="edge-fields">Discover fields</button><button id="edge-param-info">Show preset parameters</button></div><div class="edge-form"><label class="edge-preset">Custom query DSL<textarea id="edge-dsl" spellcheck="false">${esc(edge.draft.dsl)}</textarea></label><button id="edge-run-query" class="primary">Run custom query</button></div><pre id="edge-parameter-docs" class="hidden"></pre></div>`;}
-function evidence(label,row){if(!row)return `<div class="stat-card"><span>${label}</span><strong>—</strong></div>`;return `<div class="stat-card"><span>${label}</span><strong>${percentage(row.estimate)}</strong><small>N = ${number(row.n)} · 95% CI ${interval(row.ci95)}</small></div>`;}
-function resultView(edge){
-  const {result:r,config,retrievedAt}=edge.response;
-  return `<section class="edge-result"><div class="run-heading"><strong>${esc(r.preset?.title??r.query.outcome)} <span class="tag">${esc(r.query.symbol)} · ${esc(r.query.sessionKey)}</span></strong><span>${config.mode==='hosted'?'Hosted store':'Local store'} · ${esc(new Date(retrievedAt).toISOString())}</span></div><pre class="edge-dsl">${esc(r.query.dsl)}</pre>
-    ${r.guards.refused?'<div class="edge-warning" role="status">ESTIMATE WITHHELD — fewer eligible sessions than the engine’s minimum sample. Counts remain visible.</div>':r.guards.lowSample?'<div class="edge-warning" role="status">LOW SAMPLE — read the sample size and confidence interval before drawing conclusions.</div>':''}
+function localForm(edge) {
+  return `<div class="edge-local-form"><div class="edge-form"><label>Session key (optional)<input id="edge-sessionKey" value="${esc(edge.draft.sessionKey)}" placeholder="Symbol default"></label><label>From<input id="edge-since" type="date" value="${esc(edge.draft.since)}"></label><label>Until<input id="edge-until" type="date" value="${esc(edge.draft.until)}"></label><label>Group by<input id="edge-groupBy" value="${esc(edge.draft.groupBy)}" placeholder="e.g. dayOfWeek"></label></div><div class="edge-form"><label class="edge-preset">Preset parameters (JSON)<input id="edge-params" value="${esc(edge.draft.params)}" placeholder='{"minGapPct":0.3,"dir":"down"}'></label><button id="edge-fields">Discover fields</button><button id="edge-param-info">Show preset parameters</button></div><div class="edge-form"><label class="edge-preset">Custom query DSL<textarea id="edge-dsl" spellcheck="false">${esc(edge.draft.dsl)}</textarea></label><button id="edge-run-query" class="primary">Run custom query</button></div><pre id="edge-parameter-docs" class="hidden"></pre></div>`;
+}
+function evidence(label, row) {
+  if (!row)
+    return `<div class="stat-card"><span>${label}</span><strong>—</strong></div>`;
+  return `<div class="stat-card"><span>${label}</span><strong>${percentage(row.estimate)}</strong><small>N = ${number(row.n)} · 95% CI ${interval(row.ci95)}</small></div>`;
+}
+function resultView(edge) {
+  const { result: r, config, retrievedAt } = edge.response;
+  return `<section class="edge-result"><div class="run-heading"><strong>${esc(r.preset?.title ?? r.query.outcome)} <span class="tag">${esc(r.query.symbol)} · ${esc(r.query.sessionKey)}</span></strong><span>${config.mode === "hosted" ? "Hosted store" : "Local store"} · ${esc(new Date(retrievedAt).toISOString())}</span></div><pre class="edge-dsl">${esc(r.query.dsl)}</pre>
+    ${r.guards.refused ? '<div class="edge-warning" role="status">ESTIMATE WITHHELD — fewer eligible sessions than the engine’s minimum sample. Counts remain visible.</div>' : r.guards.lowSample ? '<div class="edge-warning" role="status">LOW SAMPLE — read the sample size and confidence interval before drawing conclusions.</div>' : ""}
     <div class="metrics edge-metrics"><div><span>Historical frequency</span><strong>${percentage(r.estimate)}</strong></div><div><span>Eligible sessions (N)</span><strong>${number(r.n)}</strong></div><div><span>Successes</span><strong>${number(r.successes)}</strong></div><div><span>Wilson 95% CI</span><strong>${interval(r.ci95)}</strong></div></div>
-    <p class="edge-disclaimer">${esc(r.disclaimer)}</p><div class="split-cards">${evidence('First half',r.stability?.firstHalf)}${evidence('Second half',r.stability?.secondHalf)}${evidence(`Recent ${r.recency?.window??250} eligible sessions`,r.recency)}</div><p class="footnote">Stability: ${r.stability?.agree===true?'half-sample confidence intervals overlap':r.stability?.agree===false?'half-sample confidence intervals do not overlap':'not available'}. Recency: ${r.recency?.diverges===true?'recent and full-history confidence intervals diverge':r.recency?.diverges===false?'recent and full-history confidence intervals overlap':'not available'}.</p>
-    <div class="edge-result-grid"><section class="plot-card"><div class="panel-heading"><span>YEARLY COUNTS</span><span>Full result retains the engine values</span></div><table><thead><tr><th>Year</th><th>N</th><th>Successes</th></tr></thead><tbody>${(r.perYear??[]).map(y=>`<tr><td>${esc(y.year)}</td><td>${number(y.n)}</td><td>${number(y.successes)}</td></tr>`).join('')}</tbody></table></section><section class="plot-card"><div class="panel-heading"><span>OUTCOME DISTRIBUTION</span><span>${esc(r.distribution?.unit??'Not a continuous outcome')}</span></div>${r.distribution?`<div class="edge-distribution">${['count','mean','min','p25','median','p75','p90','max'].map(k=>`<div><span>${k}</span><strong>${number(r.distribution[k],4)}</strong></div>`).join('')}</div>`:'<p class="footnote">No continuous value distribution for this result.</p>'}</section></div>
-    ${r.groups?.length?`<section class="plot-card edge-group-table"><div class="panel-heading"><span>GROUP COMPARISON</span><span>Every estimate has N and its interval</span></div><table><thead><tr><th>Group</th><th>N</th><th>Successes</th><th>Frequency</th><th>95% CI</th><th>Guard</th></tr></thead><tbody>${r.groups.map(g=>`<tr><td>${esc(g.group)}</td><td>${number(g.n)}</td><td>${number(g.successes)}</td><td>${percentage(g.estimate)}</td><td>${interval(g.ci95)}</td><td>${g.lowSample?'Low sample':'—'}</td></tr>`).join('')}</tbody></table></section>`:''}
-    <section class="plot-card edge-sessions"><div class="panel-heading"><span>SESSIONS BEHIND THIS RESULT</span><span>${(r.sessions??[]).length} returned receipts</span></div>${r.sessions?.length?`<div class="table-wrap"><table><thead><tr><th>Trade date</th><th>Outcome</th><th>Value</th><th>Inspect</th></tr></thead><tbody>${r.sessions.map(s=>`<tr><td>${esc(s.tradeDate)}</td><td>${s.success?'Success':'No success'}</td><td>${number(s.value,4)}</td><td><button data-edge-session="${esc(s.sessionId)}">View session bars →</button></td></tr>`).join('')}</tbody></table></div>`:`<p class="footnote">${config.mode==='hosted'?'The hosted store does not publish raw bars or session drill-down. Connect your local Edge Stats store to inspect underlying sessions.':'No session receipts returned for this query.'}</p>`}</section>
-    ${edge.session?sessionView(edge.session.result):''}<details class="plot-card edge-registry"><summary>Complete upstream result & provenance</summary><pre>${esc(JSON.stringify(edge.response,null,2))}</pre></details></section>`;
+    <p class="edge-disclaimer">${esc(r.disclaimer)}</p><div class="split-cards">${evidence("First half", r.stability?.firstHalf)}${evidence("Second half", r.stability?.secondHalf)}${evidence(`Recent ${r.recency?.window ?? 250} eligible sessions`, r.recency)}</div><p class="footnote">Stability: ${r.stability?.agree === true ? "half-sample confidence intervals overlap" : r.stability?.agree === false ? "half-sample confidence intervals do not overlap" : "not available"}. Recency: ${r.recency?.diverges === true ? "recent and full-history confidence intervals diverge" : r.recency?.diverges === false ? "recent and full-history confidence intervals overlap" : "not available"}.</p>
+    <div class="edge-result-grid"><section class="plot-card"><div class="panel-heading"><span>YEARLY COUNTS</span><span>Full result retains the engine values</span></div><table><thead><tr><th>Year</th><th>N</th><th>Successes</th></tr></thead><tbody>${(r.perYear ?? []).map((y) => `<tr><td>${esc(y.year)}</td><td>${number(y.n)}</td><td>${number(y.successes)}</td></tr>`).join("")}</tbody></table></section><section class="plot-card"><div class="panel-heading"><span>OUTCOME DISTRIBUTION</span><span>${esc(r.distribution?.unit ?? "Not a continuous outcome")}</span></div>${r.distribution ? `<div class="edge-distribution">${["count", "mean", "min", "p25", "median", "p75", "p90", "max"].map((k) => `<div><span>${k}</span><strong>${number(r.distribution[k], 4)}</strong></div>`).join("")}</div>` : '<p class="footnote">No continuous value distribution for this result.</p>'}</section></div>
+    ${r.groups?.length ? `<section class="plot-card edge-group-table"><div class="panel-heading"><span>GROUP COMPARISON</span><span>Every estimate has N and its interval</span></div><table><thead><tr><th>Group</th><th>N</th><th>Successes</th><th>Frequency</th><th>95% CI</th><th>Guard</th></tr></thead><tbody>${r.groups.map((g) => `<tr><td>${esc(g.group)}</td><td>${number(g.n)}</td><td>${number(g.successes)}</td><td>${percentage(g.estimate)}</td><td>${interval(g.ci95)}</td><td>${g.lowSample ? "Low sample" : "—"}</td></tr>`).join("")}</tbody></table></section>` : ""}
+    <section class="plot-card edge-sessions"><div class="panel-heading"><span>SESSIONS BEHIND THIS RESULT</span><span>${(r.sessions ?? []).length} returned receipts</span></div>${r.sessions?.length ? `<div class="table-wrap"><table><thead><tr><th>Trade date</th><th>Outcome</th><th>Value</th><th>Inspect</th></tr></thead><tbody>${r.sessions.map((s) => `<tr><td>${esc(s.tradeDate)}</td><td>${s.success ? "Success" : "No success"}</td><td>${number(s.value, 4)}</td><td><button data-edge-session="${esc(s.sessionId)}">View session bars →</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="footnote">${config.mode === "hosted" ? "The hosted store does not publish raw bars or session drill-down. Connect your local Edge Stats store to inspect underlying sessions." : "No session receipts returned for this query."}</p>`}</section>
+    ${edge.session ? sessionView(edge.session.result) : ""}<details class="plot-card edge-registry"><summary>Complete upstream result & provenance</summary><pre>${esc(JSON.stringify(edge.response, null, 2))}</pre></details></section>`;
 }
-function sessionView(s){return `<section class="plot-card edge-session-view"><div class="panel-heading"><span>SESSION VERIFICATION · ${esc(s.symbol)} · ${esc(s.tradeDate)}</span><span>${esc(s.tz)} · ${s.complete?'Complete':'Incomplete'} · ${s.isRollDay?'Roll day':'No roll flag'}</span></div><div id="edge-session-chart"></div><div class="edge-session-levels">${['prevClose','prevHigh','prevLow','open','gapPct'].map(k=>`<div><span>${esc(k)}</span><strong>${number(s.levels?.[k],4)}</strong></div>`).join('')}</div><details><summary>Derived levels and event times</summary><pre>${esc(JSON.stringify({levels:s.levels,times:s.times},null,2))}</pre></details><p class="footnote">${esc(s.disclaimer)} · ${s.bars?.length??0} session bars. Pre-session context remains separate in the upstream response.</p></section>`;}
+function sessionView(s) {
+  return `<section class="plot-card edge-session-view"><div class="panel-heading"><span>SESSION VERIFICATION · ${esc(s.symbol)} · ${esc(s.tradeDate)}</span><span>${esc(s.tz)} · ${s.complete ? "Complete" : "Incomplete"} · ${s.isRollDay ? "Roll day" : "No roll flag"}</span></div><div id="edge-session-chart"></div><div class="edge-session-levels">${["prevClose", "prevHigh", "prevLow", "open", "gapPct"].map((k) => `<div><span>${esc(k)}</span><strong>${number(s.levels?.[k], 4)}</strong></div>`).join("")}</div><details><summary>Derived levels and event times</summary><pre>${esc(JSON.stringify({ levels: s.levels, times: s.times }, null, 2))}</pre></details><p class="footnote">${esc(s.disclaimer)} · ${s.bars?.length ?? 0} session bars. Pre-session context remains separate in the upstream response.</p></section>`;
+}
 
-export function bindEdge({edge,call,task,render,exportFile}){
-  if(!$('#edge-panel'))return;
-  const on=(id,fn)=>{const el=$(`#${id}`);if(el)el.onclick=()=>task(fn);};
-  $('#edge-mode').onchange=event=>{$('#edge-endpoint').disabled=event.target.value!=='local';$('#edge-connect').textContent=event.target.value==='local'?'Connect local server':'Load public reports';};
-  on('edge-connect',async()=>{
+export function bindEdge({ edge, call, task, render, exportFile }) {
+  if (!$("#edge-panel")) return;
+  const on = (id, fn) => {
+    const el = $(`#${id}`);
+    if (el) el.onclick = () => task(fn);
+  };
+  $("#edge-mode").onchange = (event) => {
+    $("#edge-endpoint").disabled = event.target.value !== "local";
+    $("#edge-connect").textContent =
+      event.target.value === "local"
+        ? "Connect local server"
+        : "Load public reports";
+  };
+  on("edge-connect", async () => {
     retainEdgeDraft(edge);
-    edge.config=await call('edgeConfigure',{mode:$('#edge-mode').value,endpoint:$('#edge-endpoint').value});
-    edge.overview=null;edge.response=null;edge.session=null;edge.fields=null;render();
-    try{edge.overview=await call('edgeOverview');edge.draft.symbol=edge.overview.coverage.symbols?.[0]?.symbol??'';if(!edge.overview.catalog.presets.some(p=>p.id===edge.draft.preset))edge.draft.preset=edge.overview.catalog.presets?.[0]?.id??'';}finally{render();}
-  });
-  if($('#edge-preset'))$('#edge-preset').onchange=()=>{retainEdgeDraft(edge);$('#edge-preset-description').textContent=edge.overview.catalog.presets.find(p=>p.id===edge.draft.preset)?.summary??'';};
-  const localArgs=()=>Object.fromEntries(['sessionKey','since','until','groupBy'].filter(k=>edge.draft[k]).map(k=>[k,edge.draft[k]]));
-  on('edge-run-report',async()=>{
-    retainEdgeDraft(edge);let args={preset:edge.draft.preset,symbol:edge.draft.symbol};
-    if(edge.config.mode==='local'){
-      let params;try{params=JSON.parse(edge.draft.params);}catch{throw new Error('Preset parameters must be a JSON object.');}
-      if(!params||Array.isArray(params)||typeof params!=='object'||Object.values(params).some(v=>typeof v!=='string'&&(typeof v!=='number'||!Number.isFinite(v))))throw new Error('Preset parameters must map names to strings or numbers.');
-      args={...args,...localArgs(),params};
+    edge.config = await call("edgeConfigure", {
+      mode: $("#edge-mode").value,
+      endpoint: $("#edge-endpoint").value,
+    });
+    edge.overview = null;
+    edge.response = null;
+    edge.session = null;
+    edge.fields = null;
+    render();
+    try {
+      edge.overview = await call("edgeOverview");
+      edge.draft.symbol = edge.overview.coverage.symbols?.[0]?.symbol ?? "";
+      if (
+        !edge.overview.catalog.presets.some((p) => p.id === edge.draft.preset)
+      )
+        edge.draft.preset = edge.overview.catalog.presets?.[0]?.id ?? "";
+    } finally {
+      render();
     }
-    const response=await call('edgeReport',args);edge.response=response;edge.session=null;render();
   });
-  on('edge-run-query',async()=>{retainEdgeDraft(edge);const response=await call('edgeQuery',{dsl:edge.draft.dsl,symbol:edge.draft.symbol,...localArgs(),sessionsLimit:50});edge.response=response;edge.session=null;render();});
-  on('edge-fields',async()=>{retainEdgeDraft(edge);edge.fields=await call('edgeFields');render();});
-  on('edge-param-info',()=>{retainEdgeDraft(edge);const el=$('#edge-parameter-docs');el.classList.remove('hidden');el.textContent=JSON.stringify(edge.overview.catalog.presets.find(p=>p.id===edge.draft.preset)?.params??[],null,2);});
-  on('edge-export',()=>exportFile('pine-desk-edge-stats.json',JSON.stringify({overview:edge.overview,response:edge.response,session:edge.session},null,2)));
-  document.querySelectorAll('[data-edge-session]').forEach(el=>el.onclick=()=>task(async()=>{retainEdgeDraft(edge);edge.session=await call('edgeSessionBars',{sessionId:el.dataset.edgeSession,contextBars:30});render();}));
+  if ($("#edge-preset"))
+    $("#edge-preset").onchange = () => {
+      retainEdgeDraft(edge);
+      $("#edge-preset-description").textContent =
+        edge.overview.catalog.presets.find((p) => p.id === edge.draft.preset)
+          ?.summary ?? "";
+    };
+  const localArgs = () =>
+    Object.fromEntries(
+      ["sessionKey", "since", "until", "groupBy"]
+        .filter((k) => edge.draft[k])
+        .map((k) => [k, edge.draft[k]]),
+    );
+  on("edge-run-report", async () => {
+    retainEdgeDraft(edge);
+    let args = { preset: edge.draft.preset, symbol: edge.draft.symbol };
+    if (edge.config.mode === "local") {
+      let params;
+      try {
+        params = JSON.parse(edge.draft.params);
+      } catch {
+        throw new Error("Preset parameters must be a JSON object.");
+      }
+      if (
+        !params ||
+        Array.isArray(params) ||
+        typeof params !== "object" ||
+        Object.values(params).some(
+          (v) =>
+            typeof v !== "string" &&
+            (typeof v !== "number" || !Number.isFinite(v)),
+        )
+      )
+        throw new Error(
+          "Preset parameters must map names to strings or numbers.",
+        );
+      args = { ...args, ...localArgs(), params };
+    }
+    const response = await call("edgeReport", args);
+    edge.response = response;
+    edge.session = null;
+    render();
+  });
+  on("edge-run-query", async () => {
+    retainEdgeDraft(edge);
+    const response = await call("edgeQuery", {
+      dsl: edge.draft.dsl,
+      symbol: edge.draft.symbol,
+      ...localArgs(),
+      sessionsLimit: 50,
+    });
+    edge.response = response;
+    edge.session = null;
+    render();
+  });
+  on("edge-fields", async () => {
+    retainEdgeDraft(edge);
+    edge.fields = await call("edgeFields");
+    render();
+  });
+  on("edge-param-info", () => {
+    retainEdgeDraft(edge);
+    const el = $("#edge-parameter-docs");
+    el.classList.remove("hidden");
+    el.textContent = JSON.stringify(
+      edge.overview.catalog.presets.find((p) => p.id === edge.draft.preset)
+        ?.params ?? [],
+      null,
+      2,
+    );
+  });
+  on("edge-export", () =>
+    exportFile(
+      "pine-desk-edge-stats.json",
+      JSON.stringify(
+        {
+          overview: edge.overview,
+          response: edge.response,
+          session: edge.session,
+        },
+        null,
+        2,
+      ),
+    ),
+  );
+  document.querySelectorAll("[data-edge-session]").forEach(
+    (el) =>
+      (el.onclick = () =>
+        task(async () => {
+          retainEdgeDraft(edge);
+          edge.session = await call("edgeSessionBars", {
+            sessionId: el.dataset.edgeSession,
+            contextBars: 30,
+          });
+          render();
+        })),
+  );
 }
