@@ -1,0 +1,104 @@
+[
+  {
+    "name": "instrument",
+    "fails": [],
+    "warns": [
+      "Text inside the system's safe areas: \"Pine Desk\" (status bar); \"Chart workspace\" (status bar); \"Local research\" (status bar)",
+      "Three saturated hue families (24°, 0°, 168°). Is each one earning its place?"
+    ],
+    "facts": {
+      "fonts": {
+        "-apple-system": 24,
+        "ui-monospace": 1
+      },
+      "sizes": [
+        32,
+        30,
+        23,
+        14,
+        13,
+        12
+      ],
+      "weights": [
+        "400",
+        "600",
+        "700"
+      ],
+      "leftEdges": 1,
+      "accentHues": [
+        24,
+        0,
+        168
+      ],
+      "cards": 0
+    }
+  },
+  {
+    "name": "atlas",
+    "fails": [],
+    "warns": [
+      "Text inside the system's safe areas: \"Pine Desk\" (status bar); \"Chart workspace\" (status bar); \"Local research\" (status bar)"
+    ],
+    "facts": {
+      "fonts": {
+        "Georgia": 2,
+        "-apple-system": 22,
+        "ui-monospace": 1
+      },
+      "sizes": [
+        32,
+        30,
+        23,
+        14,
+        13,
+        12
+      ],
+      "weights": [
+        "400",
+        "600",
+        "700"
+      ],
+      "leftEdges": 1,
+      "accentHues": [
+        0,
+        168
+      ],
+      "cards": 0
+    }
+  },
+  {
+    "name": "observatory",
+    "fails": [],
+    "warns": [
+      "Text inside the system's safe areas: \"Pine Desk\" (status bar); \"Chart workspace\" (status bar); \"Local research\" (status bar)",
+      "Three saturated hue families (216°, 0°, 168°). Is each one earning its place?"
+    ],
+    "facts": {
+      "fonts": {
+        "ui-rounded": 24,
+        "ui-monospace": 1
+      },
+      "sizes": [
+        36,
+        32,
+        23,
+        14,
+        13,
+        12
+      ],
+      "weights": [
+        "400",
+        "600",
+        "700",
+        "800"
+      ],
+      "leftEdges": 1,
+      "accentHues": [
+        216,
+        0,
+        168
+      ],
+      "cards": 0
+    }
+  }
+]

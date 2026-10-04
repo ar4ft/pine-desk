@@ -1,3 +1,4 @@
+import { uiIcon, navGroups } from "./ui-icons.js";
 import { version } from "../package.json";
 import {
   workflowView,
@@ -64,6 +65,7 @@ import {
   bindEdge,
 } from "./edge-view.js";
 import "./edge-style.css";
+import "./design-system.css";
 import {
   newWhaleState,
   retainWhaleDraft,
@@ -100,19 +102,6 @@ const date = (t) =>
     minute: "2-digit",
     timeZone: "UTC",
   });
-const icons = {
-  workspace: "◈",
-  library: "▦",
-  backtest: "⤴",
-  orderflow: "≋",
-  mcp: "⌘",
-  edge: "∑",
-  whale: "◉",
-  options: "⌁",
-  crypto: "₿",
-  education: "∂",
-  settings: "⚙",
-};
 const titles = {
   workspace: "Chart workspace",
   library: "Indicator library",
@@ -239,15 +228,29 @@ function scheduleSession() {
   sessionTimer = setTimeout(persistSession, 300);
 }
 function chartAppearance() {
-  return { ...state.appearance, theme: resolvedTheme(state.appearance) };
+  const theme = resolvedTheme(state.appearance);
+  return {
+    ...state.appearance,
+    theme,
+    upColor:
+      theme === "light" &&
+      state.appearance.upColor === defaultAppearance.upColor
+        ? "#198467"
+        : state.appearance.upColor,
+    downColor:
+      theme === "light" &&
+      state.appearance.downColor === defaultAppearance.downColor
+        ? "#bd4259"
+        : state.appearance.downColor,
+  };
 }
 function updateAppearance() {
   applyAppearance(state.appearance);
   if (chart) {
     chart.setTheme(resolvedTheme(state.appearance));
     chart.renderer.set({
-      upColor: state.appearance.upColor,
-      downColor: state.appearance.downColor,
+      upColor: chartAppearance().upColor,
+      downColor: chartAppearance().downColor,
     });
   }
 }
@@ -347,6 +350,34 @@ function baseInputs() {
   return inputs;
 }
 
+function setChartFocus(active) {
+  state.focusChart = active;
+  document.body.dataset.focus = active ? "chart" : "";
+  const button = document.querySelector("#focus-chart");
+  if (button) {
+    button.setAttribute("aria-pressed", String(active));
+    button.querySelector("span").textContent = active
+      ? "Exit focus"
+      : "Focus chart";
+    button.querySelector("kbd").textContent = active
+      ? "Esc"
+      : navigator.platform.includes("Mac")
+        ? "⌘⇧F"
+        : "Ctrl⇧F";
+  }
+}
+window.addEventListener("keydown", (event) => {
+  if (state.page !== "workspace") return;
+  if (
+    (event.metaKey || event.ctrlKey) &&
+    event.shiftKey &&
+    event.key.toLowerCase() === "f"
+  ) {
+    event.preventDefault();
+    setChartFocus(!state.focusChart);
+  } else if (event.key === "Escape" && state.focusChart) setChartFocus(false);
+});
+
 function destroyChart() {
   chartOwner = null;
   optionsOverlay = null;
@@ -358,6 +389,7 @@ function destroyChart() {
   chartFeed = null;
 }
 function render() {
+  const destinationChanged = document.body.dataset.section !== state.page;
   captureWorkspaceChart();
   retainOptionsDraft(state.options);
   retainResearchDraft(state.research);
@@ -367,12 +399,15 @@ function render() {
   pineEditor?.destroy();
   pineEditor = null;
   destroyChart();
-  $("#nav").innerHTML = Object.entries(titles)
+  $("#nav").innerHTML = navGroups
     .map(
-      ([key, title]) =>
-        `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}"><span>${icons[key]}</span>${title.replace("Chart workspace", "Workspace").replace("Indicator library", "Library").replace("Strategy research", "Backtests").replace("Connect your agent", "MCP & setup")}${key === "library" ? "<small>LIVE</small>" : ""}</button>`,
+      ([label, keys]) =>
+        `<div class="nav-group"><div class="nav-group-label">${label}</div>${keys.map((key) => `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}" ${state.page === key ? 'aria-current="page"' : ""}><span>${uiIcon(key)}</span>${titles[key].replace("Chart workspace", "Workspace").replace("Indicator library", "Library").replace("Strategy research", "Backtests").replace("Connect your agent", "MCP & setup")}</button>`).join("")}</div>`,
     )
     .join("");
+  document.body.dataset.section = state.page;
+  document.body.dataset.focus =
+    state.page === "workspace" && state.focusChart ? "chart" : "";
   $("#title").textContent = titles[state.page];
   state.research.currentSource = state.source;
   state.research.currentSettings = state.settings;
@@ -430,12 +465,13 @@ function render() {
     paintOptions(state.options);
     mountOptionsChart().catch((e) => toast(e.message, true));
   }
+  if (destinationChanged) window.scrollTo({ top: 0, behavior: "instant" });
 }
 function workspace() {
   const b = state.dataset.bars,
     last = b.at(-1),
     change = (last.close / b[0].close - 1) * 100;
-  return `${qualityView(state.dataset)}${layoutView(state.layouts)}${watchlistView(state.watchlist, state.quotes)}<div class="marketbar"><div class="market-title"><span class="coin">₿</span><div><strong>${esc(state.dataset.symbol)}</strong><small>${esc(state.dataset.origin)}</small></div></div><strong class="price" id="market-price">${num(last.close)}</strong><span id="market-change" class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${num(change)}%</span><div class="spacer"></div><input id="symbol" aria-label="Market symbol" value="${esc(state.dataset.symbol === "DEMO" ? "BTCUSDT" : state.dataset.symbol)}" maxlength="24"><select id="timeframe" aria-label="Timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.dataset.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select><label>History bars<input id="history-limit" type="number" min="2" max="50000" value="1000" style="width:85px"></label><button id="load-market">Load market</button><button id="live-start" class="primary">Start live</button><button id="live-stop" ${state.live.active ? "" : "disabled"}>Stop live</button><button id="import-bars">Import CSV</button><button id="toggle-editor" class="icon-btn" title="Toggle editor">〈/〉</button></div><p id="live-status"></p><div class="workspace-grid ${state.editor ? "" : "no-editor"}"><section class="chart-panel"><div class="panel-heading"><span>PRICE ACTION <i class="dot"></i> ${esc(state.dataset.timeframe)}</span><span>Vela™ / PineTS</span></div><div id="chart"></div><div class="chart-footer"><span>${b.length} settled bars · ${date(b[0].time)} — ${date(last.time)} UTC</span><span>Live forming bar stays outside research snapshots</span></div></section>${state.editor ? `<section class="editor"><div class="panel-heading"><span>PINE EDITOR</span><span class="tag">v5 / v6</span></div><div class="editor-tools"><select id="script-select" aria-label="Saved script"><option value="">Choose a script…</option>${state.scripts.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select><button id="save-script">Save</button><button id="import-script">Import .pine / .txt</button></div><input id="script-name" value="${esc(state.name)}" aria-label="Script name"><div id="pine-editor"></div><textarea hidden id="source" spellcheck="false" aria-label="Pine Script source">${esc(state.source)}</textarea><div id="editor-errors" class="editor-errors">${errorView()}</div><div class="editor-bottom"><span>Pine v5/v6 · Tab indents · Ctrl-Space completes</span><div><button id="run-chart">Run chart</button><button id="run-backtest" class="primary">↗ Backtest</button></div></div></section>` : ""}</div><div class="summary-strip"><div><span class="eyebrow">STRATEGY SNAPSHOT</span><strong>${state.run ? esc(state.run.result.title) : "An idea is only the beginning."}</strong></div>${state.run ? metrics(state.run.result.metrics, true) : "<p>Run a strategy to inspect its trades, costs, and equity curve.</p>"}<button id="view-backtest">Open backtest →</button></div>`;
+  return `<div class="market-overview"><div class="market-title"><span class="market-symbol">${uiIcon("workspace")}</span><div><strong>${esc(state.dataset.symbol)}</strong><small>${esc(state.dataset.origin)}</small></div></div><strong class="price" id="market-price">${num(last.close)}</strong><span id="market-change" class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${num(change)}%</span></div><div class="marketbar"><label class="sr-only" for="symbol">Market symbol</label><input id="symbol" aria-label="Market symbol" value="${esc(state.dataset.symbol === "DEMO" ? "BTCUSDT" : state.dataset.symbol)}" maxlength="24"><select id="timeframe" aria-label="Timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.dataset.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select><label>History bars<input id="history-limit" type="number" min="2" max="50000" value="1000" style="width:85px"></label><button id="load-market">Load market</button><button id="live-start" class="primary">Start live</button><button id="live-stop" ${state.live.active ? "" : "disabled"}>Stop live</button><button id="import-bars">Import CSV</button><div class="spacer"></div><button id="toggle-editor" class="icon-btn" title="Toggle editor" aria-label="Toggle editor">${uiIcon("mcp")}</button><button id="focus-chart" aria-pressed="${!!state.focusChart}" title="Focus chart (⌘⇧F)">${uiIcon("focus")}<span>${state.focusChart ? "Exit focus" : "Focus chart"}</span><kbd>${state.focusChart ? "Esc" : navigator.platform.includes("Mac") ? "⌘⇧F" : "Ctrl⇧F"}</kbd></button></div><p id="live-status"></p><div class="workspace-grid ${state.editor ? "" : "no-editor"}"><section class="chart-panel"><div class="panel-heading"><span>Price action <i class="dot"></i> ${esc(state.dataset.timeframe)}</span><span>Vela™ / PineTS</span></div><div id="chart"></div><div class="chart-footer"><span>${b.length} settled bars · ${date(b[0].time)} — ${date(last.time)} UTC</span><span>Live forming bar stays outside research snapshots</span></div></section>${state.editor ? `<section class="editor"><div class="panel-heading"><span>Pine editor</span><span class="tag">v5 / v6</span></div><div class="editor-tools"><select id="script-select" aria-label="Saved script"><option value="">Choose a script…</option>${state.scripts.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select><button id="save-script">Save</button><button id="import-script">Import .pine / .txt</button></div><input id="script-name" value="${esc(state.name)}" aria-label="Script name"><div id="pine-editor"></div><textarea hidden id="source" spellcheck="false" aria-label="Pine Script source">${esc(state.source)}</textarea><div id="editor-errors" class="editor-errors">${errorView()}</div><div class="editor-bottom"><span>Pine v5/v6 · Tab indents · Ctrl-Space completes</span><div><button id="run-chart">Run chart</button><button id="run-backtest" class="primary">Backtest</button></div></div></section>` : ""}</div><div class="summary-strip"><div><span class="eyebrow">Strategy snapshot</span><strong>${state.run ? esc(state.run.result.title) : "No saved strategy run"}</strong></div>${state.run ? metrics(state.run.result.metrics, true) : "<p>Run a strategy to inspect its trades, costs, and equity curve.</p>"}<button id="view-backtest">Open backtest →</button></div><section class="workspace-utilities" aria-label="Workspace tools"><h2>Workspace tools</h2>${qualityView(state.dataset)}${layoutView(state.layouts)}${watchlistView(state.watchlist, state.quotes)}</section>`;
 }
 function metrics(m, compact = false) {
   return `<div class="metrics ${compact ? "compact" : ""}">${[
@@ -458,7 +494,7 @@ function metrics(m, compact = false) {
 function library() {
   const lib = state.library,
     items = lib?.indicators ?? lib?.results ?? [];
-  return `<div class="page-intro"><span class="eyebrow">THE LUXALGO LIBRARY</span><h1>Find your next edge.</h1><p>Browse the full public catalog. Bring available Pine source into your own workspace.</p></div><div class="searchbar"><input id="library-query" placeholder="Search indicators, concepts, or a trading idea…" aria-label="Search library"><button id="search-library" class="primary">Search library</button><button id="browse-library">Browse all</button></div><div class="section-label"><span>${lib ? `${num(lib.total ?? items.length, 0)} indicators · page ${state.libraryPage + 1}` : "CONNECTED THROUGH OFFICIAL LUXALGO MCP"}</span><span>Sources fetched on demand</span></div>${items.length ? `<div class="library-grid">${items.map((item) => `<article class="library-card"><div><span class="family">${esc(item.family ?? "Indicator")}</span><span class="muted">↗</span></div><h3>${esc(item.name ?? item.title)}</h3><p>${esc(item.description ?? item.excerpt ?? "Open the source to inspect this indicator.")}</p><div><button data-import-source="${esc(item.slug)}">Import source →</button><button data-link="${esc(item.url ?? `https://www.luxalgo.com/library/indicator/${item.slug}/`)}" class="text-btn">Docs</button></div></article>`).join("")}</div><div class="pagination"><button id="previous-page" ${state.libraryPage === 0 ? "disabled" : ""}>← Previous</button><span>Page ${state.libraryPage + 1}</span><button id="next-page" ${(state.libraryPage + 1) * 24 >= (lib.total ?? 0) ? "disabled" : ""}>Next →</button></div>` : `<div class="empty-state"><span class="empty-icon">▦</span><h2>Your research starts here.</h2><p>Search a topic or browse every indicator in the catalog.<br>Source availability and licenses vary by script.</p><button id="browse-empty" class="primary">Browse the catalog</button></div>`}`;
+  return `<div class="page-intro"><span class="eyebrow">THE LUXALGO LIBRARY</span><h1>Find your next edge.</h1><p>Browse the full public catalog. Bring available Pine source into your own workspace.</p></div><div class="searchbar"><input id="library-query" placeholder="Search indicators, concepts, or a trading idea…" aria-label="Search library"><button id="search-library" class="primary">Search library</button><button id="browse-library">Browse all</button></div><div class="section-label"><span>${lib ? `${num(lib.total ?? items.length, 0)} indicators · page ${state.libraryPage + 1}` : "CONNECTED THROUGH OFFICIAL LUXALGO MCP"}</span><span>Sources fetched on demand</span></div>${items.length ? `<div class="library-grid">${items.map((item) => `<article class="library-card"><div><span class="family">${esc(item.family ?? "Indicator")}</span><span class="muted">${uiIcon("external")}</span></div><h3>${esc(item.name ?? item.title)}</h3><p>${esc(item.description ?? item.excerpt ?? "Open the source to inspect this indicator.")}</p><div><button data-import-source="${esc(item.slug)}">Import source →</button><button data-link="${esc(item.url ?? `https://www.luxalgo.com/library/indicator/${item.slug}/`)}" class="text-btn">Docs</button></div></article>`).join("")}</div><div class="pagination"><button id="previous-page" ${state.libraryPage === 0 ? "disabled" : ""}>← Previous</button><span>Page ${state.libraryPage + 1}</span><button id="next-page" ${(state.libraryPage + 1) * 24 >= (lib.total ?? 0) ? "disabled" : ""}>Next →</button></div>` : `<div class="empty-state"><span class="empty-icon">${uiIcon("library")}</span><h2>Your research starts here.</h2><p>Search a topic or browse every indicator in the catalog.<br>Source availability and licenses vary by script.</p><button id="browse-empty" class="primary">Browse the catalog</button></div>`}`;
 }
 function backtests() {
   const r = state.run;
@@ -477,7 +513,7 @@ function backtests() {
           .join(
             "",
           )}</div><div class="backtest-content">${backtestTab(r)}</div><p class="footnote">${esc(r.dataset.origin)} · ${r.result.openTrades.length} open position(s) · open P&L ${money(r.result.metrics.openProfit)} · source, candle history, and settings saved with this run. Results depend on the feed and PineTS fill model.</p>${r.result.warnings?.length ? `<details class="warnings"><summary>${r.result.warnings.length} engine warnings</summary><pre>${esc(JSON.stringify(r.result.warnings, null, 2))}</pre></details>` : ""}`
-      : `<div class="empty-state"><span class="empty-icon">↗</span><h2>Give your strategy a history.</h2><p>The current Pine script runs against ${state.dataset.bars.length} ${esc(state.dataset.symbol)} candles.<br>Edit a strategy in the workspace, set costs, then run it here.</p></div>`
+      : `<div class="empty-state"><span class="empty-icon">${uiIcon("backtest")}</span><h2>Give your strategy a history.</h2><p>The current Pine script runs against ${state.dataset.bars.length} ${esc(state.dataset.symbol)} candles.<br>Edit a strategy in the workspace, set costs, then run it here.</p></div>`
   }${researchView(state.research, state.runs)}`;
 }
 function backtestTab(r) {
@@ -528,7 +564,7 @@ function flow() {
           .join(
             "",
           )}</div></section></div><p class="footnote">${date(f.from)} — ${date(f.to)} UTC · ${esc(f.symbol)} · ${esc(f.status ?? "saved trades")} · profile and CVD cover the retained range only. Missing trade intervals are omitted.${f.gaps?.length ? `<br>INCOMPLETE TRADE COVERAGE: ${esc(JSON.stringify(f.gaps))}` : ""}</p>`
-      : `<div class="empty-state"><span class="empty-icon">≋</span><h2>Real trades. Real delta.</h2><p>Import CSV with <code>time,price,size,side</code>.<br>Side is the aggressor: <code>buy</code> or <code>sell</code>. Time accepts ISO, seconds, or milliseconds.<br>Candles cannot supply this data. Label the market before importing.</p><button id="sample-trades">Download CSV template</button></div>`
+      : `<div class="empty-state"><span class="empty-icon">${uiIcon("orderflow")}</span><h2>Real trades. Real delta.</h2><p>Import CSV with <code>time,price,size,side</code>.<br>Side is the aggressor: <code>buy</code> or <code>sell</code>. Time accepts ISO, seconds, or milliseconds.<br>Candles cannot supply this data. Label the market before importing.</p><button id="sample-trades">Download CSV template</button></div>`
   }`;
 }
 function mcp() {
@@ -568,7 +604,7 @@ function mcp() {
     )
     .join(
       "",
-    )}</section></div><div class="notice"><span>◉</span><div><strong>Your data stays in your workspace.</strong><p>Local MCP tools share the app's storage directory. Catalog and hosted Edge Stats calls go to LuxAlgo; market data calls go to Binance. Options calls go to Unusual Whales when configured. Local Edge Stats and Whale Options connect to your configured loopback services. Private account features and broker execution are not connected.</p><code>${esc(state.dataDir ?? "~/Library/Application Support/Pine Desk")}</code></div></div><div class="links"><button data-link="https://github.com/LuxAlgo/PineTS">PineTS ↗</button><button data-link="https://velacharts.dev/">VelaCharts ↗</button><button data-link="https://www.luxalgo.com/licensing/">Library licensing ↗</button><button data-link="https://docs.luxalgo.com/platform/charts/strategies">Backtest documentation ↗</button></div>`;
+    )}</section></div><div class="notice"><span>◉</span><div><strong>Your data stays in your workspace.</strong><p>Local MCP tools share the app's storage directory. Catalog and hosted Edge Stats calls go to LuxAlgo; market data calls go to Binance. Options calls go to Unusual Whales when configured. Local Edge Stats and Whale Options connect to your configured loopback services. Private account features and broker execution are not connected.</p><code>${esc(state.dataDir ?? "~/Library/Application Support/Pine Desk")}</code></div></div><div class="links"><button data-link="https://github.com/LuxAlgo/PineTS">PineTS ${uiIcon("external")}</button><button data-link="https://velacharts.dev/">VelaCharts ${uiIcon("external")}</button><button data-link="https://www.luxalgo.com/licensing/">Library licensing ${uiIcon("external")}</button><button data-link="https://docs.luxalgo.com/platform/charts/strategies">Backtest documentation ${uiIcon("external")}</button></div>`;
 }
 
 async function mountChart() {
@@ -847,6 +883,7 @@ function bind() {
     const el = $("#" + id);
     if (el) el.onclick = () => task(fn);
   };
+  on("focus-chart", () => setChartFocus(!state.focusChart));
   on("toggle-editor", () => {
     state.editor = !state.editor;
     render();
@@ -1369,7 +1406,7 @@ async function pollStudy() {
   }
 }
 $("#app").innerHTML =
-  `<aside><div class="brand"><span class="brand-mark">⌁</span>Pine<span>Desk</span></div><div class="workspace-label">PERSONAL WORKSPACE</div><nav id="nav"></nav><div class="aside-bottom"><div><i class="dot"></i><span id="status">Local workspace</span></div><small>Built on PineTS + Vela™</small><span class="version">v${version} · research edition</span></div></aside><main><header><div><span class="breadcrumb">Workspace / </span><strong id="title"></strong></div><div><span class="local-badge">◉ ON YOUR MAC</span><span class="avatar">PD</span></div></header><div id="page"></div></main><div id="toast" class="toast" role="status"></div>`;
+  `<aside aria-label="Pine Desk navigation"><div class="brand"><span class="brand-mark">${uiIcon("workspace")}</span>Pine<span>Desk</span></div><nav id="nav" aria-label="Sections"></nav><div class="aside-bottom"><div><i class="dot"></i><span id="status">Local workspace</span></div><small>PineTS + Vela</small><span class="version">v${version} · research edition</span></div></aside><main><header><div><span class="breadcrumb">Research desk / </span><strong id="title"></strong></div><span class="local-badge" id="preview-status">${api ? "Local on your Mac" : "Browser preview · synthetic data"}</span></header><div id="page"></div></main><div id="toast" class="toast" role="status"></div>`;
 render();
 if (api)
   task(async () => {
@@ -1389,9 +1426,8 @@ if (api)
     render();
   });
 else
-  toast(
-    "Browser preview · synthetic demo. Start the Electron app for local tools.",
-  );
+  $("#preview-status").title =
+    "Start the Electron app to use local data, providers and research tools.";
 window.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
     e.preventDefault();

@@ -16,7 +16,7 @@ export const formatValue = (n, d = 4) =>
     : "—";
 export function curveSVG(
   series,
-  { xLabel = "", yLabel = "", current = null } = {},
+  { xLabel = "", yLabel = "", current = null, colors = ["green", "red"] } = {},
 ) {
   const all = series
     .flatMap((s) => s.points)
@@ -28,20 +28,20 @@ export function curveSVG(
     xmax = Math.max(...xs),
     ymin = Math.min(...ys),
     ymax = Math.max(...ys),
-    x = (v) => 64 + ((v - xmin) / (xmax - xmin || 1)) * 666,
+    x = (v) => 112 + ((v - xmin) / (xmax - xmin || 1)) * 618,
     y = (v) => 250 - ((v - ymin) / (ymax - ymin || 1)) * 215;
   return `<svg class="option-curve" viewBox="0 0 780 310" role="img" aria-label="${esc(yLabel)} versus ${esc(xLabel)}"><title>${esc(yLabel)} versus ${esc(xLabel)}</title>${Array.from(
     { length: 5 },
     (_, i) => {
       const v = ymin + ((ymax - ymin) * i) / 4;
-      return `<line x1="64" x2="730" y1="${y(v)}" y2="${y(v)}" class="curve-grid"/><text x="58" y="${y(v) + 4}" text-anchor="end">${formatValue(v, 3)}</text>`;
+      return `<line x1="112" x2="730" y1="${y(v)}" y2="${y(v)}" class="curve-grid"/><text x="104" y="${y(v) + 4}" text-anchor="end">${formatValue(Math.abs(v) < 1e-10 ? 0 : v, 3)}</text>`;
     },
   ).join(
     "",
   )}${[xmin, (xmin + xmax) / 2, xmax].map((v) => `<text x="${x(v)}" y="273" text-anchor="middle">${formatValue(v, 2)}</text>`).join("")}${series
     .map(
       (s, i) =>
-        `<path fill="none" stroke="var(--${i === 0 ? "green" : "red"})" stroke-width="2.5" d="${s.points
+        `<path fill="none" stroke="var(--${colors[i % colors.length]})" stroke-width="2.5" d="${s.points
           .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
           .map((p, j) => `${j ? "L" : "M"}${x(p.x)},${y(p.y)}`)
           .join(" ")}"/>${s.points
@@ -54,7 +54,7 @@ export function curveSVG(
     )
     .join(
       "",
-    )}${current && current.x >= xmin && current.x <= xmax && Number.isFinite(current.y) ? `<line x1="${x(current.x)}" x2="${x(current.x)}" y1="35" y2="250" stroke="var(--muted)" stroke-dasharray="4 4"/><circle cx="${x(current.x)}" cy="${y(current.y)}" r="5" fill="var(--text)"/>` : ""}<text x="390" y="299" text-anchor="middle">${esc(xLabel)}</text><text x="64" y="18">${esc(yLabel)}</text></svg><div class="curve-legend">${series.map((s, i) => `<span style="color:var(--${i === 0 ? "green" : "red"})">● ${esc(s.name)}</span>`).join("")}</div>`;
+    )}${current && current.x >= xmin && current.x <= xmax && Number.isFinite(current.y) ? `<line x1="${x(current.x)}" x2="${x(current.x)}" y1="35" y2="250" stroke="var(--muted)" stroke-dasharray="4 4"/><circle cx="${x(current.x)}" cy="${y(current.y)}" r="5" fill="var(--text)"/>` : ""}<text x="390" y="299" text-anchor="middle">${esc(xLabel)}</text><text x="112" y="18">${esc(yLabel)}</text></svg><div class="curve-legend">${series.map((s, i) => `<span style="color:var(--${colors[i % colors.length]})">● ${esc(s.name)}</span>`).join("")}</div>`;
 }
 export function newLearningState() {
   return {
@@ -123,6 +123,7 @@ export function paintLearning(state) {
           volatility: "IV (%)",
         }[state.axis],
         yLabel: lesson[0],
+        colors: ["accent-ink", "red"],
         current: { x: state.model[state.axis], y: result[state.metric] },
       },
     );

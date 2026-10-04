@@ -2,9 +2,9 @@
 
 A local Mac trading research app built with [PineTS](https://github.com/LuxAlgo/PineTS), [Vela](https://velacharts.dev/), and Electron. Run native Pine v5/v6 scripts, explore the official LuxAlgo library through MCP, backtest strategies, and analyze executed trade data.
 
-![Pine Desk chart workspace](docs/workspace.png)
+![Pine Desk chart workspace](docs/design/shots/workspace-dark.png)
 
-Documentation: [Research reliability upgrade](docs/research-reliability.md) · [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md) · [Crypto options & Greeks education](docs/crypto-options.md) · [Options project review](docs/options-project-review.md) · [Option research & replay](docs/option-research.md).
+Documentation: [Design direction & before/after](docs/design/README.md) · [Research reliability upgrade](docs/research-reliability.md) · [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md) · [Crypto options & Greeks education](docs/crypto-options.md) · [Options project review](docs/options-project-review.md) · [Option research & replay](docs/option-research.md).
 
 Signed distribution and automatic updates are prepared in the [release setup guide](docs/releases.md). Configure Apple signing/notarization secrets later, then manually run the Signed Mac release Action with an existing version tag.
 
@@ -39,6 +39,8 @@ For development: `npm run dev`. For a local Apple Silicon and Intel DMG/ZIP buil
 * **MCP:** A separate local stdio server shares the app's dataset, scripts, imported trades, and saved runs. Official public LuxAlgo catalog calls are forwarded through its hosted MCP.
 
 This is a working first research edition, not full parity with the LuxAlgo platform. It does not implement TPO, session/rolling profiles, footprint imbalances, order books, all platform screeners, nested/anchored optimization, automatically maintained exchange calendars, broker execution, or LuxAlgo account authentication. Library indicators are not automatically converted to strategies; specify entry/exit logic in a `strategy(...)` script.
+
+The chart and editor lead the workspace. Layouts, watchlists and data quality are below the chart; navigation groups all eleven destinations into Markets, Research and Connections. Use **Focus chart** or **Cmd+Shift+F** (Ctrl+Shift+F on other systems) to expand the chart, and **Escape** to restore the editor without losing source or chart state. Settings support system, light and dark themes and custom candle colours. Default candles render darker in light mode for contrast.
 
 ## Chart and backtest workflow
 

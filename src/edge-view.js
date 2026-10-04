@@ -1,3 +1,4 @@
+import { uiIcon } from "./ui-icons.js";
 const $ = (selector) => document.querySelector(selector);
 const esc = (value) =>
   String(value ?? "").replace(
@@ -60,7 +61,7 @@ export function edgeView(edge) {
   const r = edge.response?.result,
     selection = presets.find((p) => p.id === edge.draft.preset);
   return `<div id="edge-panel"><div class="page-intro"><span class="eyebrow">LUXALGO EDGE STATS</span><h1>Ask how often it happened.</h1><p>Conditional session statistics from the official engine, with sample sizes, confidence intervals, and the sessions behind the result.</p></div>
-    <div class="edge-connection searchbar"><label>Data source<select id="edge-mode"><option value="hosted" ${local ? "" : "selected"}>Public hosted reports</option><option value="local" ${local ? "selected" : ""}>My local Edge Stats server</option></select></label><label class="edge-endpoint">Local MCP URL<input id="edge-endpoint" value="${esc(edge.config.endpoint)}" ${local ? "" : "disabled"}></label><button id="edge-connect" class="primary">${local ? "Connect local server" : "Load public reports"}</button><button data-link="https://github.com/ar4ft/pine-desk/blob/main/docs/edge-stats.md">Setup guide ↗</button></div>
+    <div class="edge-connection searchbar"><label>Data source<select id="edge-mode"><option value="hosted" ${local ? "" : "selected"}>Public hosted reports</option><option value="local" ${local ? "selected" : ""}>My local Edge Stats server</option></select></label><label class="edge-endpoint">Local MCP URL<input id="edge-endpoint" value="${esc(edge.config.endpoint)}" ${local ? "" : "disabled"}></label><button id="edge-connect" class="primary">${local ? "Connect local server" : "Load public reports"}</button><button data-link="https://github.com/ar4ft/pine-desk/blob/main/docs/edge-stats.md">Setup guide ${uiIcon("external")}</button></div>
     <p class="footnote">${local ? "Your own Edge Stats store. Start the official local MCP server, then connect. Pine Desk chart CSVs are separate from that store." : "Hosted reports use LuxAlgo’s nightly derived store. They do not run on the chart’s candles, and do not include raw bars or custom filters."}</p>
     ${
       overview
