@@ -296,7 +296,7 @@ test("unsigned publication requires all four packages and excludes update metada
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
-test("unsigned release stays a draft on failed uploads and retries without replacing published previews", async () => {
+test("unsigned release finds drafts excluded by the tag API, retries failed uploads and preserves published previews", async () => {
   const dir = await previewFixture();
   let tag = null,
     release = null,
@@ -313,12 +313,25 @@ test("unsigned release stays a draft on failed uploads and retries without repla
         if (tag) return JSON.stringify({ object: { sha: tag } });
       } else if (args[1].includes("/commits/"))
         return JSON.stringify({ sha: tag });
-      else if (release) return JSON.stringify(release);
+      else if (args[1].endsWith("/releases")) {
+        assert.ok(args.includes("--paginate"));
+        return release ? JSON.stringify(release) : "";
+      } else if (
+        args[1].includes("/releases/tags/") &&
+        release &&
+        !release.draft
+      )
+        return JSON.stringify(release);
       throw Object.assign(Error("not found"), {
         stderr: "gh: Not Found (HTTP 404)",
       });
     }
     if (args[1] === "create") {
+      assert.equal(
+        release,
+        null,
+        "Existing drafts must be resumed, not recreated.",
+      );
       assert.ok(args.includes("--draft"));
       assert.ok(args.includes("--prerelease"));
       assert.ok(args.includes("--latest=false"));

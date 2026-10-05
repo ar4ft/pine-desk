@@ -71,6 +71,18 @@ async function publishUnsigned({
       return null;
     }
   };
+  // The by-tag REST endpoint excludes drafts. List releases with push access
+  // so new drafts and resumed uploads are both discoverable before publication.
+  const readRelease = () => {
+    const result = run([
+      "api",
+      `repos/${context.repo}/releases`,
+      "--paginate",
+      "--jq",
+      `.[] | select(.tag_name == "${context.tag}")`,
+    ]);
+    return result.trim() ? JSON.parse(result) : null;
+  };
   if (read(`git/ref/tags/${context.tag}`)) {
     if (read(`commits/${context.tag}`)?.sha !== context.sha)
       throw Error("Preview tag points to another commit.");
@@ -86,7 +98,7 @@ async function publishUnsigned({
       `sha=${context.sha}`,
     ]);
   }
-  const existing = read(`releases/tags/${context.tag}`);
+  const existing = readRelease();
   if (existing) {
     const commit = JSON.parse(
       run(["api", `repos/${context.repo}/commits/${context.tag}`]),
@@ -149,11 +161,9 @@ async function publishUnsigned({
     ...assets.map((name) => path.join(dir, name)),
     "--clobber",
   ]);
-  const uploaded = JSON.parse(
-    run(["api", `repos/${context.repo}/releases/tags/${context.tag}`]),
-  );
+  const uploaded = readRelease();
   if (
-    !uploaded.draft ||
+    !uploaded?.draft ||
     !uploaded.prerelease ||
     uploaded.assets.length !== assets.length ||
     !assets.every((name) =>
