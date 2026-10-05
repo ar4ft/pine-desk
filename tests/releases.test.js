@@ -10,6 +10,11 @@ const require = createRequire(import.meta.url);
 const { createUpdates } = require("../electron/updates.cjs");
 const { validateRelease } = require("../scripts/release-preflight.cjs");
 const { verifyAssets } = require("../scripts/verify-update-assets.cjs");
+const {
+  previewContext,
+  prepareAssets,
+  publishUnsigned,
+} = require("../scripts/publish-unsigned.cjs");
 const marker = JSON.stringify({
   channel: "stable",
   provider: "github",
@@ -212,9 +217,148 @@ test("signed pipeline is manual only and development packaging explicitly disabl
   assert.equal(config.mac.notarize, false);
   assert.equal(config.forceCodeSigning, false);
   assert.equal(config.publish, null);
+  assert.equal(
+    config.artifactName,
+    "Pine-Desk-${version}-unsigned-${arch}.${ext}",
+  );
   assert.deepEqual(config.extraResources, []);
   assert.match(
     require("../package.json").scripts["dist:mac"],
     /--config electron-builder.dev.cjs/,
   );
+});
+
+const previewEnv = {
+  GITHUB_EVENT_NAME: "push",
+  GITHUB_REF: "refs/heads/main",
+  GITHUB_RUN_NUMBER: "42",
+  GITHUB_RUN_ID: "123456",
+  GITHUB_SHA: "a".repeat(40),
+  GITHUB_REPOSITORY: "ar4ft/pine-desk",
+};
+async function previewFixture() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pine-desk-unsigned-"));
+  for (const arch of ["arm64", "x64"])
+    for (const ext of ["zip", "dmg"])
+      await fs.writeFile(
+        path.join(dir, `Pine-Desk-0.8.0-unsigned-${arch}.${ext}`),
+        `${arch}.${ext}`,
+      );
+  return dir;
+}
+test("unsigned previews publish automatically only after successful main builds", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(
+    await fs.readFile(
+      new URL("../.github/workflows/ci.yml", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(Object.keys(workflow.on), ["push", "pull_request"]);
+  assert.deepEqual(workflow.on.push.branches, ["main"]);
+  assert.deepEqual(workflow.jobs.prerelease.needs, ["test", "mac"]);
+  assert.equal(
+    workflow.jobs.prerelease.if,
+    "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+  );
+  assert.equal(workflow.permissions.contents, "read");
+  assert.equal(workflow.jobs.prerelease.permissions.contents, "write");
+  assert.equal(workflow.jobs.mac.env.CSC_IDENTITY_AUTO_DISCOVERY, "false");
+  assert.equal(previewContext(previewEnv, "0.8.0").tag, "v0.8.0-unsigned.42");
+  for (const env of [
+    { ...previewEnv, GITHUB_EVENT_NAME: "pull_request" },
+    { ...previewEnv, GITHUB_EVENT_NAME: "workflow_dispatch" },
+    { ...previewEnv, GITHUB_REF: "refs/heads/feature" },
+    { ...previewEnv, GITHUB_SHA: "main" },
+  ])
+    assert.throws(() => previewContext(env, "0.8.0"));
+});
+test("unsigned publication requires all four packages and excludes update metadata", async () => {
+  const dir = await previewFixture();
+  try {
+    const names = await prepareAssets(dir, "0.8.0");
+    assert.equal(names.length, 5);
+    const sums = await fs.readFile(path.join(dir, "SHA256SUMS.txt"), "utf8");
+    for (const name of names.slice(0, 4)) {
+      const bytes = await fs.readFile(path.join(dir, name));
+      assert.ok(
+        sums.includes(
+          `${crypto.createHash("sha256").update(bytes).digest("hex")}  ${name}`,
+        ),
+      );
+    }
+    await fs.writeFile(path.join(dir, "latest-mac.yml"), "must not ship");
+    await assert.rejects(prepareAssets(dir, "0.8.0"), /update manifests/);
+    await fs.unlink(path.join(dir, "latest-mac.yml"));
+    await fs.unlink(path.join(dir, names[0]));
+    await assert.rejects(prepareAssets(dir, "0.8.0"), /ENOENT/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+test("unsigned release stays a draft on failed uploads and retries without replacing published previews", async () => {
+  const dir = await previewFixture();
+  let tag = null,
+    release = null,
+    failUpload = true;
+  const calls = [];
+  const run = (args) => {
+    calls.push(args);
+    if (args[0] === "api") {
+      if (args[1].endsWith("/git/refs")) {
+        tag = previewEnv.GITHUB_SHA;
+        return "{}";
+      }
+      if (args[1].includes("/git/ref/")) {
+        if (tag) return JSON.stringify({ object: { sha: tag } });
+      } else if (args[1].includes("/commits/"))
+        return JSON.stringify({ sha: tag });
+      else if (release) return JSON.stringify(release);
+      throw Object.assign(Error("not found"), {
+        stderr: "gh: Not Found (HTTP 404)",
+      });
+    }
+    if (args[1] === "create") {
+      assert.ok(args.includes("--draft"));
+      assert.ok(args.includes("--prerelease"));
+      assert.ok(args.includes("--latest=false"));
+      assert.ok(args.includes(previewEnv.GITHUB_SHA));
+      release = {
+        draft: true,
+        prerelease: true,
+        assets: [],
+        html_url:
+          "https://github.com/ar4ft/pine-desk/releases/tag/v0.8.0-unsigned.42",
+      };
+    } else if (args[1] === "upload") {
+      if (failUpload) throw Error("upload failed");
+      release.assets = args
+        .filter((arg) => arg.startsWith(dir + path.sep))
+        .map((file) => ({ name: path.basename(file) }));
+    } else if (args[1] === "edit") {
+      assert.ok(args.includes("--prerelease"));
+      assert.ok(args.includes("--latest=false"));
+      release.draft = false;
+    }
+    return "";
+  };
+  try {
+    const options = { env: previewEnv, version: "0.8.0", dir, run };
+    await assert.rejects(publishUnsigned(options), /upload failed/);
+    assert.equal(release.draft, true);
+    assert.equal(
+      calls.some((args) => args[0] === "release" && args[1] === "edit"),
+      false,
+    );
+    failUpload = false;
+    assert.equal(await publishUnsigned(options), release.html_url);
+    assert.equal(release.draft, false);
+    const count = calls.filter((args) => args[1] === "upload").length;
+    await publishUnsigned(options);
+    assert.equal(calls.filter((args) => args[1] === "upload").length, count);
+    tag = "b".repeat(40);
+    await assert.rejects(publishUnsigned(options), /another commit/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });

@@ -1,6 +1,20 @@
 # Signed, notarized Mac releases and automatic updates
 
-The release pipeline is prepared. **Apple credentials are not configured or included.** Until you add them, use `npm run dist:mac` and unsigned CI artifacts. Those builds do not check for updates. The signed pipeline requires credentials and fails rather than silently producing an unsigned release.
+The release pipeline is prepared. **Apple credentials are not configured or included.** Until you add them, use `npm run dist:mac` or the automatically published unsigned prereleases. Those builds do not check for updates. The signed pipeline requires credentials and fails rather than silently producing an unsigned release.
+
+## Automatic unsigned previews
+
+Every successful push to `main` runs **Verify, package and publish previews**. After core/browser tests and both Mac desktop/package jobs succeed, a separate job downloads the two unsigned artifacts and publishes a GitHub **prerelease** with all four packages:
+
+- `Pine-Desk-X.Y.Z-unsigned-arm64.dmg` and `.zip` for Apple Silicon.
+- `Pine-Desk-X.Y.Z-unsigned-x64.dmg` and `.zip` for Intel.
+- `SHA256SUMS.txt` with checksums for those four files.
+
+Download them from the [Releases page](https://github.com/ar4ft/pine-desk/releases). Each preview tag is `vX.Y.Z-unsigned.<GitHub-run-number>` and points to the exact tested commit. Release notes link the producing Actions run. Preview tags are separate from stable `vX.Y.Z` tags, and previews are explicitly excluded from GitHub's latest stable release. They contain no update manifest; unsigned builds do not check for automatic updates.
+
+Publication stages a draft, uploads all packages/checksums and verifies the asset list before making the prerelease public. Failed uploads leave the draft unpublished. Reruns resume that draft or reuse an already published preview for the same commit without replacing its assets; a mismatched tag is rejected. Preview publication requires no Apple secrets or additional GitHub token: only its job receives `contents: write` through `GITHUB_TOKEN`.
+
+Pull requests produce test/package artifacts but do not publish releases. The unsigned workflow has no manual trigger. **Signed Mac release** remains the only manually started release workflow, and it alone handles signing, notarization and stable update metadata.
 
 ## Configure later
 
@@ -83,4 +97,4 @@ Sources: [electron-builder signing](https://www.electron.build/code-signing-mac)
 
 ## CI reliability
 
-Normal CI verifies formatting, core/browser tests and unsigned Mac packages on separate Intel (`macos-26-intel`) and Apple Silicon (`macos-26`) runners. Download `pine-desk-mac-unsigned-x64` or `pine-desk-mac-unsigned-arm64`. Desktop smoke has a 180-second watchdog, a five-minute workflow step limit, bounded shutdown and failure screenshots/logs. Mac jobs have a 25-minute deadline. None of these push/PR jobs signs or notarizes.
+Normal CI verifies formatting, core/browser tests and unsigned Mac packages on separate Intel (`macos-26-intel`) and Apple Silicon (`macos-26`) runners. Download `pine-desk-mac-unsigned-x64` or `pine-desk-mac-unsigned-arm64`. Desktop smoke has a 180-second watchdog, a five-minute workflow step limit, bounded shutdown and failure screenshots/logs. Mac jobs have a 25-minute deadline. None of these push/PR jobs signs or notarizes. Successful main pushes also publish an unsigned prerelease; pull requests never publish.

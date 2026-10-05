@@ -1,9 +1,8 @@
-name: Verify and package
+name: Verify, package and publish previews
 on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -59,6 +58,31 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: pine-desk-mac-unsigned-${{ matrix.arch }}
+          if-no-files-found: error
           path: |
             release/*.dmg
             release/*.zip
+  prerelease:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, mac]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: unsigned-prerelease-${{ github.run_id }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pine-desk-mac-unsigned-*
+          merge-multiple: true
+          path: release
+      - name: Publish verified unsigned prerelease
+        run: node scripts/publish-unsigned.cjs
