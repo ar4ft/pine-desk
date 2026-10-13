@@ -40,6 +40,7 @@ jobs:
     timeout-minutes: 25
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      PINE_DESK_BUILD_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,6 +56,19 @@ jobs:
           name: desktop-failure-${{ matrix.arch }}
           path: test-results/desktop/
       - run: npm run dist:mac -- --${{ matrix.arch }}
+      - name: Verify disk image, archive, architecture and installed app
+        run: node scripts/verify-mac-package.cjs ${{ matrix.arch }}
+        timeout-minutes: 10
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: package-failure-${{ matrix.arch }}
+          path: test-results/desktop/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pine-desk-mac-verification-${{ matrix.arch }}
+          if-no-files-found: error
+          path: test-results/desktop/package-${{ matrix.arch }}.json
       - uses: actions/upload-artifact@v4
         with:
           name: pine-desk-mac-unsigned-${{ matrix.arch }}
@@ -82,7 +96,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: pine-desk-mac-unsigned-*
-          merge-multiple: true
-          path: release
+          merge-multiple: false
+          path: unsigned-artifacts
       - name: Publish verified unsigned prerelease
-        run: node scripts/publish-unsigned.cjs
+        run: node scripts/publish-unsigned.cjs --artifacts unsigned-artifacts

@@ -12,7 +12,9 @@ Every successful push to `main` runs **Verify, package and publish previews**. A
 
 Download them from the [Releases page](https://github.com/ar4ft/pine-desk/releases). Each preview tag is `vX.Y.Z-unsigned.<GitHub-run-number>` and points to the exact tested commit. Release notes link the producing Actions run. Preview tags are separate from stable `vX.Y.Z` tags, and previews are explicitly excluded from GitHub's latest stable release. They contain no update manifest; unsigned builds do not check for automatic updates.
 
-Publication stages a draft, uploads all packages/checksums and verifies the asset list before making the prerelease public. Failed uploads leave the draft unpublished. Reruns resume that draft or reuse an already published preview for the same commit without replacing its assets; a mismatched tag is rejected. Preview publication requires no Apple secrets or additional GitHub token: only its job receives `contents: write` through `GITHUB_TOKEN`.
+Each Mac runner is restricted to its own architecture (`PINE_DESK_BUILD_ARCH=arm64` or `x64`). Before upload, CI verifies the DMG with `hdiutil`, mounts it read-only, copies its app out, validates the actual Mach-O architecture of the app and bundled native binaries, and runs the full desktop smoke test against the copied app. It also checks the ZIP with `unzip`, extracts it, verifies its binaries and runs the packaged smoke test again. Reports are available as `pine-desk-mac-verification-arm64` and `pine-desk-mac-verification-x64`.
+
+The publication job keeps architecture artifacts in separate directories, stages exactly two files from each, and rechecks DMG footer/bounds/data CRC before publication. It never merges duplicate filenames. Publication stages a draft, uploads all packages/checksums and verifies the asset list before making the prerelease public. Failed uploads leave the draft unpublished. Reruns resume that draft or reuse an already published preview for the same commit without replacing its assets; a mismatched tag is rejected. Preview publication requires no Apple secrets or additional GitHub token: only its job receives `contents: write` through `GITHUB_TOKEN`.
 
 Pull requests produce test/package artifacts but do not publish releases. The unsigned workflow has no manual trigger. **Signed Mac release** remains the only manually started release workflow, and it alone handles signing, notarization and stable update metadata.
 
@@ -98,3 +100,9 @@ Sources: [electron-builder signing](https://www.electron.build/code-signing-mac)
 ## CI reliability
 
 Normal CI verifies formatting, core/browser tests and unsigned Mac packages on separate Intel (`macos-26-intel`) and Apple Silicon (`macos-26`) runners. Download `pine-desk-mac-unsigned-x64` or `pine-desk-mac-unsigned-arm64`. Desktop smoke has a 180-second watchdog, a five-minute workflow step limit, bounded shutdown and failure screenshots/logs. Mac jobs have a 25-minute deadline. None of these push/PR jobs signs or notarizes. Successful main pushes also publish an unsigned prerelease; pull requests never publish.
+
+## DMG repair in 0.8.1
+
+The published Intel DMG in `v0.8.0-unsigned.17` has a missing UDIF (`koly`) footer even though its SHA-256 matches the release checksum. Re-download a 0.8.1 or newer preview; the old image should not be used. Both matrix jobs previously emitted both architectures and their artifacts were merged over identical filenames. CI now emits exactly one architecture per runner, keeps artifact directories separate and validates disk images before and after transfer.
+
+Use `arm64` for Apple Silicon and `x64` for Intel (`x86_64` in Mach-O tools). The local `npm run dist:mac` still builds both architectures by default. For a single native local package, set `PINE_DESK_BUILD_ARCH=arm64` or `x64`; verify on a matching Mac with `node scripts/verify-mac-package.cjs arm64` or `x64`. All these development builds remain unsigned; signing/notarization are still manual-only.

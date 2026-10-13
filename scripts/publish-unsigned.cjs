@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const os = require("node:os");
 const { execFileSync } = require("node:child_process");
+const { stagePackages, verifyDmg } = require("./mac-packages.cjs");
 
 function previewContext(env, version) {
   if (env.GITHUB_EVENT_NAME !== "push" || env.GITHUB_REF !== "refs/heads/main")
@@ -37,6 +38,7 @@ async function prepareAssets(dir, version) {
     const stat = await fs.promises.lstat(file);
     if (!stat.isFile() || stat.size === 0)
       throw Error(`Missing or empty unsigned asset: ${name}`);
+    if (name.endsWith(".dmg")) await verifyDmg(file);
     const hash = crypto.createHash("sha256");
     for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
     sums.push(`${hash.digest("hex")}  ${name}`);
@@ -188,7 +190,19 @@ async function publishUnsigned({
 
 module.exports = { previewContext, prepareAssets, publishUnsigned };
 if (require.main === module) {
-  publishUnsigned().then(
+  (async () => {
+    const args = process.argv.slice(2);
+    if (args.length) {
+      if (args.length !== 2 || args[0] !== "--artifacts")
+        throw Error("Usage: publish-unsigned.cjs [--artifacts directory]");
+      await stagePackages(
+        path.resolve(args[1]),
+        path.resolve(__dirname, "../release"),
+        require("../package.json").version,
+      );
+    }
+    return publishUnsigned();
+  })().then(
     (url) => console.log(`Unsigned prerelease published: ${url}`),
     (error) => {
       console.error(error.message);

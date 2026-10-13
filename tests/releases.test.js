@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const { createUpdates } = require("../electron/updates.cjs");
 const { validateRelease } = require("../scripts/release-preflight.cjs");
 const { verifyAssets } = require("../scripts/verify-update-assets.cjs");
+const { crc32 } = require("node:zlib");
 const {
   previewContext,
   prepareAssets,
@@ -242,7 +243,7 @@ async function previewFixture() {
     for (const ext of ["zip", "dmg"])
       await fs.writeFile(
         path.join(dir, `Pine-Desk-0.8.0-unsigned-${arch}.${ext}`),
-        `${arch}.${ext}`,
+        ext === "dmg" ? fixtureDmg() : Buffer.from(`${arch}.${ext}`),
       );
   return dir;
 }
@@ -264,6 +265,24 @@ test("unsigned previews publish automatically only after successful main builds"
   assert.equal(workflow.permissions.contents, "read");
   assert.equal(workflow.jobs.prerelease.permissions.contents, "write");
   assert.equal(workflow.jobs.mac.env.CSC_IDENTITY_AUTO_DISCOVERY, "false");
+  assert.equal(
+    workflow.jobs.mac.env.PINE_DESK_BUILD_ARCH,
+    "${{ matrix.arch }}",
+  );
+  const download = workflow.jobs.prerelease.steps.find((step) =>
+    step.uses?.startsWith("actions/download-artifact@"),
+  );
+  assert.equal(download.with["merge-multiple"], false);
+  const checks = workflow.jobs.mac.steps.findIndex((step) =>
+    step.run?.includes("verify-mac-package.cjs"),
+  );
+  const upload = workflow.jobs.mac.steps.findIndex(
+    (step) => step.with?.name === "pine-desk-mac-unsigned-${{ matrix.arch }}",
+  );
+  assert.ok(
+    checks >= 0 && checks < upload,
+    "Native package validation must precede artifact publication.",
+  );
   assert.equal(previewContext(previewEnv, "0.8.0").tag, "v0.8.0-unsigned.42");
   for (const env of [
     { ...previewEnv, GITHUB_EVENT_NAME: "pull_request" },
@@ -272,6 +291,106 @@ test("unsigned previews publish automatically only after successful main builds"
     { ...previewEnv, GITHUB_SHA: "main" },
   ])
     assert.throws(() => previewContext(env, "0.8.0"));
+});
+
+function fixtureDmg() {
+  const data = Buffer.from("compressed disk image fixture");
+  const xml = Buffer.from("<plist/>");
+  const footer = Buffer.alloc(512);
+  footer.write("koly");
+  footer.writeUInt32BE(4, 4);
+  footer.writeUInt32BE(512, 8);
+  footer.writeBigUInt64BE(BigInt(data.length), 32);
+  footer.writeUInt32BE(2, 80);
+  footer.writeUInt32BE(32, 84);
+  footer.writeUInt32BE(crc32(data), 88);
+  footer.writeBigUInt64BE(BigInt(data.length), 216);
+  footer.writeBigUInt64BE(BigInt(xml.length), 224);
+  return Buffer.concat([data, xml, footer]);
+}
+
+test("DMG verification rejects the published missing-footer failure and damaged image data", async () => {
+  const { verifyDmg } = require("../scripts/mac-packages.cjs");
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "pine-desk-dmg-"));
+  const file = path.join(dir, "test.dmg");
+  try {
+    await fs.writeFile(file, fixtureDmg());
+    assert.ok((await verifyDmg(file)).dataLength > 0);
+    const missingFooter = fixtureDmg();
+    missingFooter.fill(0, missingFooter.length - 512);
+    await fs.writeFile(file, missingFooter);
+    await assert.rejects(verifyDmg(file), /UDIF footer/);
+    const corrupted = fixtureDmg();
+    corrupted[0] ^= 1;
+    await fs.writeFile(file, corrupted);
+    await assert.rejects(verifyDmg(file), /checksum/);
+    await fs.writeFile(file, Buffer.alloc(20));
+    await assert.rejects(verifyDmg(file), /truncated/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("native Mac build targets and binaries distinguish arm64 from Intel x86_64", () => {
+  const { execFileSync } = require("node:child_process");
+  const { assertArchitectures } = require("../scripts/verify-mac-package.cjs");
+  for (const arch of ["arm64", "x64"]) {
+    const result = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          "-e",
+          "process.stdout.write(JSON.stringify(require('./electron-builder.dev.cjs').mac.target))",
+        ],
+        {
+          cwd: path.resolve("."),
+          env: { ...process.env, PINE_DESK_BUILD_ARCH: arch },
+          encoding: "utf8",
+        },
+      ),
+    );
+    assert.equal(result.length, 2);
+    for (const target of result) assert.deepEqual(target.arch, [arch]);
+  }
+  assertArchitectures("arm64", "arm64", true);
+  assertArchitectures("x86_64", "x64", true);
+  assert.throws(() => assertArchitectures("arm64", "x64", true), /x86_64/);
+  assert.throws(
+    () => assertArchitectures("arm64 x86_64", "arm64", true),
+    /Expected/,
+  );
+});
+
+test("release staging isolates each architecture and refuses duplicate artifact filenames", async () => {
+  const {
+    stagePackages,
+    packageNames,
+  } = require("../scripts/mac-packages.cjs");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "pine-desk-artifacts-"));
+  const input = path.join(root, "input"),
+    output = path.join(root, "output");
+  try {
+    for (const arch of ["arm64", "x64"]) {
+      const dir = path.join(input, `pine-desk-mac-unsigned-${arch}`);
+      await fs.mkdir(dir, { recursive: true });
+      const names = packageNames("0.8.0", arch);
+      await fs.writeFile(path.join(dir, names[0]), fixtureDmg());
+      await fs.writeFile(path.join(dir, names[1]), "zip fixture");
+    }
+    const duplicate = path.join(
+      input,
+      "pine-desk-mac-unsigned-arm64",
+      packageNames("0.8.0", "x64")[0],
+    );
+    await fs.writeFile(duplicate, fixtureDmg());
+    await assert.rejects(stagePackages(input, output, "0.8.0"), /only arm64/);
+    await fs.unlink(duplicate);
+    await stagePackages(input, output, "0.8.0");
+    assert.equal((await fs.readdir(output)).length, 4);
+    await assert.rejects(stagePackages(input, output, "0.8.0"), /empty/);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 test("unsigned publication requires all four packages and excludes update metadata", async () => {
   const dir = await previewFixture();

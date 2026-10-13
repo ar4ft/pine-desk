@@ -10,6 +10,8 @@ Signed distribution and automatic updates are prepared in the [release setup gui
 
 ## Run on your Mac
 
+**Download fix:** Use a **0.8.1 or newer** [unsigned preview](https://github.com/ar4ft/pine-desk/releases). The older `v0.8.0-unsigned.17` Intel DMG is corrupted. New builds verify DMG mounting, ZIP extraction, native CPU architecture and the packaged app on both Apple Silicon and Intel before publication.
+
 Install Node.js **22.16+** (Node 24 recommended), then:
 
 ```sh
