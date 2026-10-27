@@ -8,6 +8,8 @@ Documentation: [Design direction & before/after](docs/design/README.md) · [Rese
 
 Signed distribution and automatic updates are prepared in the [release setup guide](docs/releases.md). Configure Apple signing/notarization secrets later, then manually run the Signed Mac release Action with an existing version tag.
 
+The [OpenMarket, Alertsify and GoCharting review](docs/platform-feature-review.md) compares their public features with this edition and proposes an ordered roadmap for local charts, alerts, order flow and paper trading. It distinguishes planned work from shipped capabilities and identifies external data requirements.
+
 ## Run on your Mac
 
 **Download fix:** Use a **0.8.1 or newer** [unsigned preview](https://github.com/ar4ft/pine-desk/releases). The older `v0.8.0-unsigned.17` Intel DMG is corrupted. New builds verify DMG mounting, ZIP extraction, native CPU architecture and the packaged app on both Apple Silicon and Intel before publication.
