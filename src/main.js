@@ -294,6 +294,7 @@ function toast(message, error = false) {
 async function task(fn) {
   if (state.busy) return;
   state.busy = true;
+  if ($("#toggle-editor")) $("#toggle-editor").disabled = true;
   $("#status").textContent = "Working…";
   try {
     await fn();
@@ -301,6 +302,7 @@ async function task(fn) {
     toast(e.message, true);
   } finally {
     state.busy = false;
+    if ($("#toggle-editor")) $("#toggle-editor").disabled = false;
     $("#status").textContent = "Local workspace";
   }
 }
@@ -432,6 +434,7 @@ function render() {
   if (["workspace", "backtest", "crypto", "options"].includes(state.page))
     $("#page").insertAdjacentHTML("afterbegin", workflowView(state));
   bind();
+  if ($("#toggle-editor")) $("#toggle-editor").disabled = state.busy;
   bindWorkflow({
     navigate: (page, step) => {
       if (state.busy) return;
@@ -1349,6 +1352,7 @@ async function handleDesktopCommand(action, args = {}) {
   if (args.panelId && args.panelId !== "workspace")
     throw Error("Unknown chart panel.");
   state.busy = true;
+  if ($("#toggle-editor")) $("#toggle-editor").disabled = true;
   $("#status").textContent = "Agent updating workspace…";
   try {
     let result;
@@ -1451,6 +1455,7 @@ async function handleDesktopCommand(action, args = {}) {
     return result ?? desktopSnapshot();
   } finally {
     state.busy = false;
+    if ($("#toggle-editor")) $("#toggle-editor").disabled = false;
     $("#status").textContent = "Local workspace";
   }
 }

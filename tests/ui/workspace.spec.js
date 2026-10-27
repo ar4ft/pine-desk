@@ -675,7 +675,14 @@ test("themes follow OS, strategy files import safely, layouts restore and watchl
   await page.locator("[data-watch-open]").click();
   await expect(page.locator(".market-title strong")).toHaveText("BTCUSDT");
   await page.locator("#toggle-editor").click();
-  await page.waitForTimeout(400);
+  await expect(page.locator("#pine-editor")).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem("pine-desk-session"))?.editor,
+      ),
+    )
+    .toBe(false);
   await page.reload();
   await expect(page.locator("#chart[data-ready=true]")).toBeVisible();
   await expect(page.locator("#toggle-editor")).toBeVisible();
