@@ -1,5 +1,7 @@
 import { uiIcon, navGroups } from "./ui-icons.js";
 import { version } from "../package.json";
+import { agentConfig, agentAccessView } from "./agent-access.js";
+import { datasetInstrument } from "../core/instruments.js";
 import {
   workflowView,
   qualityView,
@@ -125,6 +127,7 @@ const state = {
   chartMemory: null,
   options: newOptionsState(),
   providerSettings: null,
+  agentAccess: null,
   research: newResearchState(),
   diagnostic: null,
   live: { status: "stopped", active: false },
@@ -167,6 +170,7 @@ let chart,
   chartOwner,
   chartIdentity,
   optionsBarsRevision = "";
+let chartMount = Promise.resolve();
 const api = window.desk;
 let hydrated = !api,
   restoringChart = false,
@@ -430,6 +434,7 @@ function render() {
   bind();
   bindWorkflow({
     navigate: (page, step) => {
+      if (state.busy) return;
       state.page = page;
       if (step === "1") state.editor = true;
       render();
@@ -450,7 +455,8 @@ function render() {
     },
   });
   if (state.page === "workspace") {
-    mountChart();
+    chartMount = mountChart();
+    chartMount.catch((error) => toast(error.message, true));
     mountEditor();
   }
   updateLiveStatus();
@@ -568,16 +574,13 @@ function flow() {
   }`;
 }
 function mcp() {
-  const config = {
-    mcpServers: {
-      "pine-desk": {
-        command: "node",
-        args: ["/absolute/path/to/pine-desk/core/mcp.js"],
-      },
-      luxalgo: { url: "https://mcp.luxalgo.com/mcp" },
-    },
-  };
-  return `<div class="page-intro"><span class="eyebrow">YOUR WORKSPACE, WITH TOOLS</span><h1>A local research desk for your agent.</h1><p>Connect an MCP client to the same scripts, candles, trades, and backtests used by the app.</p></div><div class="mcp-grid"><section class="plot-card"><div class="panel-heading"><span>MCP CLIENT CONFIGURATION</span><button id="export-config">Export JSON ↓</button></div><pre>${esc(JSON.stringify(config, null, 2))}</pre><p class="footnote">Install Node.js 22.16+ and this repository's dependencies. Replace the absolute path. Run <code>npm run mcp</code> for stdio transport. The bundled desktop app alone does not install the Node MCP server.</p></section><section class="plot-card"><div class="panel-heading"><span>AVAILABLE LOCAL TOOLS</span><span class="tag">STDIO</span></div>${[
+  const config = agentConfig(state.dataDir);
+  return `<div class="page-intro"><span class="eyebrow">YOUR WORKSPACE, WITH TOOLS</span><h1>Your agent, connected to this desktop.</h1><p>Read the displayed dataset, control the workspace chart and share this app’s existing live connections.</p></div>${agentAccessView(state.agentAccess, esc)}<div class="mcp-grid"><section class="plot-card"><div class="panel-heading"><span>MCP CLIENT CONFIGURATION</span><button id="export-config">Export JSON ↓</button></div><pre>${esc(JSON.stringify(config, null, 2))}</pre><p class="footnote">Install Node.js 22.16+ and this repository's dependencies. Replace the absolute path. Enable access above, then reconnect your MCP client. Desktop mode requires the app and never starts a second data service. The bundled desktop app alone does not install the Node MCP server.</p></section><section class="plot-card"><div class="panel-heading"><span>AVAILABLE LOCAL TOOLS</span><span class="tag">STDIO</span></div>${[
+    [
+      "desktop_state / desktop_navigate",
+      "Inspect the running workspace or open a page",
+    ],
+    ["desktop_chart_*", "Edit source, run a script or set the visible range"],
     ["workspace", "Read scripts, data, saved runs"],
     ["load_market / import_bars", "Fetch settled candles or import OHLCV"],
     [
@@ -872,6 +875,14 @@ function bind() {
   document.querySelectorAll("[data-page]").forEach(
     (el) =>
       (el.onclick = () => {
+        if (state.busy) return;
+        if (el.dataset.page === "mcp" && api?.agentReady)
+          call("agentStatus")
+            .then((status) => {
+              state.agentAccess = status;
+              if (state.page === "mcp") render();
+            })
+            .catch((error) => toast(error.message, true));
         state.page = el.dataset.page;
         render();
       }),
@@ -1084,22 +1095,37 @@ function bind() {
       "time,price,size,side\n2026-01-01T00:00:01Z,65000,0.01,buy\n2026-01-01T00:00:02Z,64990,0.02,sell\n",
     ),
   );
+  on("agent-save", async () => {
+    state.agentAccess = await call(
+      "agentConfigure",
+      Object.fromEntries(
+        ["enabled", "charts", "streams", "research"].map((key) => [
+          key,
+          $("#agent-" + key).checked,
+        ]),
+      ),
+    );
+    render();
+    toast("Agent access updated. Reconnect your MCP client.");
+  });
+  on("agent-revoke", async () => {
+    state.agentAccess = await call("agentConfigure", {
+      enabled: false,
+      charts: false,
+      streams: false,
+      research: false,
+    });
+    render();
+    toast("Agent access revoked.");
+  });
+  on("agent-refresh", async () => {
+    state.agentAccess = await call("agentStatus");
+    render();
+  });
   on("export-config", () =>
     exportFile(
       "mcp-config.json",
-      JSON.stringify(
-        {
-          mcpServers: {
-            "pine-desk": {
-              command: "node",
-              args: ["/absolute/path/to/pine-desk/core/mcp.js"],
-            },
-            luxalgo: { url: "https://mcp.luxalgo.com/mcp" },
-          },
-        },
-        null,
-        2,
-      ),
+      JSON.stringify(agentConfig(state.dataDir), null, 2),
     ),
   );
   document.querySelectorAll("[data-link]").forEach(
@@ -1269,6 +1295,180 @@ async function stopLive() {
     render();
   }
 }
+function desktopSnapshot() {
+  saveDraft();
+  captureWorkspaceChart();
+  const bars = state.dataset.bars;
+  return {
+    observedAt: Date.now(),
+    busy: state.busy || restoringChart,
+    page: state.page,
+    panels: [
+      {
+        id: "workspace",
+        visible: state.page === "workspace",
+        instrument: datasetInstrument(state.dataset),
+        timeframe: state.dataset.timeframe,
+        origin: state.dataset.origin,
+        settledBars: bars.length,
+        firstBarAt: bars[0]?.time ?? null,
+        lastBarAt: bars.at(-1)?.time ?? null,
+        loadedAt: state.dataset.loadedAt ?? null,
+        chart: state.chartMemory,
+        editor: { name: state.name, source: state.source },
+        live: {
+          active: state.live.active,
+          status: state.live.status,
+          symbol: state.live.symbol ?? null,
+          lastMessageAt: state.live.lastMessageAt ?? null,
+          gaps: state.live.gaps ?? [],
+          error: state.live.error ?? null,
+        },
+      },
+    ],
+  };
+}
+async function handleDesktopCommand(action, args = {}) {
+  if (!hydrated) throw Error("Desktop is still loading.");
+  if (action === "desktopState") return desktopSnapshot();
+  // Live synchronization can remount a chart between two agent commands.
+  // Wait for that existing mount rather than rejecting an otherwise idle desk.
+  if (!state.busy && restoringChart) await chartMount;
+  if (state.busy || restoringChart)
+    throw Error("Desktop is busy. Retry after the current operation finishes.");
+  if (action === "researchSnapshot") {
+    if (state.live.active && !state.live.dataset)
+      throw Error(
+        "Wait for the live candle history to synchronize before research.",
+      );
+    return {
+      dataset: structuredClone(state.dataset),
+      desktop: desktopSnapshot(),
+    };
+  }
+  if (args.panelId && args.panelId !== "workspace")
+    throw Error("Unknown chart panel.");
+  state.busy = true;
+  $("#status").textContent = "Agent updating workspace…";
+  try {
+    let result;
+    if (action === "desktopSetScript") {
+      if (!/^\s*\/\/@version=[56]\s*$/m.test(args.source))
+        throw Error("Use Pine v5/v6 source with a version declaration.");
+      setSource(args.source);
+      state.name = args.name;
+      if ($("#script-name")) $("#script-name").value = args.name;
+      state.diagnostic = null;
+      state.page = "workspace";
+      state.editor = true;
+      render();
+      await chartMount;
+    } else if (action === "desktopRun" || action === "desktopSetRange") {
+      if (state.page !== "workspace") {
+        state.page = "workspace";
+        render();
+      }
+      await chartMount;
+      if (action === "desktopRun") await runChart();
+      else {
+        if (
+          args.from >= args.to ||
+          args.to < state.dataset.bars[0].time ||
+          args.from >
+            state.dataset.bars.at(-1).time + durations[state.dataset.timeframe]
+        )
+          throw Error(
+            "Choose an ordered range overlapping the loaded candles, in Unix milliseconds.",
+          );
+        chart.setVisibleRange({ from: args.from, to: args.to });
+      }
+    } else if (action === "desktopNavigate") {
+      if (!titles[args.page]) throw Error("Unknown desktop page.");
+      if (args.page === "mcp") state.agentAccess = await call("agentStatus");
+      state.page = args.page;
+      render();
+      if (state.page === "workspace") await chartMount;
+    } else if (action === "serviceAction") {
+      const request = args.args;
+      switch (args.action) {
+        case "loadMarket":
+        case "importBars":
+          state.dataset = await call(args.action, request);
+          state.live = await call("liveSnapshot");
+          state.page = "workspace";
+          render();
+          await chartMount;
+          result = structuredClone(state.dataset);
+          break;
+        case "liveStart":
+        case "liveStop":
+          state.live = await call(args.action, request);
+          if (state.live.dataset) state.dataset = state.live.dataset;
+          state.page = "workspace";
+          render();
+          await chartMount;
+          result = state.live;
+          break;
+        case "optionsRefresh":
+        case "optionsStart":
+        case "optionsStop":
+          state.options.snapshot = await call(args.action, request);
+          if (request.ticker) state.options.ticker = request.ticker;
+          if (request.timeframe) state.options.timeframe = request.timeframe;
+          for (const key of ["ticker", "timeframe"])
+            if ($("#options-" + key))
+              $("#options-" + key).value = state.options[key];
+          state.page = "options";
+          render();
+          result = state.options.snapshot;
+          break;
+        case "cryptoRefresh":
+        case "cryptoStart":
+        case "cryptoStop":
+        case "cryptoSelect":
+          state.crypto.snapshot = await call(args.action, request);
+          state.crypto.exchange = request.exchange ?? "deribit";
+          if (request.currency) state.crypto.currency = request.currency;
+          if (request.settlement) state.crypto.settlement = request.settlement;
+          state.crypto.archiveId = null;
+          if (args.action === "cryptoRefresh") {
+            state.crypto.expiry = null;
+            state.crypto.research.surface = null;
+            state.crypto.research.risk = null;
+            state.crypto.research.legs = [];
+          }
+          state.page = "crypto";
+          render();
+          result = state.crypto.snapshot;
+          break;
+        default:
+          throw Error("Unsupported desktop service action.");
+      }
+    } else throw Error("Unsupported desktop command.");
+    persistSession();
+    toast("Agent updated the workspace.");
+    state.busy = false;
+    return result ?? desktopSnapshot();
+  } finally {
+    state.busy = false;
+    $("#status").textContent = "Local workspace";
+  }
+}
+api?.onAgentCommand?.(handleDesktopCommand);
+api?.onServiceChanged?.(async () => {
+  try {
+    const workspace = await call("workspace");
+    state.scripts = workspace.scripts;
+    state.runs = workspace.runs;
+    state.research.saved = workspace.savedStudies;
+    // Preserve chart/draft/selection; the next navigation shows new saved work.
+    toast(
+      "Agent saved research. Open Backtests or the script list to inspect it.",
+    );
+  } catch (error) {
+    toast(error.message, true);
+  }
+});
 let livePolling = false,
   liveRevision = "",
   flowPulse = 0;
@@ -1416,6 +1616,7 @@ if (api)
     state.edge.config = await call("edgeConfig");
     state.whale.config = await call("whaleConfig");
     state.providerSettings = await call("providerSettings");
+    if (api.agentReady) state.agentAccess = await call("agentStatus");
     const ui = await call("uiConfig");
     state.appearance = ui.appearance;
     state.watchlist = ui.watchlist;
@@ -1424,6 +1625,7 @@ if (api)
     hydrated = true;
     updateAppearance();
     render();
+    await api.agentReady?.();
   });
 else
   $("#preview-status").title =

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { desktopMcpSmoke } from "./desktop-mcp-smoke.js";
 const evidenceDir = path.resolve("test-results/desktop");
 await fs.mkdir(evidenceDir, { recursive: true });
 let stage = "launch";
@@ -266,6 +267,8 @@ try {
     document.querySelector("#toast")?.textContent.includes("UTF-8"),
   );
   assert.equal(await page.locator("#source").inputValue(), importedSource);
+  mark("attached desktop MCP");
+  await desktopMcpSmoke({ app, page, dataDir: dir });
   await page.locator('[data-page="settings"]').click();
   await page.locator("#appearance-theme").selectOption("light");
   await page.locator("#appearance-save").click();

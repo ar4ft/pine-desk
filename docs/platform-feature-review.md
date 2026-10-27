@@ -2,6 +2,10 @@
 
 Reviewed October 27, 2026 against Pine Desk `0.8.1`, commit `0c5396d`. This is a product comparison and proposed implementation backlog, not a claim that the missing features have shipped. Public product descriptions were inspected; authenticated accounts, execution and paid feeds were not tested.
 
+## Implementation update — v0.9.0
+
+The [shared desktop/MCP service](desktop-mcp.md) now implements desktop attachment, local authentication, capability controls, single service ownership, workspace chart commands and frozen research inputs. Linked multi-chart layouts and concurrent per-panel subscriptions remain milestone 2; the current controlled chart has panel ID `workspace`. The comparison below retains the original 0.8.1 baseline.
+
 ## Recommendation
 
 Build an independent local terminal on the existing Vela/PineTS foundation. Prioritize a shared market-data service, linked charts, persistent alerts, deeper order-flow analysis and chart-based paper trading. Extend the existing options tools instead of creating another disconnected options page.

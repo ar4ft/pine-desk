@@ -36,14 +36,15 @@ Choose Backtest to inspect trades and equity. App cost/sizing overrides are docu
 
 An LLM client supporting MCP can read your data and saved scripts, save custom source, run backtests and inspect order flow. It can also browse the public library and query the configured Edge Stats / Whale Options services. No LLM or provider subscription is bundled into Pine Desk.
 
-After `npm ci`, configure your client:
+For the running desktop, enable local agent access in **MCP & setup**, choose the allowed controls, and reconnect your client. See [shared desktop service, permissions and tools](desktop-mcp.md). After `npm ci`, configure your client:
 
 ```json
 {
   "mcpServers": {
     "pine-desk": {
       "command": "node",
-      "args": ["/absolute/path/to/pine-desk/core/mcp.js"]
+      "args": ["/absolute/path/to/pine-desk/core/mcp.js"],
+      "env": { "PINE_DESK_MCP_MODE": "desktop" }
     }
   }
 }
@@ -57,14 +58,14 @@ For Edge Stats, ask the agent to check coverage first and preserve N, Wilson CI,
 
 Reference documentation: [PineTS](https://github.com/LuxAlgo/PineTS), [Vela PineTS addon](https://github.com/LuxAlgo/Vela-pinets), [Vela](https://velacharts.dev/), [LuxAlgo documentation index](https://www.luxalgo.com/llms.txt).
 
-Continuous streams and parameter research are documented in [Live data](live-data.md) and [Strategy research](strategy-research.md). The MCP server exposes their process-local controls and saved results.
+Continuous streams and parameter research are documented in [Live data](live-data.md) and [Strategy research](strategy-research.md). Attached MCP controls the desktop service and shares its streams; standalone mode owns a separate service and requires exclusive directory ownership.
 
-Options MCP tools: `options_refresh`, `options_start`, `options_snapshot`, `options_stop`. The standalone process uses `UNUSUAL_WHALES_API_KEY`; desktop encrypted credentials cannot be unlocked by the Node server. See [provider and options documentation](options.md#credential-storage-and-mcp).
+Options MCP tools: `options_refresh`, `options_start`, `options_snapshot`, `options_stop`. Attached mode uses the desktop’s encrypted credentials without exposing keys to the client. Standalone mode uses `UNUSUAL_WHALES_API_KEY`; it cannot unlock the desktop vault. See [provider and options documentation](options.md#credential-storage-and-mcp).
 
 Use the editor’s **Import .pine / .txt** button for native source files (UTF-8, up to 200 KB, Pine v5/v6). Imports save the source and provenance without executing it. [File import and workspace guide](workspaces.md#import-pine-and-txt-scripts).
 
 ## Crypto options and educational calculations
 
-The six new crypto/education tools are listed in [Crypto options & Greeks Lab](crypto-options.md#mcp). Deribit public access needs no key. Desktop and stdio streams remain separate processes; tools preserve exchange units, timestamps and coverage. `options_greeks` produces hypothetical European/American-model values rather than pricing inverse crypto settlement.
+The six new crypto/education tools are listed in [Crypto options & Greeks Lab](crypto-options.md#mcp). Deribit public access needs no key. Attached clients share the desktop streams; standalone mode has its own streams; tools preserve exchange units, timestamps and coverage. `options_greeks` produces hypothetical European/American-model values rather than pricing inverse crypto settlement.
 
 Research reliability tools and licensed historical-data setup are listed in the [v0.7 guide](research-reliability.md). The standalone MCP process uses `MASSIVE_API_KEY` for Massive access.

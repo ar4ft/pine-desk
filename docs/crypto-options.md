@@ -63,7 +63,7 @@ The existing local stdio MCP exposes:
 
 * `crypto_options_refresh`: BTC/ETH public chain snapshot.
 * `crypto_options_contract`: selected-contract ticker/Greeks.
-* `crypto_options_start`, `crypto_options_stop`: this process's stream lifecycle.
+* `crypto_options_start`, `crypto_options_stop`: the owning service’s stream lifecycle.
 * `crypto_options_snapshot`: timestamped coverage, ticker, trades, errors and gaps.
 * `options_greeks`: educational BSM values with optional 2–201-point curve.
 
@@ -76,7 +76,7 @@ Example calculator arguments:
 }
 ```
 
-Desktop and stdio run **separate in-memory Deribit sessions**, just like other live feeds. An LLM can fetch its own public session without credentials; it does not automatically read the desktop stream. Setup is in [custom scripts and MCP](custom-scripts-and-mcp.md).
+[Desktop MCP mode](desktop-mcp.md) shares the desktop’s in-memory Deribit session. Standalone mode owns an independent public session without credentials and requires exclusive ownership of its data directory.
 
 ## Other crypto options exchanges
 

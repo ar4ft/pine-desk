@@ -40,7 +40,7 @@ For development: `npm run dev`. For a local Apple Silicon and Intel DMG/ZIP buil
 * **Greeks Lab:** Independent interactive European/American-option education with call/put controls, spot/time/IV sensitivity curves, first and higher Greeks, explicit units, explanations, presets and a short exercise.
 * **Crypto options:** Public Deribit BTC/ETH inverse-option chains, IV smiles, ATM/forward term structure, selected exchange-reported Greeks and acknowledged public WebSocket updates, optional bounded expiry-chain quotes and option trade prints. No key required; snapshots and live coverage are labeled. Export JSON. Bybit USDC/USDT and OKX inverse REST adapters add explicit 30-second polling; fixture-tested because live endpoints return HTTP 403 here.
 * **Option research:** Save/import/record full-chain snapshots and compare observations. Fixed-beta SABR with held-out diagnostics, 25-delta skew brackets, modeled gamma scenarios, six surface strategy templates, mixed-expiry multi-leg payoff/Greeks analysis, and saved bid/ask quote replays with settlement-currency cash, fees/slippage, supplied funding and static margin checks. Gzip archives, eight rule-driven strategy templates, calendars, targets/stops, latency/depth assumptions, modeled hedges, explicit American exercise/dividends, saved-run allocations and prepared Massive historical backfill. [Method and limitations](docs/research-reliability.md).
-* **MCP:** A separate local stdio server shares the app's dataset, scripts, imported trades, and saved runs. Official public LuxAlgo catalog calls are forwarded through its hosted MCP.
+* **MCP:** Attach a local stdio client to the running desktop's data service, streams and configured provider credentials. Agents can inspect the displayed dataset, edit/run chart scripts, set the viewport and start research on a frozen snapshot. Access controls and activity are in **MCP & setup**. Standalone research remains available with exclusive data-directory ownership. See [desktop MCP setup](docs/desktop-mcp.md). Official public LuxAlgo catalog calls are forwarded through its hosted MCP.
 
 This is a working first research edition, not full parity with the LuxAlgo platform. It does not implement TPO, session/rolling profiles, footprint imbalances, order books, all platform screeners, nested/anchored optimization, automatically maintained exchange calendars, broker execution, or LuxAlgo account authentication. Library indicators are not automatically converted to strategies; specify entry/exit logic in a `strategy(...)` script.
 
@@ -79,14 +79,15 @@ Time accepts ISO dates or Unix seconds/milliseconds. Trade `side` is the **aggre
 
 ## MCP setup
 
-With Node installed and `npm ci` completed, add this to an MCP client supporting stdio. Replace the path with your checkout's absolute path:
+With Node installed and `npm ci` completed, enable local agent access in **MCP & setup**, then add this to an MCP client supporting stdio. Replace the path with your checkout's absolute path:
 
 ```json
 {
   "mcpServers": {
     "pine-desk": {
       "command": "node",
-      "args": ["/absolute/path/to/pine-desk/core/mcp.js"]
+      "args": ["/absolute/path/to/pine-desk/core/mcp.js"],
+      "env": { "PINE_DESK_MCP_MODE": "desktop" }
     },
     "luxalgo": {
       "url": "https://mcp.luxalgo.com/mcp"
@@ -95,7 +96,7 @@ With Node installed and `npm ci` completed, add this to an MCP client supporting
 }
 ```
 
-The URL entry requires a client supporting Streamable HTTP; some clients use a different remote-server configuration shape. Public library tools need no key. The local server's stdout is reserved for MCP protocol traffic. `npm run mcp` also starts it; this is not an HTTP endpoint inside the desktop app.
+The URL entry requires a client supporting Streamable HTTP; some clients use a different remote-server configuration shape. Public library tools need no key. The local server's stdout is reserved for MCP protocol traffic. `npm run mcp` also starts it. Desktop attachment uses authenticated local IPC; see [modes, permissions and standalone setup](docs/desktop-mcp.md).
 
 Additional tools: five `live_*` streaming/flow tools, four `research_*` study tools plus `compare_runs`, seven `edge_*` tools and nine `whale_*` read-only tools (documented in their setup guides). These forward to the selected upstream services; their stores are separate from the chart dataset.
 

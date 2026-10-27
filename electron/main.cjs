@@ -12,16 +12,21 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 let win, updates, shutdown;
 let windowStore;
+let bridge, rendererRPC, releaseOwner, shutdownTask;
 const { gracefulQuit } = require("./graceful-quit.cjs");
 const isQuitting = gracefulQuit({
   app,
-  persist: () =>
-    win &&
-    !win.isDestroyed() &&
-    windowStore?.write("window-state", win.getNormalBounds()),
+  persist: async () => {
+    if (win && !win.isDestroyed())
+      await windowStore?.write("window-state", win.getNormalBounds());
+    rendererRPC?.rejectAll();
+    await bridge?.stop();
+    await shutdownTask;
+    await releaseOwner?.();
+  },
   stop: () => {
     updates?.stop();
-    shutdown?.();
+    shutdownTask = shutdown?.();
   },
 });
 app.setName("Pine Desk");
@@ -101,10 +106,44 @@ async function createWindow() {
         : url.startsWith("file://") || url.startsWith("http://127.0.0.1:5173/"))
     );
   };
+  rendererRPC?.rejectAll();
+  rendererRPC = require("./renderer-bridge.cjs").rendererBridge({
+    ipcMain,
+    getWindow: () => win,
+    trusted,
+  });
+  win.webContents.on("did-start-loading", () => rendererRPC.rejectAll());
+  win.on("closed", () => rendererRPC.rejectAll());
+  if (!bridge) {
+    const { DesktopBridge, bridgeDefaults } = await import(
+      "../core/desktop-bridge.js"
+    );
+    const { desktopDispatcher } = await import("../core/desktop-session.js");
+    bridge = new DesktopBridge({
+      dataDir: store.dataDir,
+      dispatch: desktopDispatcher({
+        dispatch,
+        renderer: (action, args) => rendererRPC.request(action, args),
+        notify: () => {
+          if (win && !win.isDestroyed())
+            win.webContents.send("desk:service-changed");
+        },
+      }),
+    });
+    await bridge.configure(
+      (await store.read("agent-access")) ?? bridgeDefaults,
+    );
+  }
   ipcMain.removeHandler("desk:call");
   ipcMain.handle("desk:call", async (event, action, args) => {
     if (!trusted(event)) throw new Error("Untrusted window.");
     try {
+      if (action === "agentStatus") return bridge.status();
+      if (action === "agentConfigure") {
+        const status = await bridge.configure(args);
+        await store.write("agent-access", bridge.config);
+        return status;
+      }
       return await dispatch(action, args);
     } catch (error) {
       if (error.diagnostic)
@@ -202,6 +241,15 @@ async function createWindow() {
   else await win.loadFile(path.join(__dirname, "../dist/index.html"));
 }
 app.whenReady().then(async () => {
+  try {
+    const { dataDir } = await import("../core/store.js");
+    const { acquireServiceOwner } = await import("../core/service-owner.js");
+    releaseOwner = await acquireServiceOwner(dataDir);
+  } catch (error) {
+    dialog.showErrorBox("Pine Desk service is already running", error.message);
+    app.quit();
+    return;
+  }
   await createWindow();
   const { createUpdates } = require("./updates.cjs");
   updates = createUpdates({ app, dialog, getWindow: () => win });

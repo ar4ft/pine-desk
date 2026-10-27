@@ -101,7 +101,7 @@ async function researchSnapshot(args) {
 export const optionsProvider = new UnusualWhales();
 export const whaleRunner = new WhaleRunner();
 export const researchJobs = new ResearchJobs();
-export function shutdown() {
+export async function shutdown() {
   stopOptionStudies();
   optionRecorder.stop();
   for (const provider of Object.values(cryptoExchanges)) provider.stop();
@@ -109,6 +109,7 @@ export function shutdown() {
   researchJobs.stop();
   optionsProvider.stop();
   whaleRunner.stop();
+  await liveWrite.catch(() => {});
 }
 async function datasetFor(args) {
   return structuredClone(
