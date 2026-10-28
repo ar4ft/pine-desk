@@ -297,6 +297,10 @@ try {
   );
   await reopened.locator("#toggle-editor").click();
   assert.equal(await reopened.locator("#source").inputValue(), importedSource);
+  assert.equal(
+    (await reopened.evaluate(() => window.desk.call("depthSnapshot"))).active,
+    false,
+  );
   const alertStatus = await reopened.evaluate(() =>
     window.desk.call("alertStatus"),
   );

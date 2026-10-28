@@ -1,3 +1,4 @@
+import { BinanceDepth } from "./depth.js";
 import { AlertEngine } from "./alerts.js";
 import { QuoteSubscriptions } from "./quote-subscriptions.js";
 import { ChartPanels } from "./chart-panels.js";
@@ -68,6 +69,7 @@ export const live = new BinanceLive({
     );
   },
 });
+export const depth = new BinanceDepth();
 export const chartPanels = new ChartPanels({ primary: live });
 export const marketQuotes = new MarketQuotes({ maxSymbols: 100 });
 export const quoteSubscriptions = new QuoteSubscriptions(marketQuotes);
@@ -120,6 +122,7 @@ export const researchJobs = new ResearchJobs();
 export async function shutdown() {
   await alertEngine.close();
   quoteSubscriptions.stop();
+  depth.stop();
   chartPanels.stop();
   marketQuotes.stop();
   stopOptionStudies();
@@ -366,6 +369,12 @@ export async function dispatch(action, args = {}) {
       });
     case "chartPanelsSnapshot":
       return chartPanels.snapshot();
+    case "depthStart":
+      return depth.start(args);
+    case "depthStop":
+      return depth.stop();
+    case "depthSnapshot":
+      return depth.snapshot(args);
     case "watchlistStart":
       return quoteSubscriptions.set("watchlist", args.symbols);
     case "watchlistStop":

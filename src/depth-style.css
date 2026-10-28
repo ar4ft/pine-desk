@@ -1,0 +1,154 @@
+.depth-workspace {
+  --depth-bid: var(--green);
+  --depth-ask: var(--red);
+}
+:root[data-theme="light"] .depth-workspace {
+  --depth-bid: #14795b;
+  --depth-ask: #b62950;
+}
+.flow-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.flow-tabs button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.depth-controls {
+  flex-wrap: wrap;
+}
+#depth-status {
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 20px;
+  overflow-wrap: anywhere;
+}
+.depth-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 24px 0 16px;
+}
+.depth-identity > strong {
+  font-size: 22px;
+}
+.depth-identity > span:last-child {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+.depth-metrics small {
+  color: var(--muted);
+  display: block;
+  margin-top: 8px;
+}
+.depth-metrics strong {
+  font-size: 22px;
+}
+.depth-balance {
+  height: 5px;
+  background: var(--depth-ask);
+  overflow: hidden;
+  border-radius: 4px;
+  margin: 12px 0 24px;
+}
+.depth-balance > span {
+  display: block;
+  height: 100%;
+  background: var(--depth-bid);
+}
+.depth-curve {
+  margin-bottom: 20px;
+}
+.depth-curve svg {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+}
+.depth-curve line {
+  stroke: var(--border);
+}
+.depth-curve text {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.depth-curve path {
+  fill: none;
+  stroke-width: 2;
+}
+.depth-curve path.bids {
+  stroke: var(--depth-bid);
+}
+.depth-curve path.asks {
+  stroke: var(--depth-ask);
+}
+.depth-ladders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.depth-ladder .table-wrap {
+  max-height: 470px;
+  overflow: auto;
+}
+.depth-ladder table {
+  width: 100%;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.depth-ladder th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+.depth-ladder th,
+.depth-ladder td {
+  text-align: right;
+  padding: 9px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.depth-ladder td:nth-child(2) {
+  position: relative;
+}
+.depth-size-bar {
+  position: absolute;
+  right: 0;
+  top: 1px;
+  bottom: 1px;
+  opacity: 0.12;
+}
+.depth-size-bar + span {
+  position: relative;
+}
+.depth-ladder.bids .depth-size-bar {
+  background: var(--depth-bid);
+}
+.depth-ladder.asks .depth-size-bar {
+  background: var(--depth-ask);
+}
+.depth-ladder.bids td:first-child {
+  color: var(--depth-bid);
+}
+.depth-ladder.asks td:first-child {
+  color: var(--depth-ask);
+}
+.depth-empty {
+  min-height: 280px;
+}
+@media (max-width: 1200px) {
+  .depth-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 850px) {
+  .depth-ladders {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .depth-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

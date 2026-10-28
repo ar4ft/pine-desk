@@ -8,6 +8,8 @@ export function toolDefinitions() {
     if (["loadMarket", "importBars"].includes(action)) capability = "charts";
     if (
       [
+        "depthStart",
+        "depthStop",
         "liveStart",
         "liveStop",
         "optionsStart",
@@ -99,6 +101,26 @@ export function toolDefinitions() {
     "Import executed trade CSV: time,price,size,side. Side must be buy/sell aggressor. Replaces local trade dataset.",
     { csv: z.string().max(20000000), symbol: z.string() },
     "importTrades",
+    false,
+  );
+  tool(
+    "depth_snapshot",
+    "Read the owning service's Binance spot order book: best bids/asks, cumulative base size, spread and displayed-level imbalance. Stale or unsynchronized books return no levels. No stream is started; snapshot coverage is bounded, not full exchange depth.",
+    { limit: z.number().int().min(1).max(100).default(20) },
+    "depthSnapshot",
+  );
+  tool(
+    "depth_start",
+    "Start or switch the shared Binance spot depth monitor (one symbol). Synchronizes public REST depth and 100ms diff updates. Does not change candles, trades or alerts; requires stream permission. Does not place orders.",
+    { symbol: z.string().regex(/^[A-Z0-9]{3,24}$/) },
+    "depthStart",
+    false,
+  );
+  tool(
+    "depth_stop",
+    "Stop the shared depth monitor and clear the book. Leaves other market streams running; requires stream permission.",
+    {},
+    "depthStop",
     false,
   );
   tool(

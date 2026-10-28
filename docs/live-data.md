@@ -40,3 +40,7 @@ This implementation does not include futures, depth/order books, liquidation fee
 The stdio server adds `live_start`, `live_status`, `live_stop`, `live_order_flow` and `live_save_trades`. **In desktop mode these tools control the desktop connection and read its existing buffer.** Client disconnect does not stop the stream. Standalone mode owns its own connection and must have exclusive ownership of the data directory. Use different `PINE_DESK_DATA_DIR` values for independent sessions. See [desktop MCP setup](desktop-mcp.md).
 
 Check `live_status` and data timestamps before reporting results. Preserve gap and retained-window caveats in any agent summary. Stopping/closing the owning process disconnects its stream.
+
+## Live order book
+
+[Live depth / DOM](live-depth.md) uses a separate public Binance snapshot-plus-diff feed. Start it from Order flow. It shares service ownership with MCP, reports bounded coverage and hides stale or unsynchronized prices. It does not change the candle or executed-trade dataset.

@@ -1,6 +1,6 @@
 # Shared desktop service and MCP
 
-Available since v0.9.0; linked-chart tools were added in v0.10.0 and [persistent alert tools](local-alerts.md) in v0.11.0. An attached MCP client uses the running Electron main process for data, streams, credentials and research. It does not start a second Binance/Unusual Whales/crypto connection. Chart commands go to the renderer and return observed state after completion.
+Available since v0.9.0; linked-chart tools were added in v0.10.0 and [persistent alert tools](local-alerts.md) in v0.11.0. [Live order-book tools](live-depth.md) were added in v0.12.0: `depth_snapshot` uses read access; `depth_start` and `depth_stop` require stream permission. An attached MCP client uses the running Electron main process for data, streams, credentials and research. It does not start a second Binance/Unusual Whales/crypto connection. Chart commands go to the renderer and return observed state after completion.
 
 ## Setup
 

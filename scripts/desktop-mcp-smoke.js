@@ -1,3 +1,4 @@
+import { desktopDepthSmoke } from "./desktop-depth-smoke.js";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -52,6 +53,12 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       arguments: { monitoring: true, notifications: true },
     });
     assert.equal(alertDenied.isError, true);
+    const depthDenied = await readOnly.callTool({
+      name: "depth_start",
+      arguments: { symbol: "BTCUSDT" },
+    });
+    assert.equal(depthDenied.isError, true);
+    assert.equal((await call(readOnly, "depth_snapshot")).active, false);
     for (const scope of ["charts", "streams", "research", "alerts"])
       await page.locator("#agent-" + scope).check();
     await page.locator("#agent-save").click();
@@ -242,6 +249,9 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       panelId: "workspace",
       ...original.panels[0].editor,
     });
+    const depthClient = await connect();
+    await desktopDepthSmoke({ app, page, first: depthClient, second, call });
+    await depthClient.close();
     // Real alert engine, durable store and attached MCP; replace only transport
     // and OS notification submission so packaged CI never depends on permissions.
     await app.evaluate(({ app }) => {
@@ -357,6 +367,6 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     await Promise.allSettled(clients.map((client) => client.close()));
   }
   console.log(
-    "Desktop MCP passed: persistent alerts and scope enforcement, linked charts, shared primary/comparison stream, observed chart edits, execution errors, snapshot research, client disconnect and revocation.",
+    "Desktop MCP passed: synchronized depth, persistent alerts and scope enforcement, linked charts, shared primary/comparison stream, observed chart edits, execution errors, snapshot research, client disconnect and revocation.",
   );
 }

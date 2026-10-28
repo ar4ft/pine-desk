@@ -1,4 +1,12 @@
 import {
+  newDepthState,
+  depthView,
+  retainDepthDraft,
+  pollDepth,
+  bindDepth,
+} from "./depth-view.js";
+import "./depth-style.css";
+import {
   newAlertsState,
   alertsView,
   retainAlertDraft,
@@ -136,6 +144,8 @@ const titles = {
   settings: "Settings",
 };
 const state = {
+  depth: newDepthState(),
+  flowTab: "trades",
   alerts: newAlertsState(),
   learning: newLearningState(),
   crypto: newCryptoState(),
@@ -330,11 +340,28 @@ function toast(message, error = false) {
 function syncBusyControls() {
   document
     .querySelectorAll(
-      "#toggle-editor, #chart-count, [data-chart-link], [data-panel-load], [data-panel-live], #alert-save, #alerts-toggle, #alerts-notifications, [data-alert-edit], [data-alert-enable], [data-alert-delete], [data-alert-ack]",
+      "#depth-start, #depth-limit, [data-flow-tab], #toggle-editor, #chart-count, [data-chart-link], [data-panel-load], [data-panel-live], #alert-save, #alerts-toggle, #alerts-notifications, [data-alert-edit], [data-alert-enable], [data-alert-delete], [data-alert-ack]",
     )
     .forEach((el) => {
       el.disabled = state.busy;
     });
+  if ($("#depth-stop"))
+    $("#depth-stop").disabled = state.busy || !state.depth.snapshot?.active;
+}
+async function pollOrderBook() {
+  if (
+    !api ||
+    state.page !== "orderflow" ||
+    state.flowTab !== "depth" ||
+    state.busy
+  )
+    return;
+  await pollDepth(
+    state.depth,
+    call,
+    () =>
+      !state.busy && state.page === "orderflow" && state.flowTab === "depth",
+  );
 }
 async function task(fn) {
   if (state.busy) return;
@@ -445,6 +472,7 @@ function render() {
   const destinationChanged = document.body.dataset.section !== state.page;
   captureWorkspaceChart();
   linkedCharts.capture();
+  retainDepthDraft(state.depth);
   retainAlertDraft(state.alerts);
   retainOptionsDraft(state.options);
   retainResearchDraft(state.research);
@@ -518,7 +546,8 @@ function render() {
     if (state.run) paintBacktest();
     requestAnimationFrame(() => paintComparison(state.research.comparison));
   }
-  if (state.page === "orderflow" && state.flow) paintFlow();
+  if (state.page === "orderflow" && state.flowTab === "trades" && state.flow)
+    paintFlow();
   scheduleSession();
   if (state.page === "options") {
     paintOptions(state.options);
@@ -599,8 +628,10 @@ function backtestTab(r) {
   return `<div class="plot-card"><div class="panel-heading"><span>MONTE CARLO RESAMPLING</span><button id="simulate" class="primary">Simulate 200 paths</button></div><canvas id="simulation-plot"></canvas><div id="simulation-metrics" class="simulation-metrics">Seed 42 · sampling closed-trade net P&L with replacement, at fixed cash size.<br>This model excludes intra-trade equity, serial dependence, and changing position sizes.</div></div>`;
 }
 function flow() {
+  const tabs = `<div class="flow-tabs" role="group" aria-label="Order flow view"><button data-flow-tab="trades" aria-pressed="${state.flowTab === "trades"}">Executed trades</button><button data-flow-tab="depth" aria-pressed="${state.flowTab === "depth"}">Live order book / DOM</button></div>`;
+  if (state.flowTab === "depth") return tabs + depthView(state.depth);
   const f = state.flow;
-  return `<div class="page-intro"><span class="eyebrow">FOLLOW THE EXECUTED VOLUME</span><h1>Read what traded.</h1><p>Footprints, cumulative delta, and volume at price from trades with an explicit aggressor side.</p></div><div class="searchbar"><label>Source<select id="flow-source"><option value="imported" ${state.flowSource === "imported" ? "selected" : ""}>Imported / saved trades</option><option value="live" ${state.flowSource === "live" ? "selected" : ""}>Live Binance retained window</option></select></label><label>Market label<input id="trade-symbol" value="${esc(f?.symbol ?? "BTCUSDT")}" aria-label="Trade market label"></label><label>Aggregation<select id="flow-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.flowSettings.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Price bucket<input id="tick-size" type="number" min=".000001" step="any" value="${state.flowSettings.tickSize}"></label><button id="import-trades" class="primary">Import trade CSV</button><button id="refresh-flow">Recompute</button><button id="save-live-trades">Save live trade snapshot</button></div>${
+  return `${tabs}<div class="page-intro"><span class="eyebrow">FOLLOW THE EXECUTED VOLUME</span><h1>Read what traded.</h1><p>Footprints, cumulative delta, and volume at price from trades with an explicit aggressor side.</p></div><div class="searchbar"><label>Source<select id="flow-source"><option value="imported" ${state.flowSource === "imported" ? "selected" : ""}>Imported / saved trades</option><option value="live" ${state.flowSource === "live" ? "selected" : ""}>Live Binance retained window</option></select></label><label>Market label<input id="trade-symbol" value="${esc(f?.symbol ?? "BTCUSDT")}" aria-label="Trade market label"></label><label>Aggregation<select id="flow-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.flowSettings.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Price bucket<input id="tick-size" type="number" min=".000001" step="any" value="${state.flowSettings.tickSize}"></label><button id="import-trades" class="primary">Import trade CSV</button><button id="refresh-flow">Recompute</button><button id="save-live-trades">Save live trade snapshot</button></div>${
     f
       ? `<div class="metrics"><div><span>Executed prints</span><strong>${num(f.totalTrades, 0)}</strong></div><div><span>Aggressor buys</span><strong class="positive">${num(f.buy, 4)}</strong></div><div><span>Aggressor sells</span><strong class="negative">${num(f.sell, 4)}</strong></div><div><span>Net delta</span><strong>${num(f.buy - f.sell, 4)}</strong></div><div><span>Point of control</span><strong>${num(f.poc)}</strong></div></div><div class="plot-card"><div class="panel-heading"><span>CUMULATIVE VOLUME DELTA</span><span>${esc(f.origin ?? "Imported range")} · ${f.gaps?.length ?? 0} gap warnings</span></div><canvas id="cvd-plot"></canvas></div><div class="flow-grid"><section class="plot-card"><div class="panel-heading"><span>FOOTPRINT · MOST RECENT BAR</span><span>Sell / buy volume</span></div><div class="table-wrap"><table><thead><tr><th>Price bucket</th><th class="negative">Sell</th><th class="positive">Buy</th><th>Delta</th></tr></thead><tbody>${f.bars
           .at(-1)
@@ -634,6 +665,10 @@ function mcp() {
       "Inspect the running workspace or open a page",
     ],
     ["desktop_chart_*", "Edit source, run a script or set the visible range"],
+    [
+      "depth_snapshot / depth_start / depth_stop",
+      "Read or manage the shared live spot order book",
+    ],
     ["workspace", "Read scripts, data, saved runs"],
     ["load_market / import_bars", "Fetch settled candles or import OHLCV"],
     [
@@ -898,6 +933,18 @@ function alertBindings() {
   });
 }
 function bind() {
+  document.querySelectorAll("[data-flow-tab]").forEach((el) => {
+    el.onclick = () => {
+      if (!state.busy) {
+        state.flowTab = el.dataset.flowTab;
+        render();
+      }
+    };
+  });
+  if (state.page === "orderflow" && state.flowTab === "depth") {
+    bindDepth({ state: state.depth, call, task });
+    pollOrderBook();
+  }
   if (state.page === "alerts") {
     alertBindings();
     pollAlerts();
@@ -1629,6 +1676,7 @@ async function pollLive() {
       liveRevision = revision;
       if (
         state.page === "orderflow" &&
+        state.flowTab === "trades" &&
         state.flowSource === "live" &&
         !state.busy &&
         Date.now() - flowPulse > 2000
@@ -1761,6 +1809,7 @@ if (api) {
   }, 1000);
   setInterval(pollWatchlist, 1000);
   setInterval(pollAlerts, 2000);
+  setInterval(pollOrderBook, 500);
 }
 
 async function mountOptionsChart() {
