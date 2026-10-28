@@ -775,8 +775,26 @@ export function toolDefinitions() {
   );
 
   tool(
+    "market_search",
+    "Search currently trading Binance spot pairs by symbol or base asset. Cached public exchange metadata; no credentials.",
+    { query: z.string().max(40) },
+    "marketSearch",
+  );
+  tool(
+    "watchlist_snapshot",
+    "Read the desktop-owned live Binance watchlist ticker state, event times and explicit stale flags. Does not start a stream.",
+    {},
+    "watchlistSnapshot",
+  );
+  tool(
+    "chart_panels_snapshot",
+    "Read comparison chart datasets and stream status from the owning service. Does not change the primary research dataset.",
+    {},
+    "chartPanelsSnapshot",
+  );
+  tool(
     "desktop_state",
-    "Read the running desktop, active page, workspace panel, instrument, editor draft, chart settings and source timestamps. Requires attached desktop mode.",
+    "Read the running desktop, active page, primary and comparison panels, instrument, editor draft, chart settings and source timestamps. Requires attached desktop mode.",
     {},
     "desktopState",
   );
@@ -800,9 +818,9 @@ export function toolDefinitions() {
   );
   tool(
     "desktop_chart_set_range",
-    "Set the workspace chart viewport using Unix milliseconds; return the resulting visible range.",
+    "Set a loaded primary or comparison chart viewport using Unix milliseconds. Linked charts follow when time-range linking is enabled.",
     {
-      panelId: z.literal("workspace"),
+      panelId: z.enum(["workspace", "compare-1", "compare-2", "compare-3"]),
       from: z.number().finite(),
       to: z.number().finite(),
     },

@@ -1,3 +1,4 @@
+import { chartLayout } from "./chart-layout.js";
 import { randomUUID } from "node:crypto";
 import * as store from "./store.js";
 import { validateBars, durations } from "./data.js";
@@ -222,6 +223,26 @@ export function validateLayout(input) {
       origin: String(s.dataset.origin ?? "Saved layout snapshot").slice(0, 200),
     };
   }
+  const multiChart = chartLayout(s.multiChart);
+  if (s.multiChart)
+    multiChart.panels = multiChart.panels.map((p) => {
+      const { snapshot } = validateLayout({
+        snapshot: {
+          page: "workspace",
+          editor: false,
+          source: "",
+          chart: p.chart,
+          dataset: p.dataset,
+        },
+      });
+      if (
+        snapshot.dataset &&
+        (snapshot.dataset.symbol !== p.symbol ||
+          snapshot.dataset.timeframe !== p.timeframe)
+      )
+        throw Error("Comparison snapshot does not match its market.");
+      return { ...p, chart: snapshot.chart, dataset: snapshot.dataset };
+    });
   return {
     name:
       String(input.name ?? "Untitled layout")
@@ -239,6 +260,7 @@ export function validateLayout(input) {
         : "performance",
       chart,
       dataset,
+      multiChart,
     },
   };
 }

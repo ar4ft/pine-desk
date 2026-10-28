@@ -2,6 +2,8 @@
 // A panel snapshot is captured before a research job can outlive a chart change.
 export function desktopDispatcher({ dispatch, renderer, notify = () => {} }) {
   return async (action, args) => {
+    if (action === "chartPanelsSnapshot")
+      return renderer("comparisonSnapshot", {});
     if (action.startsWith("desktop")) return renderer(action, args);
     if (
       [

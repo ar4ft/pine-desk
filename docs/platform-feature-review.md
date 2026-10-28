@@ -2,9 +2,9 @@
 
 Reviewed October 27, 2026 against Pine Desk `0.8.1`, commit `0c5396d`. This is a product comparison and proposed implementation backlog, not a claim that the missing features have shipped. Public product descriptions were inspected; authenticated accounts, execution and paid feeds were not tested.
 
-## Implementation update — v0.9.0
+## Implementation update — v0.10.0
 
-The [shared desktop/MCP service](desktop-mcp.md) now implements desktop attachment, local authentication, capability controls, single service ownership, workspace chart commands and frozen research inputs. Linked multi-chart layouts and concurrent per-panel subscriptions remain milestone 2; the current controlled chart has panel ID `workspace`. The comparison below retains the original 0.8.1 baseline.
+The [shared desktop/MCP service](desktop-mcp.md) now implements desktop attachment, local authentication, capability controls, single service ownership, workspace chart commands and frozen research inputs. The [linked chart foundation](linked-charts.md) adds 1/2/4-chart layouts, symbol/timeframe/range/crosshair linking, shared comparison subscriptions, Binance market search and streaming watchlist quotes. Named watchlist collections, screeners/sorting, multiple link groups, per-panel editors and the command palette remain milestone-2 extensions. The comparison below retains the original 0.8.1 baseline.
 
 ## Recommendation
 
@@ -52,7 +52,7 @@ Existing drawings, indicators and script support are useful foundations, but the
 
 ### 1. Shared data service and desktop MCP bridge
 
-The current service owns one Binance stream and a current research dataset. Separate desktop and MCP instances can compete over shared files. Introduce explicit instrument IDs (venue, asset type, symbol, contract, currency), panel subscriptions and a single owner for live connections and writes. Keep reproducible research snapshots immutable when live panels change.
+At the 0.8.1 baseline, the service owned one Binance stream and a current research dataset; separate desktop and MCP instances could compete over shared files. Introduce explicit instrument IDs (venue, asset type, symbol, contract, currency), panel subscriptions and a single owner for live connections and writes. Keep reproducible research snapshots immutable when live panels change.
 
 Use authenticated local IPC for desktop attachment, with separate capabilities for reading data, changing charts and managing alerts. Preserve standalone MCP research mode. Return the actual panel state after a chart command. An LLM provider remains user-selected; using a remote LLM sends requested context outside the Mac.
 

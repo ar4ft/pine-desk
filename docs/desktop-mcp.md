@@ -1,6 +1,6 @@
 # Shared desktop service and MCP
 
-Available in v0.9.0. An attached MCP client uses the running Electron main process for data, streams, credentials and research. It does not start a second Binance/Unusual Whales/crypto connection. Chart commands go to the renderer and return observed state after completion.
+Available since v0.9.0; linked-chart tools were added in v0.10.0. An attached MCP client uses the running Electron main process for data, streams, credentials and research. It does not start a second Binance/Unusual Whales/crypto connection. Chart commands go to the renderer and return observed state after completion.
 
 ## Setup
 
@@ -34,13 +34,13 @@ The desktop decrypts its saved provider keys when needed; attached clients do no
 
 | Tool | Behavior |
 | --- | --- |
-| `desktop_state` | Read the active page and workspace panel, instrument ID, source/observation times, settled-bar coverage, stream state/gaps, editor draft, drawings, indicators and viewport |
+| `desktop_state` | Read the active page and primary/comparison panels, instrument ID, source/observation times, settled-bar coverage, stream state/gaps, editor draft, drawings, indicators and viewport |
 | `desktop_navigate` | Open a supported page and return desktop state |
 | `desktop_chart_set_script` | Replace the `workspace` editor draft/name without executing the new source |
 | `desktop_chart_run` | Execute the current trusted draft and return the resulting chart state; runtime failures are tool errors and appear in the editor |
-| `desktop_chart_set_range` | Set the workspace viewport using `from`/`to` Unix milliseconds; return the observed range |
+| `desktop_chart_set_range` | Set a loaded primary/comparison viewport using `from`/`to` Unix milliseconds; return the observed range |
 
-The chart tools require `panelId: "workspace"` where shown in their schema. This milestone controls the existing workspace chart. Linked multi-chart layouts and multiple concurrent Binance markets are the next milestone, not part of this release. Options/crypto tools continue to expose their own provider snapshots and update their corresponding desktop views.
+Script tools require `panelId: "workspace"`. Since v0.10.0, viewport control also accepts `compare-1`, `compare-2` and `compare-3` when loaded. [Linked charts and live watchlists](linked-charts.md) add concurrent comparison markets, `chart_panels_snapshot`, `watchlist_snapshot` and `market_search`. Research still uses the primary chart. Options/crypto tools continue to expose their own provider snapshots and update their corresponding desktop views.
 
 Existing tools now share the desktop when attached:
 

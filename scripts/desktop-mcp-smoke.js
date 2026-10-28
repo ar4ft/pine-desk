@@ -99,6 +99,48 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     assert.ok(
       range.panels[0].chart.range.to > range.panels[0].chart.range.from,
     );
+    // Use deterministic REST history for comparison charts in source and packaged apps.
+    await app.evaluate(({ app }, bars) => {
+      const path = process.getBuiltinModule("node:path");
+      const require = process
+        .getBuiltinModule("node:module")
+        .createRequire(path.join(app.getAppPath(), "package.json"));
+      const { chartPanels } = require(
+        path.join(app.getAppPath(), "core/service.js"),
+      );
+      globalThis.pineDeskSmokePanels = {
+        chartPanels,
+        fetchHistory: chartPanels.fetchHistory,
+      };
+      chartPanels.fetchHistory = async (request) => ({
+        symbol: request.symbol,
+        timeframe: request.timeframe,
+        origin: "Binance fixture",
+        bars,
+      });
+    }, bars);
+    await page.locator("#chart-count").selectOption("4");
+    await page.waitForSelector("#compare-3[data-ready=true]");
+    await waitIdle();
+    const grid = await call(second, "desktop_state");
+    assert.equal(grid.panels.length, 4);
+    assert.equal(grid.panels[1].instrument.symbol, "ETHUSDT");
+    assert.equal((await call(second, "chart_panels_snapshot")).length, 3);
+    const linked = await call(second, "desktop_chart_set_range", {
+      panelId: "compare-1",
+      from: bars.at(-60).time,
+      to: bars.at(-1).time,
+    });
+    assert.ok(
+      Math.abs(
+        linked.panels[0].chart.range.from - linked.panels[1].range.from,
+      ) < 3600000,
+    );
+    await page.locator('[data-panel-symbol="compare-1"]').fill("BTCUSDT");
+    await page.locator('[data-panel-load="compare-1"]').click();
+    await waitIdle();
+    await page.locator("#chart-count").selectOption("1");
+    await waitIdle();
     const strategy =
       '//@version=6\nstrategy("Attached test")\nif bar_index == 0\n    strategy.entry("Long", strategy.long, qty=1)';
     const run = await call(first, "run_backtest", { source: strategy });
@@ -143,7 +185,23 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       await app.evaluate(() => globalThis.pineDeskSmokeLive.starts),
       1,
     );
+    await page.locator("#chart-count").selectOption("2");
+    await page.waitForSelector("#compare-1[data-ready=true]");
+    await waitIdle();
+    await page.locator('[data-panel-live="compare-1"]').check();
+    await waitIdle();
+    assert.equal(
+      (await call(second, "chart_panels_snapshot"))[0].sharedWithPrimary,
+      true,
+    );
+    assert.equal(
+      await app.evaluate(() => globalThis.pineDeskSmokeLive.starts),
+      1,
+    );
     await first.close();
+    assert.equal((await call(second, "live_status")).active, true);
+    await page.locator("#chart-count").selectOption("1");
+    await waitIdle();
     assert.equal((await call(second, "live_status")).active, true);
     await call(second, "live_stop");
     assert.equal(
@@ -155,6 +213,9 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       saved.live.createSocket = saved.createSocket;
       saved.live.fetchHistory = saved.fetchHistory;
       delete globalThis.pineDeskSmokeLive;
+      const panels = globalThis.pineDeskSmokePanels;
+      panels.chartPanels.fetchHistory = panels.fetchHistory;
+      delete globalThis.pineDeskSmokePanels;
     });
     const csv =
       "time,open,high,low,close,volume\n" +
@@ -196,6 +257,6 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     await Promise.allSettled(clients.map((client) => client.close()));
   }
   console.log(
-    "Desktop MCP passed: shared stream, observed chart edits, execution errors, snapshot research, client disconnect and revocation.",
+    "Desktop MCP passed: linked charts, shared primary/comparison stream, observed chart edits, execution errors, snapshot research, client disconnect and revocation.",
   );
 }

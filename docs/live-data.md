@@ -4,6 +4,8 @@ Open Workspace, choose a Binance **spot** symbol such as BTCUSDT and a timeframe
 
 The status strip shows connecting, synchronizing, streaming, reconnecting or stopped, the last received event, retained trade count, errors and gap warnings. **Stop live** disconnects and keeps settled candles. Loading another market/CSV or restoring a saved backtest stops the current stream. A stream does not restart automatically after app restart. Network and regional restrictions can make public Binance endpoints unavailable; failures remain visible and never substitute synthetic data.
 
+Comparison charts can follow other markets concurrently, and watchlists have a separate combined ticker stream. See [linked charts and live watchlists](linked-charts.md) for subscription sharing, buffer limits and saved-grid behavior.
+
 ## Candle handling
 
 The stream connects before requesting the latest 1,000 REST candles and buffers events during synchronization. The forming REST candle is excluded. As live kline events arrive, forming candles update the chart but only `x=true` closed candles enter the persisted research dataset. Live candles and scripts share Vela's public MarketDataFeed streaming port; chart ticks do not replace your editor document.

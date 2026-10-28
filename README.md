@@ -4,7 +4,7 @@ A local Mac trading research app built with [PineTS](https://github.com/LuxAlgo/
 
 ![Pine Desk chart workspace](docs/design/shots/workspace-dark.png)
 
-Documentation: [Design direction & before/after](docs/design/README.md) · [Research reliability upgrade](docs/research-reliability.md) · [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md) · [Crypto options & Greeks education](docs/crypto-options.md) · [Options project review](docs/options-project-review.md) · [Option research & replay](docs/option-research.md).
+Documentation: [Linked charts & live watchlists](docs/linked-charts.md) · [Design direction & before/after](docs/design/README.md) · [Research reliability upgrade](docs/research-reliability.md) · [Custom scripts and LLM/MCP setup](docs/custom-scripts-and-mcp.md) · [Edge Stats](docs/edge-stats.md) · [Whale Options and feed access](docs/whale-options.md) · [Live Binance data](docs/live-data.md) · [Strategy research](docs/strategy-research.md) · [Crypto options & Greeks education](docs/crypto-options.md) · [Options project review](docs/options-project-review.md) · [Option research & replay](docs/option-research.md).
 
 Signed distribution and automatic updates are prepared in the [release setup guide](docs/releases.md). Configure Apple signing/notarization secrets later, then manually run the Signed Mac release Action with an existing version tag.
 

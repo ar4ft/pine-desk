@@ -1,3 +1,10 @@
+import { chartLayout } from "../core/chart-layout.js";
+import {
+  LinkedCharts,
+  linkedToolbar,
+  comparisonCards,
+} from "./linked-charts.js";
+import "./linked-charts.css";
 import { uiIcon, navGroups } from "./ui-icons.js";
 import { version } from "../package.json";
 import { agentConfig, agentAccessView } from "./agent-access.js";
@@ -125,6 +132,8 @@ const state = {
   quotes: {},
   layouts: [],
   chartMemory: null,
+  multiChart: chartLayout(),
+  watchLive: { active: false, status: "stopped", quotes: {} },
   options: newOptionsState(),
   providerSettings: null,
   agentAccess: null,
@@ -172,6 +181,17 @@ let chart,
   optionsBarsRevision = "";
 let chartMount = Promise.resolve();
 const api = window.desk;
+const linkedCharts = new LinkedCharts({
+  getLayout: () => state.multiChart,
+  getPrimary: () => ({
+    chart: chartOwner === "workspace" ? chart : null,
+    dataset: state.dataset,
+  }),
+  appearance: chartAppearance,
+  call: (action, args) => (api ? call(action, args) : Promise.resolve([])),
+  changed: scheduleSession,
+  error: (e) => toast(e.message, true),
+});
 let hydrated = !api,
   restoringChart = false,
   sessionTimer;
@@ -194,6 +214,7 @@ try {
     state.settings = { ...state.settings, ...saved.settings };
     state.research.inputs = saved.inputs ?? "{}";
     state.chartMemory = saved.chart ?? null;
+    state.multiChart = chartLayout(saved.multiChart);
   }
 } catch {}
 applyAppearance(state.appearance);
@@ -215,6 +236,7 @@ function sessionSnapshot(withData = false) {
     tab: state.tab,
     chart: state.chartMemory,
     dataset: withData ? state.dataset : null,
+    multiChart: linkedCharts.capture(withData),
   };
 }
 function persistSession() {
@@ -249,6 +271,7 @@ function chartAppearance() {
   };
 }
 function updateAppearance() {
+  linkedCharts.updateAppearance();
   applyAppearance(state.appearance);
   if (chart) {
     chart.setTheme(resolvedTheme(state.appearance));
@@ -291,10 +314,19 @@ function toast(message, error = false) {
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => (el.className = "toast"), 6500);
 }
+function syncBusyControls() {
+  document
+    .querySelectorAll(
+      "#toggle-editor, #chart-count, [data-chart-link], [data-panel-load], [data-panel-live]",
+    )
+    .forEach((el) => {
+      el.disabled = state.busy;
+    });
+}
 async function task(fn) {
   if (state.busy) return;
   state.busy = true;
-  if ($("#toggle-editor")) $("#toggle-editor").disabled = true;
+  syncBusyControls();
   $("#status").textContent = "Working…";
   try {
     await fn();
@@ -302,7 +334,7 @@ async function task(fn) {
     toast(e.message, true);
   } finally {
     state.busy = false;
-    if ($("#toggle-editor")) $("#toggle-editor").disabled = false;
+    syncBusyControls();
     $("#status").textContent = "Local workspace";
   }
 }
@@ -385,6 +417,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 function destroyChart() {
+  linkedCharts.destroyViews();
   chartOwner = null;
   optionsOverlay = null;
   handle = null;
@@ -395,8 +428,10 @@ function destroyChart() {
   chartFeed = null;
 }
 function render() {
+  linkedCharts.requests();
   const destinationChanged = document.body.dataset.section !== state.page;
   captureWorkspaceChart();
+  linkedCharts.capture();
   retainOptionsDraft(state.options);
   retainResearchDraft(state.research);
   retainWhaleDraft(state.whale);
@@ -434,7 +469,7 @@ function render() {
   if (["workspace", "backtest", "crypto", "options"].includes(state.page))
     $("#page").insertAdjacentHTML("afterbegin", workflowView(state));
   bind();
-  if ($("#toggle-editor")) $("#toggle-editor").disabled = state.busy;
+  syncBusyControls();
   bindWorkflow({
     navigate: (page, step) => {
       if (state.busy) return;
@@ -480,7 +515,7 @@ function workspace() {
   const b = state.dataset.bars,
     last = b.at(-1),
     change = (last.close / b[0].close - 1) * 100;
-  return `<div class="market-overview"><div class="market-title"><span class="market-symbol">${uiIcon("workspace")}</span><div><strong>${esc(state.dataset.symbol)}</strong><small>${esc(state.dataset.origin)}</small></div></div><strong class="price" id="market-price">${num(last.close)}</strong><span id="market-change" class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${num(change)}%</span></div><div class="marketbar"><label class="sr-only" for="symbol">Market symbol</label><input id="symbol" aria-label="Market symbol" value="${esc(state.dataset.symbol === "DEMO" ? "BTCUSDT" : state.dataset.symbol)}" maxlength="24"><select id="timeframe" aria-label="Timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.dataset.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select><label>History bars<input id="history-limit" type="number" min="2" max="50000" value="1000" style="width:85px"></label><button id="load-market">Load market</button><button id="live-start" class="primary">Start live</button><button id="live-stop" ${state.live.active ? "" : "disabled"}>Stop live</button><button id="import-bars">Import CSV</button><div class="spacer"></div><button id="toggle-editor" class="icon-btn" title="Toggle editor" aria-label="Toggle editor">${uiIcon("mcp")}</button><button id="focus-chart" aria-pressed="${!!state.focusChart}" title="Focus chart (⌘⇧F)">${uiIcon("focus")}<span>${state.focusChart ? "Exit focus" : "Focus chart"}</span><kbd>${state.focusChart ? "Esc" : navigator.platform.includes("Mac") ? "⌘⇧F" : "Ctrl⇧F"}</kbd></button></div><p id="live-status"></p><div class="workspace-grid ${state.editor ? "" : "no-editor"}"><section class="chart-panel"><div class="panel-heading"><span>Price action <i class="dot"></i> ${esc(state.dataset.timeframe)}</span><span>Vela™ / PineTS</span></div><div id="chart"></div><div class="chart-footer"><span>${b.length} settled bars · ${date(b[0].time)} — ${date(last.time)} UTC</span><span>Live forming bar stays outside research snapshots</span></div></section>${state.editor ? `<section class="editor"><div class="panel-heading"><span>Pine editor</span><span class="tag">v5 / v6</span></div><div class="editor-tools"><select id="script-select" aria-label="Saved script"><option value="">Choose a script…</option>${state.scripts.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select><button id="save-script">Save</button><button id="import-script">Import .pine / .txt</button></div><input id="script-name" value="${esc(state.name)}" aria-label="Script name"><div id="pine-editor"></div><textarea hidden id="source" spellcheck="false" aria-label="Pine Script source">${esc(state.source)}</textarea><div id="editor-errors" class="editor-errors">${errorView()}</div><div class="editor-bottom"><span>Pine v5/v6 · Tab indents · Ctrl-Space completes</span><div><button id="run-chart">Run chart</button><button id="run-backtest" class="primary">Backtest</button></div></div></section>` : ""}</div><div class="summary-strip"><div><span class="eyebrow">Strategy snapshot</span><strong>${state.run ? esc(state.run.result.title) : "No saved strategy run"}</strong></div>${state.run ? metrics(state.run.result.metrics, true) : "<p>Run a strategy to inspect its trades, costs, and equity curve.</p>"}<button id="view-backtest">Open backtest →</button></div><section class="workspace-utilities" aria-label="Workspace tools"><h2>Workspace tools</h2>${qualityView(state.dataset)}${layoutView(state.layouts)}${watchlistView(state.watchlist, state.quotes)}</section>`;
+  return `<div class="market-overview"><div class="market-title"><span class="market-symbol">${uiIcon("workspace")}</span><div><strong>${esc(state.dataset.symbol)}</strong><small>${esc(state.dataset.origin)}</small></div></div><strong class="price" id="market-price">${num(last.close)}</strong><span id="market-change" class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${num(change)}%</span></div><div class="marketbar"><label class="sr-only" for="symbol">Market symbol</label><input id="symbol" aria-label="Market symbol" value="${esc(state.dataset.symbol === "DEMO" ? "BTCUSDT" : state.dataset.symbol)}" maxlength="24"><select id="timeframe" aria-label="Timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.dataset.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select><label>History bars<input id="history-limit" type="number" min="2" max="50000" value="1000" style="width:85px"></label><button id="load-market">Load market</button><button id="live-start" class="primary">Start live</button><button id="live-stop" ${state.live.active ? "" : "disabled"}>Stop live</button><button id="import-bars">Import CSV</button><div class="spacer"></div><button id="toggle-editor" class="icon-btn" title="Toggle editor" aria-label="Toggle editor">${uiIcon("mcp")}</button><button id="focus-chart" aria-pressed="${!!state.focusChart}" title="Focus chart (⌘⇧F)">${uiIcon("focus")}<span>${state.focusChart ? "Exit focus" : "Focus chart"}</span><kbd>${state.focusChart ? "Esc" : navigator.platform.includes("Mac") ? "⌘⇧F" : "Ctrl⇧F"}</kbd></button></div><p id="live-status"></p>${linkedToolbar(state.multiChart)}<div class="workspace-grid ${state.editor ? "" : "no-editor"} ${state.multiChart.count > 1 ? "has-comparisons" : ""}"><div class="chart-matrix" data-chart-count="${state.multiChart.count}"><section class="chart-panel primary-chart"><span class="primary-chart-label" ${state.multiChart.count === 1 ? "hidden" : ""}>1 · Primary · Editor & backtests</span><div class="panel-heading"><span>Price action <i class="dot"></i> ${esc(state.dataset.timeframe)}</span><span>Vela™ / PineTS</span></div><div id="chart"></div><div class="chart-footer"><span>${b.length} settled bars · ${date(b[0].time)} — ${date(last.time)} UTC</span><span>Live forming bar stays outside research snapshots</span></div></section>${comparisonCards(state.multiChart, linkedCharts.liveIds)}</div>${state.editor ? `<section class="editor"><div class="panel-heading"><span>Pine editor</span><span class="tag">v5 / v6</span></div><div class="editor-tools"><select id="script-select" aria-label="Saved script"><option value="">Choose a script…</option>${state.scripts.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select><button id="save-script">Save</button><button id="import-script">Import .pine / .txt</button></div><input id="script-name" value="${esc(state.name)}" aria-label="Script name"><div id="pine-editor"></div><textarea hidden id="source" spellcheck="false" aria-label="Pine Script source">${esc(state.source)}</textarea><div id="editor-errors" class="editor-errors">${errorView()}</div><div class="editor-bottom"><span>Pine v5/v6 · Tab indents · Ctrl-Space completes</span><div><button id="run-chart">Run chart</button><button id="run-backtest" class="primary">Backtest</button></div></div></section>` : ""}</div><div class="summary-strip"><div><span class="eyebrow">Strategy snapshot</span><strong>${state.run ? esc(state.run.result.title) : "No saved strategy run"}</strong></div>${state.run ? metrics(state.run.result.metrics, true) : "<p>Run a strategy to inspect its trades, costs, and equity curve.</p>"}<button id="view-backtest">Open backtest →</button></div><section class="workspace-utilities" aria-label="Workspace tools"><h2>Workspace tools</h2>${qualityView(state.dataset)}${layoutView(state.layouts)}${watchlistView(state.watchlist, state.quotes, state.watchLive)}</section>`;
 }
 function metrics(m, compact = false) {
   return `<div class="metrics ${compact ? "compact" : ""}">${[
@@ -716,6 +751,7 @@ async function mountChart() {
       () => state.options,
     );
     optionsOverlay.update();
+    await linkedCharts.mount(target);
   }
 }
 async function runChart() {
@@ -1306,6 +1342,13 @@ function desktopSnapshot() {
     observedAt: Date.now(),
     busy: state.busy || restoringChart,
     page: state.page,
+    multiChart: {
+      count: state.multiChart.count,
+      linkSymbol: state.multiChart.linkSymbol,
+      linkTimeframe: state.multiChart.linkTimeframe,
+      linkRange: state.multiChart.linkRange,
+      linkCrosshair: state.multiChart.linkCrosshair,
+    },
     panels: [
       {
         id: "workspace",
@@ -1328,12 +1371,21 @@ function desktopSnapshot() {
           error: state.live.error ?? null,
         },
       },
+      ...linkedCharts.describe(state.page === "workspace"),
     ],
   };
 }
 async function handleDesktopCommand(action, args = {}) {
   if (!hydrated) throw Error("Desktop is still loading.");
   if (action === "desktopState") return desktopSnapshot();
+  if (action === "comparisonSnapshot")
+    return structuredClone(
+      linkedCharts.snapshots.filter((s) =>
+        state.multiChart.panels
+          .slice(0, state.multiChart.count - 1)
+          .some((p) => p.id === s.id),
+      ),
+    );
   // Live synchronization can remount a chart between two agent commands.
   // Wait for that existing mount rather than rejecting an otherwise idle desk.
   if (!state.busy && restoringChart) await chartMount;
@@ -1349,10 +1401,19 @@ async function handleDesktopCommand(action, args = {}) {
       desktop: desktopSnapshot(),
     };
   }
-  if (args.panelId && args.panelId !== "workspace")
+  if (
+    args.panelId &&
+    args.panelId !== "workspace" &&
+    !(
+      action === "desktopSetRange" &&
+      state.multiChart.panels
+        .slice(0, state.multiChart.count - 1)
+        .some((p) => p.id === args.panelId)
+    )
+  )
     throw Error("Unknown chart panel.");
   state.busy = true;
-  if ($("#toggle-editor")) $("#toggle-editor").disabled = true;
+  syncBusyControls();
   $("#status").textContent = "Agent updating workspace…";
   try {
     let result;
@@ -1375,16 +1436,23 @@ async function handleDesktopCommand(action, args = {}) {
       await chartMount;
       if (action === "desktopRun") await runChart();
       else {
+        const targetView =
+          args.panelId === "workspace"
+            ? { chart, dataset: state.dataset }
+            : linkedCharts.views.get(args.panelId);
+        if (!targetView?.dataset)
+          throw Error("Wait for the comparison chart to load.");
+        const rangeDataset = targetView.dataset;
         if (
           args.from >= args.to ||
-          args.to < state.dataset.bars[0].time ||
+          args.to < rangeDataset.bars[0].time ||
           args.from >
-            state.dataset.bars.at(-1).time + durations[state.dataset.timeframe]
+            rangeDataset.bars.at(-1).time + durations[rangeDataset.timeframe]
         )
           throw Error(
             "Choose an ordered range overlapping the loaded candles, in Unix milliseconds.",
           );
-        chart.setVisibleRange({ from: args.from, to: args.to });
+        targetView.chart.setVisibleRange({ from: args.from, to: args.to });
       }
     } else if (action === "desktopNavigate") {
       if (!titles[args.page]) throw Error("Unknown desktop page.");
@@ -1455,7 +1523,7 @@ async function handleDesktopCommand(action, args = {}) {
     return result ?? desktopSnapshot();
   } finally {
     state.busy = false;
-    if ($("#toggle-editor")) $("#toggle-editor").disabled = false;
+    syncBusyControls();
     $("#status").textContent = "Local workspace";
   }
 }
@@ -1648,6 +1716,10 @@ if (api) {
   setInterval(pollEngine, 5000);
   setInterval(pollLive, 1000);
   setInterval(pollStudy, 500);
+  setInterval(() => {
+    if (state.page === "workspace" && !state.busy) linkedCharts.poll();
+  }, 1000);
+  setInterval(pollWatchlist, 1000);
 }
 
 async function mountOptionsChart() {
@@ -1773,6 +1845,65 @@ async function importStrategy() {
   );
 }
 function bindCustomization() {
+  if ($("#chart-count"))
+    $("#chart-count").onchange = () =>
+      task(async () => {
+        linkedCharts.capture();
+        state.multiChart.count = Number($("#chart-count").value);
+        for (const id of [...linkedCharts.liveIds])
+          if (
+            !state.multiChart.panels
+              .slice(0, state.multiChart.count - 1)
+              .some((p) => p.id === id)
+          )
+            linkedCharts.liveIds.delete(id);
+        linkedCharts.saved = false;
+        render();
+        await chartMount;
+      });
+  document.querySelectorAll("[data-chart-link]").forEach(
+    (el) =>
+      (el.onchange = () =>
+        task(async () => {
+          state.multiChart[el.dataset.chartLink] = el.checked;
+          linkedCharts.saved = false;
+          render();
+          await chartMount;
+        })),
+  );
+  const loadPanel = (id) =>
+    task(async () => {
+      const p = state.multiChart.panels.find((p) => p.id === id);
+      const next = {
+        ...p,
+        symbol: document
+          .querySelector(`[data-panel-symbol="${id}"]`)
+          .value.trim()
+          .toUpperCase(),
+        timeframe: document.querySelector(`[data-panel-timeframe="${id}"]`)
+          .value,
+      };
+      chartLayout({
+        ...state.multiChart,
+        panels: state.multiChart.panels.map((item) =>
+          item.id === id ? next : item,
+        ),
+      });
+      Object.assign(p, next);
+      const live = document.querySelector(`[data-panel-live="${id}"]`).checked;
+      chartLayout(state.multiChart);
+      if (live) linkedCharts.liveIds.add(id);
+      else linkedCharts.liveIds.delete(id);
+      await linkedCharts.configure(true);
+      render();
+      await chartMount;
+    });
+  document
+    .querySelectorAll("[data-panel-load]")
+    .forEach((el) => (el.onclick = () => loadPanel(el.dataset.panelLoad)));
+  document
+    .querySelectorAll("[data-panel-live]")
+    .forEach((el) => (el.onchange = () => loadPanel(el.dataset.panelLive)));
   const on = (id, fn) => {
     const el = $("#" + id);
     if (el) el.onclick = () => task(fn);
@@ -1781,6 +1912,12 @@ function bindCustomization() {
     const ui = await call("uiConfigure", args);
     state.appearance = ui.appearance;
     state.watchlist = ui.watchlist;
+    if (state.watchLive.active)
+      state.watchLive = await call("watchlistStart", {
+        symbols: state.watchlist
+          .filter((i) => i.provider === "binance")
+          .map((i) => i.symbol),
+      });
   };
   on("appearance-save", async () => {
     await saveUI({
@@ -1822,6 +1959,8 @@ function bindCustomization() {
     const s = saved.snapshot;
     if (s.dataset) state.dataset = s.dataset;
     state.chartMemory = s.chart;
+    state.multiChart = chartLayout(s.multiChart);
+    linkedCharts.reset(state.multiChart);
     state.source = s.source;
     state.name = s.name;
     state.editor = s.editor;
@@ -1858,6 +1997,37 @@ function bindCustomization() {
       ],
     });
     render();
+  });
+  on("watch-live", async () => {
+    state.watchLive = state.watchLive.active
+      ? await call("watchlistStop")
+      : await call("watchlistStart", {
+          symbols: state.watchlist
+            .filter((i) => i.provider === "binance")
+            .map((i) => i.symbol),
+        });
+    render();
+  });
+  on("market-search-button", async () => {
+    const result = await call("marketSearch", {
+      query: $("#market-search").value,
+    });
+    $("#market-search-results").innerHTML =
+      result.markets
+        .map(
+          (m) =>
+            `<button data-market-result="${esc(m.symbol)}"><strong>${esc(m.symbol)}</strong> ${esc(m.base)} / ${esc(m.quote)} · Binance spot</button>`,
+        )
+        .join("") || "No matching spot markets.";
+    document.querySelectorAll("[data-market-result]").forEach(
+      (el) =>
+        (el.onclick = () => {
+          $("#watch-provider").value = "binance";
+          $("#watch-symbol").value = el.dataset.marketResult;
+          $("#symbol").value = el.dataset.marketResult;
+          $("#watch-symbol").focus();
+        }),
+    );
   });
   on("watch-refresh", async () => {
     const response = await call("watchlistQuotes", {
@@ -1957,3 +2127,37 @@ async function pollOptionRecorder() {
   }
 }
 setInterval(pollOptionRecorder, 2000);
+
+let watchPolling = false;
+async function pollWatchlist() {
+  if (watchPolling || !api) return;
+  watchPolling = true;
+  try {
+    state.watchLive = await call("watchlistSnapshot");
+    if (state.watchLive.active) {
+      for (const [symbol, quote] of Object.entries(state.watchLive.quotes))
+        state.quotes[symbol] = quote;
+    }
+    if ($("#watch-live"))
+      $("#watch-live").textContent = state.watchLive.active
+        ? "Stop live quotes"
+        : "Start live quotes";
+    if (state.watchLive.active && $("#watch-quote-status"))
+      $("#watch-quote-status").textContent =
+        `${state.watchLive.status} · Binance rolling 24-hour change · quotes older than 30 seconds are marked stale${state.watchLive.error ? " · " + state.watchLive.error : ""}`;
+    document.querySelectorAll("[data-watch-quote]").forEach((el) => {
+      const q = state.quotes[el.dataset.watchQuote];
+      if (q) {
+        el.textContent = `${q.price.toLocaleString()} · ${q.change >= 0 ? "+" : ""}${q.change.toFixed(2)}%${q.stale || (q.receivedAt && (!state.watchLive.active || !state.watchLive.quotes?.[el.dataset.watchQuote] || Date.now() - q.receivedAt > 30000)) ? " · stale" : ""}`;
+        el.title = q.eventAt
+          ? new Date(q.eventAt).toISOString()
+          : "REST snapshot";
+      }
+    });
+  } catch (e) {
+    if ($("#watch-quote-status"))
+      $("#watch-quote-status").textContent = e.message;
+  } finally {
+    watchPolling = false;
+  }
+}

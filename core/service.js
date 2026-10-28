@@ -1,3 +1,5 @@
+import { ChartPanels } from "./chart-panels.js";
+import { MarketQuotes, MarketSearch } from "./market-quotes.js";
 import { PublicOptionsExchange } from "./crypto-exchanges.js";
 import { OptionHistory, OptionRecorder } from "./option-history.js";
 import { fitSABR, deltaSkew, gammaExposure } from "./option-surface.js";
@@ -64,6 +66,9 @@ export const live = new BinanceLive({
     );
   },
 });
+export const chartPanels = new ChartPanels({ primary: live });
+export const marketQuotes = new MarketQuotes();
+export const marketSearch = new MarketSearch();
 export const deribit = new DeribitOptions();
 export const cryptoExchanges = {
   deribit,
@@ -102,6 +107,8 @@ export const optionsProvider = new UnusualWhales();
 export const whaleRunner = new WhaleRunner();
 export const researchJobs = new ResearchJobs();
 export async function shutdown() {
+  chartPanels.stop();
+  marketQuotes.stop();
   stopOptionStudies();
   optionRecorder.stop();
   for (const provider of Object.values(cryptoExchanges)) provider.stop();
@@ -324,6 +331,20 @@ export async function dispatch(action, args = {}) {
         values: calculateGreeks(args.model),
         curve: args.curve ? greekCurve(args.model, args.curve) : null,
       };
+    case "chartPanelsConfigure":
+      return chartPanels.configure(args.panels, {
+        refresh: args.refresh === true,
+      });
+    case "chartPanelsSnapshot":
+      return chartPanels.snapshot();
+    case "watchlistStart":
+      return marketQuotes.start(args.symbols);
+    case "watchlistStop":
+      return marketQuotes.stop();
+    case "watchlistSnapshot":
+      return marketQuotes.snapshot();
+    case "marketSearch":
+      return marketSearch.search(args.query);
     case "watchlistQuotes":
       return watchlistQuotes(args.symbols);
     case "uiConfig":
@@ -342,6 +363,7 @@ export async function dispatch(action, args = {}) {
       return readLayout(args.id);
     case "layoutActivate": {
       const saved = await readLayout(args.id);
+      chartPanels.stop();
       live.stop();
       optionsProvider.stop();
       await liveWrite;
@@ -438,8 +460,12 @@ export async function dispatch(action, args = {}) {
       await store.write("runs", run, run.id);
       return run;
     }
-    case "liveStart":
-      return live.start(args);
+    case "liveStart": {
+      chartPanels.preparePrimary(args);
+      const result = await live.start(args);
+      chartPanels.reconcile();
+      return result;
+    }
     case "liveSnapshot":
       return live.snapshot();
     case "liveStop": {
