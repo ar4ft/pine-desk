@@ -1,3 +1,5 @@
+import { AlertEngine } from "./alerts.js";
+import { QuoteSubscriptions } from "./quote-subscriptions.js";
 import { ChartPanels } from "./chart-panels.js";
 import { MarketQuotes, MarketSearch } from "./market-quotes.js";
 import { PublicOptionsExchange } from "./crypto-exchanges.js";
@@ -67,7 +69,16 @@ export const live = new BinanceLive({
   },
 });
 export const chartPanels = new ChartPanels({ primary: live });
-export const marketQuotes = new MarketQuotes();
+export const marketQuotes = new MarketQuotes({ maxSymbols: 100 });
+export const quoteSubscriptions = new QuoteSubscriptions(marketQuotes);
+export const alertEngine = new AlertEngine({
+  repository: {
+    read: () => store.read("alerts"),
+    write: (doc) => store.write("alerts", doc),
+  },
+  quotes: quoteSubscriptions,
+});
+export const initialize = () => alertEngine.initialize();
 export const marketSearch = new MarketSearch();
 export const deribit = new DeribitOptions();
 export const cryptoExchanges = {
@@ -107,6 +118,8 @@ export const optionsProvider = new UnusualWhales();
 export const whaleRunner = new WhaleRunner();
 export const researchJobs = new ResearchJobs();
 export async function shutdown() {
+  await alertEngine.close();
+  quoteSubscriptions.stop();
   chartPanels.stop();
   marketQuotes.stop();
   stopOptionStudies();
@@ -132,6 +145,22 @@ async function datasetFor(args) {
 }
 export async function dispatch(action, args = {}) {
   switch (action) {
+    case "alertStatus":
+      await initialize();
+      return alertEngine.snapshot();
+    case "alertHistory":
+      await initialize();
+      return alertEngine.history(args);
+    case "alertCreate":
+      return alertEngine.save(args.rule);
+    case "alertUpdate":
+      return alertEngine.save(args.rule, args.id);
+    case "alertDelete":
+      return alertEngine.remove(args.id);
+    case "alertConfigure":
+      return alertEngine.configure(args);
+    case "alertAcknowledge":
+      return alertEngine.acknowledge(args.id);
     case "optionHistoryBackfill": {
       const token = await credential("massiveKey");
       if (!token)
@@ -338,11 +367,11 @@ export async function dispatch(action, args = {}) {
     case "chartPanelsSnapshot":
       return chartPanels.snapshot();
     case "watchlistStart":
-      return marketQuotes.start(args.symbols);
+      return quoteSubscriptions.set("watchlist", args.symbols);
     case "watchlistStop":
-      return marketQuotes.stop();
+      return quoteSubscriptions.set("watchlist", []);
     case "watchlistSnapshot":
-      return marketQuotes.snapshot();
+      return quoteSubscriptions.snapshot("watchlist");
     case "marketSearch":
       return marketSearch.search(args.query);
     case "watchlistQuotes":

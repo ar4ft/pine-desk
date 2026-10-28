@@ -1,4 +1,5 @@
 const paths = {
+  alerts: '<path d="M6 9a6 6 0 0112 0v6l2 3H4l2-3zM10 21h4"/>',
   workspace: '<path d="M4 19h16M5 14l4-5 4 3 6-8"/>',
   library:
     '<rect x="4" y="4" width="6" height="7" rx="1"/><rect x="14" y="4" width="6" height="7" rx="1"/><rect x="4" y="15" width="6" height="5" rx="1"/><rect x="14" y="15" width="6" height="5" rx="1"/>',
@@ -20,7 +21,7 @@ export function uiIcon(name) {
   return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.workspace}</svg>`;
 }
 export const navGroups = [
-  ["Markets", ["workspace", "orderflow", "options", "crypto"]],
+  ["Markets", ["workspace", "alerts", "orderflow", "options", "crypto"]],
   ["Research", ["backtest", "library", "edge", "whale", "education"]],
   ["Connections", ["mcp", "settings"]],
 ];

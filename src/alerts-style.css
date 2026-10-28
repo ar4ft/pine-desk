@@ -1,0 +1,148 @@
+.alerts-status {
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.alerts-monitor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+.alerts-monitor h2 {
+  margin: 8px 0;
+  font-size: 23px;
+}
+.alerts-monitor p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.alerts-monitor > div:last-child {
+  display: grid;
+  gap: 12px;
+}
+.alerts-monitor label,
+.alert-checks,
+.alert-days {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.alerts-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.alert-form form {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+.alert-form form > label,
+.alert-fields label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.alert-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.alert-fields input,
+.alert-fields select {
+  width: 100%;
+  min-width: 0;
+}
+.alert-checks {
+  gap: 20px;
+}
+.alert-checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.alert-form input[type="checkbox"],
+.alerts-monitor input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
+}
+.alert-form fieldset {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  min-width: 0;
+}
+.alert-form fieldset:disabled {
+  opacity: 0.45;
+}
+.alert-form fieldset small {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+}
+.alert-days {
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.alert-days label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.alert-rules {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.alert-rule {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.alert-rule > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.alert-rule p {
+  font-size: 13px;
+  line-height: 1.65;
+}
+.alerts-empty {
+  padding: 30px;
+  color: var(--muted);
+}
+.alerts-history #alert-history {
+  padding: 16px;
+}
+.alerts-table {
+  overflow: auto;
+}
+.alerts-table td {
+  vertical-align: top;
+  line-height: 1.7;
+}
+.alerts-error {
+  color: var(--red);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1000px) {
+  .alerts-grid {
+    grid-template-columns: 1fr;
+  }
+  .alerts-monitor {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+}
+.alert-form form > label.alert-checks {
+  display: flex;
+  gap: 8px;
+}
+.alert-form fieldset:disabled {
+  display: none;
+}

@@ -7,11 +7,13 @@ const {
   Menu,
   safeStorage,
   screen,
+  Notification,
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 let win, updates, shutdown;
 let windowStore;
+const alertNotifications = new Set();
 let bridge, rendererRPC, releaseOwner, shutdownTask;
 const { gracefulQuit } = require("./graceful-quit.cjs");
 const isQuitting = gracefulQuit({
@@ -50,6 +52,30 @@ async function createWindow() {
   const service = await import("../core/service.js");
   const { dispatch } = service;
   shutdown = service.shutdown;
+  service.alertEngine.notify = (event) => {
+    if (!Notification.isSupported()) return "unavailable";
+    const notification = new Notification({
+      title: `Pine Desk · ${event.name}`,
+      body: `${event.symbol} crossed ${event.direction} ${event.threshold}. Observed ${event.previousPrice} → ${event.price}.`,
+    });
+    alertNotifications.add(notification);
+    if (alertNotifications.size > 20) {
+      const oldest = alertNotifications.values().next().value;
+      oldest.close();
+      alertNotifications.delete(oldest);
+    }
+    notification.once("close", () => alertNotifications.delete(notification));
+    notification.once("failed", () => alertNotifications.delete(notification));
+    notification.on("click", () => {
+      if (win && !win.isDestroyed()) {
+        win.show();
+        win.focus();
+      }
+    });
+    notification.show();
+    return "submitted";
+  };
+  await service.initialize();
   const store = await import("../core/store.js");
   windowStore = store;
   const savedWindow = await store.read("window-state");

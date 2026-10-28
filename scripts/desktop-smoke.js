@@ -297,6 +297,19 @@ try {
   );
   await reopened.locator("#toggle-editor").click();
   assert.equal(await reopened.locator("#source").inputValue(), importedSource);
+  const alertStatus = await reopened.evaluate(() =>
+    window.desk.call("alertStatus"),
+  );
+  assert.equal(alertStatus.monitoring, false);
+  assert.equal(
+    alertStatus.rules.find((r) => r.name === "Native MCP alert").enabled,
+    false,
+  );
+  const alertHistory = await reopened.evaluate(() =>
+    window.desk.call("alertHistory"),
+  );
+  assert.equal(alertHistory.total, 1);
+  assert.ok(alertHistory.events[0].acknowledgedAt);
   const bounds = JSON.parse(
     await fs.readFile(path.join(dir, "window-state/current.json"), "utf8"),
   );

@@ -1,3 +1,13 @@
+import {
+  newAlertsState,
+  alertsView,
+  retainAlertDraft,
+  primeAlert,
+  refreshAlerts,
+  paintAlerts,
+  bindAlerts,
+} from "./alerts-view.js";
+import "./alerts-style.css";
 import { chartLayout } from "../core/chart-layout.js";
 import {
   LinkedCharts,
@@ -113,6 +123,7 @@ const date = (t) =>
   });
 const titles = {
   workspace: "Chart workspace",
+  alerts: "Local alerts",
   library: "Indicator library",
   backtest: "Strategy research",
   orderflow: "Order flow",
@@ -125,6 +136,7 @@ const titles = {
   settings: "Settings",
 };
 const state = {
+  alerts: newAlertsState(),
   learning: newLearningState(),
   crypto: newCryptoState(),
   appearance: defaultAppearance,
@@ -192,6 +204,7 @@ const linkedCharts = new LinkedCharts({
   changed: scheduleSession,
   error: (e) => toast(e.message, true),
 });
+let alertsPolling = false;
 let hydrated = !api,
   restoringChart = false,
   sessionTimer;
@@ -317,7 +330,7 @@ function toast(message, error = false) {
 function syncBusyControls() {
   document
     .querySelectorAll(
-      "#toggle-editor, #chart-count, [data-chart-link], [data-panel-load], [data-panel-live]",
+      "#toggle-editor, #chart-count, [data-chart-link], [data-panel-load], [data-panel-live], #alert-save, #alerts-toggle, #alerts-notifications, [data-alert-edit], [data-alert-enable], [data-alert-delete], [data-alert-ack]",
     )
     .forEach((el) => {
       el.disabled = state.busy;
@@ -432,6 +445,7 @@ function render() {
   const destinationChanged = document.body.dataset.section !== state.page;
   captureWorkspaceChart();
   linkedCharts.capture();
+  retainAlertDraft(state.alerts);
   retainOptionsDraft(state.options);
   retainResearchDraft(state.research);
   retainWhaleDraft(state.whale);
@@ -454,6 +468,7 @@ function render() {
   state.research.currentSettings = state.settings;
   $("#page").innerHTML = {
     workspace: workspace,
+    alerts: () => alertsView(state.alerts),
     library: library,
     backtest: backtests,
     orderflow: flow,
@@ -515,7 +530,7 @@ function workspace() {
   const b = state.dataset.bars,
     last = b.at(-1),
     change = (last.close / b[0].close - 1) * 100;
-  return `<div class="market-overview"><div class="market-title"><span class="market-symbol">${uiIcon("workspace")}</span><div><strong>${esc(state.dataset.symbol)}</strong><small>${esc(state.dataset.origin)}</small></div></div><strong class="price" id="market-price">${num(last.close)}</strong><span id="market-change" class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${num(change)}%</span></div><div class="marketbar"><label class="sr-only" for="symbol">Market symbol</label><input id="symbol" aria-label="Market symbol" value="${esc(state.dataset.symbol === "DEMO" ? "BTCUSDT" : state.dataset.symbol)}" maxlength="24"><select id="timeframe" aria-label="Timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.dataset.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select><label>History bars<input id="history-limit" type="number" min="2" max="50000" value="1000" style="width:85px"></label><button id="load-market">Load market</button><button id="live-start" class="primary">Start live</button><button id="live-stop" ${state.live.active ? "" : "disabled"}>Stop live</button><button id="import-bars">Import CSV</button><div class="spacer"></div><button id="toggle-editor" class="icon-btn" title="Toggle editor" aria-label="Toggle editor">${uiIcon("mcp")}</button><button id="focus-chart" aria-pressed="${!!state.focusChart}" title="Focus chart (⌘⇧F)">${uiIcon("focus")}<span>${state.focusChart ? "Exit focus" : "Focus chart"}</span><kbd>${state.focusChart ? "Esc" : navigator.platform.includes("Mac") ? "⌘⇧F" : "Ctrl⇧F"}</kbd></button></div><p id="live-status"></p>${linkedToolbar(state.multiChart)}<div class="workspace-grid ${state.editor ? "" : "no-editor"} ${state.multiChart.count > 1 ? "has-comparisons" : ""}"><div class="chart-matrix" data-chart-count="${state.multiChart.count}"><section class="chart-panel primary-chart"><span class="primary-chart-label" ${state.multiChart.count === 1 ? "hidden" : ""}>1 · Primary · Editor & backtests</span><div class="panel-heading"><span>Price action <i class="dot"></i> ${esc(state.dataset.timeframe)}</span><span>Vela™ / PineTS</span></div><div id="chart"></div><div class="chart-footer"><span>${b.length} settled bars · ${date(b[0].time)} — ${date(last.time)} UTC</span><span>Live forming bar stays outside research snapshots</span></div></section>${comparisonCards(state.multiChart, linkedCharts.liveIds)}</div>${state.editor ? `<section class="editor"><div class="panel-heading"><span>Pine editor</span><span class="tag">v5 / v6</span></div><div class="editor-tools"><select id="script-select" aria-label="Saved script"><option value="">Choose a script…</option>${state.scripts.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select><button id="save-script">Save</button><button id="import-script">Import .pine / .txt</button></div><input id="script-name" value="${esc(state.name)}" aria-label="Script name"><div id="pine-editor"></div><textarea hidden id="source" spellcheck="false" aria-label="Pine Script source">${esc(state.source)}</textarea><div id="editor-errors" class="editor-errors">${errorView()}</div><div class="editor-bottom"><span>Pine v5/v6 · Tab indents · Ctrl-Space completes</span><div><button id="run-chart">Run chart</button><button id="run-backtest" class="primary">Backtest</button></div></div></section>` : ""}</div><div class="summary-strip"><div><span class="eyebrow">Strategy snapshot</span><strong>${state.run ? esc(state.run.result.title) : "No saved strategy run"}</strong></div>${state.run ? metrics(state.run.result.metrics, true) : "<p>Run a strategy to inspect its trades, costs, and equity curve.</p>"}<button id="view-backtest">Open backtest →</button></div><section class="workspace-utilities" aria-label="Workspace tools"><h2>Workspace tools</h2>${qualityView(state.dataset)}${layoutView(state.layouts)}${watchlistView(state.watchlist, state.quotes, state.watchLive)}</section>`;
+  return `<div class="market-overview"><div class="market-title"><span class="market-symbol">${uiIcon("workspace")}</span><div><strong>${esc(state.dataset.symbol)}</strong><small>${esc(state.dataset.origin)}</small></div></div><strong class="price" id="market-price">${num(last.close)}</strong><span id="market-change" class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${num(change)}%</span></div><div class="marketbar"><label class="sr-only" for="symbol">Market symbol</label><input id="symbol" aria-label="Market symbol" value="${esc(state.dataset.symbol === "DEMO" ? "BTCUSDT" : state.dataset.symbol)}" maxlength="24"><select id="timeframe" aria-label="Timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.dataset.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select><label>History bars<input id="history-limit" type="number" min="2" max="50000" value="1000" style="width:85px"></label><button id="load-market">Load market</button><button id="live-start" class="primary">Start live</button><button id="live-stop" ${state.live.active ? "" : "disabled"}>Stop live</button><button id="import-bars">Import CSV</button><button id="create-price-alert">Price alert</button><div class="spacer"></div><button id="toggle-editor" class="icon-btn" title="Toggle editor" aria-label="Toggle editor">${uiIcon("mcp")}</button><button id="focus-chart" aria-pressed="${!!state.focusChart}" title="Focus chart (⌘⇧F)">${uiIcon("focus")}<span>${state.focusChart ? "Exit focus" : "Focus chart"}</span><kbd>${state.focusChart ? "Esc" : navigator.platform.includes("Mac") ? "⌘⇧F" : "Ctrl⇧F"}</kbd></button></div><p id="live-status"></p>${linkedToolbar(state.multiChart)}<div class="workspace-grid ${state.editor ? "" : "no-editor"} ${state.multiChart.count > 1 ? "has-comparisons" : ""}"><div class="chart-matrix" data-chart-count="${state.multiChart.count}"><section class="chart-panel primary-chart"><span class="primary-chart-label" ${state.multiChart.count === 1 ? "hidden" : ""}>1 · Primary · Editor & backtests</span><div class="panel-heading"><span>Price action <i class="dot"></i> ${esc(state.dataset.timeframe)}</span><span>Vela™ / PineTS</span></div><div id="chart"></div><div class="chart-footer"><span>${b.length} settled bars · ${date(b[0].time)} — ${date(last.time)} UTC</span><span>Live forming bar stays outside research snapshots</span></div></section>${comparisonCards(state.multiChart, linkedCharts.liveIds)}</div>${state.editor ? `<section class="editor"><div class="panel-heading"><span>Pine editor</span><span class="tag">v5 / v6</span></div><div class="editor-tools"><select id="script-select" aria-label="Saved script"><option value="">Choose a script…</option>${state.scripts.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select><button id="save-script">Save</button><button id="import-script">Import .pine / .txt</button></div><input id="script-name" value="${esc(state.name)}" aria-label="Script name"><div id="pine-editor"></div><textarea hidden id="source" spellcheck="false" aria-label="Pine Script source">${esc(state.source)}</textarea><div id="editor-errors" class="editor-errors">${errorView()}</div><div class="editor-bottom"><span>Pine v5/v6 · Tab indents · Ctrl-Space completes</span><div><button id="run-chart">Run chart</button><button id="run-backtest" class="primary">Backtest</button></div></div></section>` : ""}</div><div class="summary-strip"><div><span class="eyebrow">Strategy snapshot</span><strong>${state.run ? esc(state.run.result.title) : "No saved strategy run"}</strong></div>${state.run ? metrics(state.run.result.metrics, true) : "<p>Run a strategy to inspect its trades, costs, and equity curve.</p>"}<button id="view-backtest">Open backtest →</button></div><section class="workspace-utilities" aria-label="Workspace tools"><h2>Workspace tools</h2>${qualityView(state.dataset)}${layoutView(state.layouts)}${watchlistView(state.watchlist, state.quotes, state.watchLive)}</section>`;
 }
 function metrics(m, compact = false) {
   return `<div class="metrics ${compact ? "compact" : ""}">${[
@@ -867,7 +882,26 @@ async function exportFile(name, text) {
   a.click();
   URL.revokeObjectURL(url);
 }
+function alertBindings() {
+  bindAlerts({
+    state: state.alerts,
+    call,
+    task,
+    render,
+    toast,
+    exportFile: (name, text) =>
+      api?.exportFile
+        ? api.exportFile(name, text)
+        : Promise.reject(
+            Error("Open the desktop app to export alert history."),
+          ),
+  });
+}
 function bind() {
+  if (state.page === "alerts") {
+    alertBindings();
+    pollAlerts();
+  }
   bindLearning(state.learning, render);
   bindCrypto({ state: state.crypto, call, task, render, exportFile });
   bindCustomization();
@@ -933,6 +967,12 @@ function bind() {
     const el = $("#" + id);
     if (el) el.onclick = () => task(fn);
   };
+  on("create-price-alert", async () => {
+    primeAlert(state.alerts, state.dataset);
+    await refreshAlerts(state.alerts, call);
+    state.page = "alerts";
+    render();
+  });
   on("focus-chart", () => setChartFocus(!state.focusChart));
   on("toggle-editor", () => {
     state.editor = !state.editor;
@@ -1138,7 +1178,7 @@ function bind() {
     state.agentAccess = await call(
       "agentConfigure",
       Object.fromEntries(
-        ["enabled", "charts", "streams", "research"].map((key) => [
+        ["enabled", "charts", "streams", "research", "alerts"].map((key) => [
           key,
           $("#agent-" + key).checked,
         ]),
@@ -1720,6 +1760,7 @@ if (api) {
     if (state.page === "workspace" && !state.busy) linkedCharts.poll();
   }, 1000);
   setInterval(pollWatchlist, 1000);
+  setInterval(pollAlerts, 2000);
 }
 
 async function mountOptionsChart() {
@@ -2159,5 +2200,19 @@ async function pollWatchlist() {
       $("#watch-quote-status").textContent = e.message;
   } finally {
     watchPolling = false;
+  }
+}
+
+async function pollAlerts() {
+  if (!api || state.page !== "alerts" || alertsPolling || state.busy) return;
+  alertsPolling = true;
+  try {
+    await refreshAlerts(state.alerts, call);
+    if (state.page === "alerts" && !state.busy)
+      paintAlerts(state.alerts, alertBindings);
+  } catch (error) {
+    if (state.page === "alerts") toast(error.message, true);
+  } finally {
+    alertsPolling = false;
   }
 }

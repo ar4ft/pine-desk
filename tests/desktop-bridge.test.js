@@ -213,3 +213,46 @@ test("instrument identity separates venue/type and preserves unknown import unit
   assert.equal(imported.assetType, "unknown");
   assert.equal(imported.settlementCurrency, null);
 });
+
+test("legacy bridge configs deny alert changes until the separate alert permission is enabled", async (t) => {
+  const { bridge, dataDir } = await fixture(t, async (action) => ({ action }));
+  await bridge.configure({
+    enabled: true,
+    charts: true,
+    streams: true,
+    research: true,
+  });
+  let descriptor = await readBridgeDescriptor(dataDir);
+  assert.equal(bridge.status().alerts, false);
+  assert.deepEqual(await callDesktop(descriptor, "alerts_status"), {
+    action: "alertStatus",
+  });
+  await assert.rejects(
+    callDesktop(descriptor, "alerts_configure", {
+      monitoring: true,
+      notifications: false,
+    }),
+    /alerts/,
+  );
+  await bridge.configure({ ...bridgeDefaults, enabled: true, alerts: true });
+  descriptor = await readBridgeDescriptor(dataDir);
+  assert.deepEqual(
+    await callDesktop(descriptor, "alerts_configure", {
+      monitoring: true,
+      notifications: false,
+    }),
+    { action: "alertConfigure" },
+  );
+  for (const tool of toolDefinitions().filter((t) =>
+    [
+      "alertCreate",
+      "alertUpdate",
+      "alertConfigure",
+      "alertDelete",
+      "alertAcknowledge",
+    ].includes(t.action),
+  )) {
+    assert.equal(tool.capability, "alerts");
+    assert.equal(tool.readOnly, false);
+  }
+});

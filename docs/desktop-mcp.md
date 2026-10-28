@@ -1,6 +1,6 @@
 # Shared desktop service and MCP
 
-Available since v0.9.0; linked-chart tools were added in v0.10.0. An attached MCP client uses the running Electron main process for data, streams, credentials and research. It does not start a second Binance/Unusual Whales/crypto connection. Chart commands go to the renderer and return observed state after completion.
+Available since v0.9.0; linked-chart tools were added in v0.10.0 and [persistent alert tools](local-alerts.md) in v0.11.0. An attached MCP client uses the running Electron main process for data, streams, credentials and research. It does not start a second Binance/Unusual Whales/crypto connection. Chart commands go to the renderer and return observed state after completion.
 
 ## Setup
 
@@ -10,6 +10,7 @@ Available since v0.9.0; linked-chart tools were added in v0.10.0. An attached MC
    - **Chart and editor changes:** market loading/import, navigation, editing/running trusted Pine source and changing the visible range. Selecting a different market also stops the workspace's previous live stream.
    - **Provider streams:** refreshing/selecting provider markets, starting/stopping streams and the options recorder. These operations may update the corresponding desktop page. Provider calls use the desktop's configured credentials and quotas.
    - **Saved-data changes and research:** script/trade/archive writes and deletions, backtests, strategy audits, sweeps and other research jobs.
+   - **Alert rules and monitoring:** creating/editing/deleting price alerts, starting/pausing their local ticker subscriptions, notification preferences and history acknowledgements. This separate permission defaults off on upgrade. Read access can inspect definitions and trigger history.
 4. Install Node.js 22.16+ and run `npm ci` in your source checkout. Export the MCP configuration from the app, replace the checkout path and connect your MCP client. The app does not bundle a Node MCP launcher.
 
 ```json

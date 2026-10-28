@@ -32,6 +32,7 @@ export async function createMcpBackend({
   let service;
   try {
     service = await import("./service.js");
+    await service.initialize();
   } catch (error) {
     await release();
     throw error;

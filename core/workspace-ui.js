@@ -117,6 +117,7 @@ export function validateLayout(input) {
       "backtest",
       "library",
       "orderflow",
+      "alerts",
       "mcp",
       "edge",
       "whale",

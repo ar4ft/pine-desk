@@ -1,17 +1,25 @@
 import WebSocket from "ws";
 import { HttpsProxyAgent } from "https-proxy-agent";
 
-export function validateQuoteSymbols(symbols) {
+export function validateQuoteSymbols(symbols, limit = 50) {
   if (
     !Array.isArray(symbols) ||
-    symbols.length > 50 ||
+    symbols.length > limit ||
     symbols.some((s) => !/^[A-Z0-9]{3,24}$/.test(s))
   )
-    throw Error("Choose up to 50 Binance spot symbols.");
+    throw Error(`Choose up to ${limit} Binance spot symbols.`);
   return [...new Set(symbols)].sort();
 }
 export class MarketQuotes {
-  constructor({ createSocket, now = Date.now, clock = globalThis } = {}) {
+  constructor({
+    createSocket,
+    now = Date.now,
+    clock = globalThis,
+    maxSymbols = 50,
+  } = {}) {
+    this.maxSymbols = maxSymbols;
+    this.listeners = new Set();
+    this.connection = 0;
     this.createSocket =
       createSocket ??
       ((url) =>
@@ -30,7 +38,7 @@ export class MarketQuotes {
     this.status = "stopped";
   }
   start(symbols) {
-    symbols = validateQuoteSymbols(symbols);
+    symbols = validateQuoteSymbols(symbols, this.maxSymbols);
     if (this.active && JSON.stringify(symbols) === JSON.stringify(this.symbols))
       return this.snapshot();
     this.stop();
@@ -54,6 +62,7 @@ export class MarketQuotes {
   connect(generation) {
     if (!this.active || generation !== this.generation) return;
     this.status = "connecting";
+    const connection = ++this.connection;
     this.lastMessageAt = this.now();
     let socket;
     try {
@@ -85,15 +94,24 @@ export class MarketQuotes {
           !Number.isFinite(price) ||
           !Number.isFinite(change) ||
           !Number.isFinite(eventAt) ||
-          eventAt <= 0
+          eventAt <= 0 ||
+          eventAt > this.now() + 5000
         )
           return;
-        if (this.quotes[d.s]?.eventAt > eventAt) return;
+        if (this.quotes[d.s]?.eventAt >= eventAt) return;
         this.lastMessageAt = this.now();
-        this.quotes[d.s] = { price, change, eventAt, receivedAt: this.now() };
+        this.quotes[d.s] = {
+          price,
+          change,
+          eventAt,
+          receivedAt: this.now(),
+          connection,
+        };
         this.status = "streaming";
         this.error = null;
         this.retries = 0;
+        for (const listener of this.listeners)
+          listener(d.s, { ...this.quotes[d.s] });
       } catch {
         /* Ignore malformed network events, never replace a valid quote. */
       }
@@ -116,6 +134,10 @@ export class MarketQuotes {
       Math.min(30000, 1000 * 2 ** Math.min(this.retries++, 5)),
     );
     this.retryTimer?.unref?.();
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
   snapshot() {
     const now = this.now();

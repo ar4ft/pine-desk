@@ -31,6 +31,10 @@ Only the most recent **50,000 raw trade prints** are retained. CVD restarts at t
 
 This implementation does not include futures, depth/order books, liquidation feeds, unlimited tick storage, trade-gap backfill or additional streaming providers. Existing Whale Options feed adapters remain available through its separate engine.
 
+## Local price alerts
+
+[Persistent local alerts](local-alerts.md) evaluate public Binance ticker observations in the owning service, with saved rules, cooldowns, session/expiry gates and trigger history. They share watchlist ticker subscriptions and do not consume every raw chart trade.
+
 ## MCP
 
 The stdio server adds `live_start`, `live_status`, `live_stop`, `live_order_flow` and `live_save_trades`. **In desktop mode these tools control the desktop connection and read its existing buffer.** Client disconnect does not stop the stream. Standalone mode owns its own connection and must have exclusive ownership of the data directory. Use different `PINE_DESK_DATA_DIR` values for independent sessions. See [desktop MCP setup](desktop-mcp.md).

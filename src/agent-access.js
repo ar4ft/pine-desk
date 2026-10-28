@@ -14,11 +14,12 @@ export function agentConfig(dataDir) {
 }
 export function agentAccessView(status, esc) {
   const s = status ?? {};
-  return `<section class="plot-card" id="agent-access"><div class="panel-heading"><span>DESKTOP AGENT ACCESS</span><span id="agent-connection">${s.running ? "Enabled on this Mac" : "Disabled"}</span></div><p>Attached clients use this app’s live connections and saved credentials. Read access includes datasets, scripts and saved research. Enable only the additional controls you want.</p><div class="edge-form">${[
+  return `<section class="plot-card" id="agent-access"><div class="panel-heading"><span>DESKTOP AGENT ACCESS</span><span id="agent-connection">${s.running ? "Enabled on this Mac" : "Disabled"}</span></div><p>Attached clients use this app’s live connections and saved credentials. Read access includes datasets, scripts, saved research, alert rules and trigger history. Enable only the additional controls you want.</p><div class="edge-form">${[
     ["enabled", "Enable local agent access"],
     ["charts", "Allow chart and editor changes"],
     ["streams", "Allow starting and stopping provider streams"],
     ["research", "Allow saved-data changes and research jobs"],
+    ["alerts", "Allow alert rules, monitoring and acknowledgements"],
   ]
     .map(
       ([key, label]) =>

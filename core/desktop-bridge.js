@@ -10,6 +10,7 @@ export const bridgeDefaults = {
   charts: false,
   streams: false,
   research: false,
+  alerts: false,
 };
 export const bridgeDescriptor = (dir) => path.join(dir, "desktop-bridge.json");
 const requestLimit = 26_000_000;
@@ -24,13 +25,16 @@ function authenticated(actual, expected) {
 export function validateBridgeConfig(input) {
   if (
     !input ||
-    Object.keys(input).length !== 4 ||
-    Object.keys(bridgeDefaults).some((key) => typeof input[key] !== "boolean")
+    typeof input !== "object" ||
+    Object.keys(input).some((key) => !Object.hasOwn(bridgeDefaults, key)) ||
+    ["enabled", "charts", "streams", "research"].some(
+      (key) => typeof input[key] !== "boolean",
+    ) ||
+    (input.alerts !== undefined && typeof input.alerts !== "boolean")
   )
-    throw Error("Choose enabled, charts, streams and research access.");
-  return Object.fromEntries(
-    Object.keys(bridgeDefaults).map((key) => [key, input[key]]),
-  );
+    throw Error("Choose enabled, charts, streams, research and alerts access.");
+  // Existing four-capability configs migrate with alerts explicitly denied.
+  return { ...bridgeDefaults, ...input };
 }
 
 export class DesktopBridge {

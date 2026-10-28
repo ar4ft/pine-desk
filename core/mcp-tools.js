@@ -25,6 +25,7 @@ export function toolDefinitions() {
       ].includes(action)
     )
       capability = "streams";
+    if (action.startsWith("alert") && !readOnly) capability = "alerts";
     definitions.push({
       name,
       description,
@@ -774,6 +775,74 @@ export function toolDefinitions() {
     "optionRunGet",
   );
 
+  const alertRule = z
+    .object({
+      name: z.string().min(1).max(100),
+      symbol: z.string().regex(/^[A-Z0-9]{3,24}$/),
+      direction: z.enum(["above", "below"]),
+      price: z.number().positive().finite(),
+      cooldownSeconds: z.number().int().min(1).max(604800).default(300),
+      once: z.boolean().default(true),
+      enabled: z.boolean().default(true),
+      expiresAt: z.number().int().positive().nullable().default(null),
+      session: z
+        .object({
+          startMinuteUTC: z.number().int().min(0).max(1439),
+          endMinuteUTC: z.number().int().min(0).max(1439),
+          daysUTC: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+        })
+        .strict()
+        .nullable()
+        .default(null),
+    })
+    .strict();
+  tool(
+    "alerts_status",
+    "Read saved Binance spot crossing rules, monitor/feed health, baselines and unread history count. Ticker observations are not every trade.",
+    {},
+    "alertStatus",
+  );
+  tool(
+    "alerts_history",
+    "Read durable trigger evidence and notification submission state. Retains the latest 1000 events; pending delivery after a crash is not replayed.",
+    { limit: z.number().int().min(1).max(1000).default(100) },
+    "alertHistory",
+  );
+  tool(
+    "alerts_create",
+    "Save a local price-crossing rule. With monitoring enabled, subscribes to its public Binance ticker. First fresh quote establishes a baseline; no catch-up across gaps. Requires alert permission.",
+    { rule: alertRule },
+    "alertCreate",
+    false,
+  );
+  tool(
+    "alerts_update",
+    "Replace an alert definition; resets its crossing baseline but preserves cooldown/trigger history. Can re-enable a one-shot rule. Requires alert permission.",
+    { id: z.string(), rule: alertRule },
+    "alertUpdate",
+    false,
+  );
+  tool(
+    "alerts_delete",
+    "Delete an alert rule; existing trigger evidence remains in history. Requires alert permission.",
+    { id: z.string() },
+    "alertDelete",
+    false,
+  );
+  tool(
+    "alerts_configure",
+    "Start/pause persistent local monitoring and OS notification requests. Enabled monitoring resumes when the owning app/service restarts. Quitting or sleeping interrupts monitoring; no cloud delivery. Requires alert permission.",
+    { monitoring: z.boolean(), notifications: z.boolean() },
+    "alertConfigure",
+    false,
+  );
+  tool(
+    "alerts_acknowledge",
+    "Mark a trigger event as reviewed without deleting its evidence. Requires alert permission.",
+    { id: z.string() },
+    "alertAcknowledge",
+    false,
+  );
   tool(
     "market_search",
     "Search currently trading Binance spot pairs by symbol or base asset. Cached public exchange metadata; no credentials.",
@@ -835,6 +904,7 @@ export function toolDefinitions() {
         "workspace",
         "backtest",
         "orderflow",
+        "alerts",
         "options",
         "crypto",
         "education",

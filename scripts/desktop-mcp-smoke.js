@@ -47,7 +47,12 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       arguments: { page: "workspace" },
     });
     assert.equal(denied.isError, true);
-    for (const scope of ["charts", "streams", "research"])
+    const alertDenied = await readOnly.callTool({
+      name: "alerts_configure",
+      arguments: { monitoring: true, notifications: true },
+    });
+    assert.equal(alertDenied.isError, true);
+    for (const scope of ["charts", "streams", "research", "alerts"])
       await page.locator("#agent-" + scope).check();
     await page.locator("#agent-save").click();
     await waitIdle();
@@ -237,6 +242,101 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       panelId: "workspace",
       ...original.panels[0].editor,
     });
+    // Real alert engine, durable store and attached MCP; replace only transport
+    // and OS notification submission so packaged CI never depends on permissions.
+    await app.evaluate(({ app }) => {
+      const path = process.getBuiltinModule("node:path"),
+        { EventEmitter } = process.getBuiltinModule("node:events");
+      const require = process
+        .getBuiltinModule("node:module")
+        .createRequire(path.join(app.getAppPath(), "package.json"));
+      const { marketQuotes, alertEngine } = require(
+        path.join(app.getAppPath(), "core/service.js"),
+      );
+      const fixture = (globalThis.pineDeskSmokeAlerts = {
+        marketQuotes,
+        alertEngine,
+        createSocket: marketQuotes.createSocket,
+        notify: alertEngine.notify,
+        submissions: 0,
+        starts: 0,
+        eventAt: 0,
+      });
+      marketQuotes.createSocket = () => {
+        fixture.starts++;
+        fixture.socket = new EventEmitter();
+        fixture.socket.terminate = () => fixture.socket.emit("close");
+        queueMicrotask(() => fixture.socket.emit("open"));
+        return fixture.socket;
+      };
+      alertEngine.notify = () => {
+        fixture.submissions++;
+        return "submitted";
+      };
+    });
+    await page.evaluate(() =>
+      window.desk.call("watchlistStart", { symbols: ["BTCUSDT"] }),
+    );
+    const alert = await call(second, "alerts_create", {
+      rule: {
+        name: "Native MCP alert",
+        symbol: "BTCUSDT",
+        direction: "above",
+        price: 100,
+      },
+    });
+    await call(second, "alerts_configure", {
+      monitoring: true,
+      notifications: true,
+    });
+    assert.equal(
+      await app.evaluate(() => globalThis.pineDeskSmokeAlerts.starts),
+      1,
+    );
+    await page.evaluate(() => window.desk.call("watchlistStop"));
+    assert.equal((await call(second, "alerts_status")).feed.active, true);
+    for (const price of [99, 101]) {
+      await app.evaluate(async (_electron, price) => {
+        const fixture = globalThis.pineDeskSmokeAlerts;
+        fixture.eventAt = Math.max(Date.now(), fixture.eventAt + 1);
+        fixture.socket.emit(
+          "message",
+          JSON.stringify({
+            e: "24hrTicker",
+            s: "BTCUSDT",
+            E: fixture.eventAt,
+            c: String(price),
+            P: "0",
+          }),
+        );
+        await fixture.alertEngine.queue;
+      }, price);
+    }
+    const history = await call(second, "alerts_history");
+    assert.equal(history.total, 1);
+    assert.equal(history.events[0].ruleId, alert.id);
+    assert.equal(history.events[0].notification, "submitted");
+    assert.equal(
+      await app.evaluate(() => globalThis.pineDeskSmokeAlerts.submissions),
+      1,
+    );
+    await call(second, "desktop_navigate", { page: "alerts" });
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#alert-history")
+        ?.textContent.includes("99 → 101"),
+    );
+    await call(second, "alerts_acknowledge", { id: history.events[0].id });
+    await call(second, "alerts_configure", {
+      monitoring: false,
+      notifications: true,
+    });
+    await app.evaluate(() => {
+      const fixture = globalThis.pineDeskSmokeAlerts;
+      fixture.marketQuotes.createSocket = fixture.createSocket;
+      fixture.alertEngine.notify = fixture.notify;
+      delete globalThis.pineDeskSmokeAlerts;
+    });
     await call(second, "desktop_navigate", { page: "mcp" });
     await page.locator("#agent-revoke").click();
     await waitIdle();
@@ -257,6 +357,6 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     await Promise.allSettled(clients.map((client) => client.close()));
   }
   console.log(
-    "Desktop MCP passed: linked charts, shared primary/comparison stream, observed chart edits, execution errors, snapshot research, client disconnect and revocation.",
+    "Desktop MCP passed: persistent alerts and scope enforcement, linked charts, shared primary/comparison stream, observed chart edits, execution errors, snapshot research, client disconnect and revocation.",
   );
 }
