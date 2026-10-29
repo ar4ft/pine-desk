@@ -45,4 +45,28 @@ export async function desktopFootprintSmoke({ page, client, call }) {
       "75% achieved",
     ),
   );
+  const profile = await call(client, "volume_profile", {
+    mode: "anchored",
+    from: start,
+    to: start + 60000,
+    tickSize: 1,
+  });
+  assert.equal(profile.totalTrades, 8);
+  assert.equal(profile.buy, 36);
+  assert.equal(profile.sell, 4);
+  assert.equal(profile.valueArea.actualPercent, 75);
+  await page.locator('[data-flow-tab="profiles"]').click();
+  await page.locator("#vp-sessionDate").fill("2026-01-01");
+  await page.locator("#vp-sessionMinutes").fill("1");
+  await page.locator("#vp-tickSize").fill("1");
+  await page.locator("#vp-compute").click();
+  await page.waitForFunction(() =>
+    document.querySelector("#vp-area")?.textContent.includes("75% achieved"),
+  );
+  assert.equal(await page.locator("#vp-table tbody tr").count(), 4);
+  assert.ok(
+    (await page.locator("#vp-applied").textContent()).includes(
+      "FOOTPRINT-FIXTURE",
+    ),
+  );
 }

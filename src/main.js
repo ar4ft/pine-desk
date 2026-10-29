@@ -1,4 +1,10 @@
 import {
+  newVolumeProfileState,
+  retainVolumeProfileDraft,
+  volumeProfileView,
+  bindVolumeProfile,
+} from "./volume-profile-view.js";
+import {
   newFootprintState,
   footprintControls,
   readFootprintSettings,
@@ -161,6 +167,7 @@ const state = {
   depthHistory: newDepthHistoryState(),
   depth: newDepthState(),
   flowTab: "trades",
+  volumeProfile: newVolumeProfileState(),
   alerts: newAlertsState(),
   learning: newLearningState(),
   crypto: newCryptoState(),
@@ -505,6 +512,7 @@ function render() {
   const destinationChanged = document.body.dataset.section !== state.page;
   captureWorkspaceChart();
   linkedCharts.capture();
+  retainVolumeProfileDraft(state.volumeProfile);
   retainDepthHistoryDraft(state.depthHistory);
   retainDepthDraft(state.depth);
   retainAlertDraft(state.alerts);
@@ -662,7 +670,9 @@ function backtestTab(r) {
   return `<div class="plot-card"><div class="panel-heading"><span>MONTE CARLO RESAMPLING</span><button id="simulate" class="primary">Simulate 200 paths</button></div><canvas id="simulation-plot"></canvas><div id="simulation-metrics" class="simulation-metrics">Seed 42 · sampling closed-trade net P&L with replacement, at fixed cash size.<br>This model excludes intra-trade equity, serial dependence, and changing position sizes.</div></div>`;
 }
 function flow() {
-  const tabs = `<div class="flow-tabs" role="group" aria-label="Order flow view"><button data-flow-tab="trades" aria-pressed="${state.flowTab === "trades"}">Executed trades</button><button data-flow-tab="depth" aria-pressed="${state.flowTab === "depth"}">Live order book / DOM</button><button data-flow-tab="history" aria-pressed="${state.flowTab === "history"}">Recorded liquidity</button></div>`;
+  const tabs = `<div class="flow-tabs" role="group" aria-label="Order flow view"><button data-flow-tab="trades" aria-pressed="${state.flowTab === "trades"}">Executed trades</button><button data-flow-tab="depth" aria-pressed="${state.flowTab === "depth"}">Live order book / DOM</button><button data-flow-tab="history" aria-pressed="${state.flowTab === "history"}">Recorded liquidity</button><button data-flow-tab="profiles" aria-pressed="${state.flowTab === "profiles"}">Volume profiles</button></div>`;
+  if (state.flowTab === "profiles")
+    return tabs + volumeProfileView(state.volumeProfile);
   if (state.flowTab === "history")
     return tabs + depthHistoryView(state.depthHistory);
   if (state.flowTab === "depth") return tabs + depthView(state.depth);
@@ -689,6 +699,7 @@ function mcp() {
       "Persist Pine source and execute strategies",
     ],
     ["import_trades / order_flow", "Trade footprints, delta, CVD, profile"],
+    ["volume_profile", "UTC session and anchored profiles with coverage"],
     [
       "library_search / library_list / library_source",
       "Browse official catalog and get public source",
@@ -946,6 +957,8 @@ function alertBindings() {
   });
 }
 function bind() {
+  if (state.page === "orderflow" && state.flowTab === "profiles")
+    bindVolumeProfile({ state: state.volumeProfile, call, task, exportFile });
   if (state.page === "orderflow" && state.flowTab === "history")
     depthHistoryController.bind();
   document.querySelectorAll("[data-flow-tab]").forEach((el) => {

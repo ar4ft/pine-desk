@@ -80,4 +80,6 @@ Responses retain existing totals, bars, profile, POC and CVD fields and add:
 
 Fixtures cover both diagonal directions, inclusive thresholds, zero/edge comparisons, interrupted runs, bar isolation, POC/expansion ties, achieved percentages, decimal boundaries, sparse price ranges, overflow and capacity limits. Browser checks cover history pinning, live draft preservation, eviction, profile scope, paging and both themes. Native desktop/installed macOS checks compare the MCP result with actual displayed stack/value-area output.
 
-Session/anchored/composite profiles, configurable exchange sessions and DST handling, trade-size filtering, TPO and chart-integrated footprint rendering remain follow-up work.
+Recurring-session composite profiles, exchange calendars and DST handling, trade-size filtering, TPO and chart-integrated footprint rendering remain follow-up work.
+
+[Session and anchored volume profiles](volume-profiles.md) are available in v0.15.0 in the separate Volume profiles tab and via `volume_profile`.

@@ -91,3 +91,39 @@
   max-height: 150px;
   overflow: auto;
 }
+
+#volume-profile-view .searchbar {
+  flex-wrap: wrap;
+}
+#volume-profile-view input[type="date"] {
+  width: 170px;
+}
+#volume-profile-view input[type="datetime-local"] {
+  width: 245px;
+}
+#vp-table {
+  width: 100%;
+}
+#vp-table td:nth-child(2) {
+  width: 35%;
+  min-width: 120px;
+}
+#vp-table .profile-track {
+  display: flex;
+  height: 12px;
+}
+#vp-table .profile-track i {
+  display: block;
+  height: 100%;
+}
+#vp-error {
+  color: var(--red);
+}
+#volume-profile-view .metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1000px) {
+  #volume-profile-view .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -37,13 +37,13 @@ export function flowSettings(input = {}) {
     );
   return Object.fromEntries(Object.keys(flowDefaults).map((k) => [k, s[k]]));
 }
-const priceAt = (index, tick) => {
+export const priceAt = (index, tick) => {
   const price = Number((index * tick).toPrecision(15));
   if (!Number.isFinite(price))
     throw Error("Price bucket exceeds numeric capacity.");
   return price;
 };
-function bucketIndex(price, tick) {
+export function bucketIndex(price, tick) {
   let ratio = price / tick;
   if (!Number.isFinite(ratio) || ratio > 1e12)
     throw Error(
