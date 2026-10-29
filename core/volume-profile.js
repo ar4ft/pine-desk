@@ -76,13 +76,31 @@ export function profileSettings(input = {}) {
       : {}),
   };
 }
-export function volumeProfile(snapshot, input = {}) {
-  const settings = profileSettings(input),
-    trades = validateTrades(snapshot.trades);
+export function profileTrades(snapshot) {
+  const trades = validateTrades(snapshot.trades);
   if (trades.some((t) => !Number.isSafeInteger(t.time) || t.time > maxTime))
     throw Error(
       "Trade timestamp must be a supported integer millisecond date.",
     );
+  return trades;
+}
+export function profileCoverage(snapshot, trades, from, to, first, last) {
+  return {
+    retainedFrom: trades[0].time,
+    retainedTo: trades.at(-1).time,
+    observedFrom: first,
+    observedTo: last,
+    startsBeforeRetained: from < trades[0].time,
+    endsAfterRetained: to - 1 > trades.at(-1).time,
+    gaps: (snapshot.gaps ?? []).filter(
+      (g) => (g.from == null || g.from < to) && (g.to == null || g.to >= from),
+    ),
+    note: "Observed trades only. Retained timestamps and known gaps do not establish complete session coverage. No backfill or interpolation.",
+  };
+}
+export function volumeProfile(snapshot, input = {}) {
+  const settings = profileSettings(input),
+    trades = profileTrades(snapshot);
   const { from, to, tickSize, valueAreaPercent } = settings,
     levels = new Map();
   let buy = 0,
@@ -115,9 +133,6 @@ export function volumeProfile(snapshot, input = {}) {
   if (!Number.isFinite(buy + sell))
     throw Error("Trade volume exceeds numeric capacity.");
   const profile = [...levels.values()].sort((a, b) => b.index - a.index);
-  const gaps = (snapshot.gaps ?? []).filter(
-    (g) => (g.from == null || g.from < to) && (g.to == null || g.to >= from),
-  );
   return {
     settings,
     symbol: snapshot.symbol,
@@ -129,15 +144,6 @@ export function volumeProfile(snapshot, input = {}) {
     delta: buy - sell,
     profile,
     valueArea: volumeValueArea(profile, tickSize, valueAreaPercent),
-    coverage: {
-      retainedFrom: trades[0].time,
-      retainedTo: trades.at(-1).time,
-      observedFrom: first,
-      observedTo: last,
-      startsBeforeRetained: from < trades[0].time,
-      endsAfterRetained: to - 1 > trades.at(-1).time,
-      gaps,
-      note: "Observed trades only. Retained timestamps and known gaps do not establish complete session coverage. No backfill or interpolation.",
-    },
+    coverage: profileCoverage(snapshot, trades, from, to, first, last),
   };
 }

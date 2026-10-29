@@ -200,6 +200,15 @@ test("service uses the saved snapshot or owning live buffer and preserves gap pr
   assert.equal(result.totalTrades, 2);
   assert.equal(result.symbol, "LIVE");
   assert.equal(result.coverage.retainedFrom, day + 1);
+  const tpo = await dispatch("tpoProfile", { ...args, source: "live" });
+  assert.equal(tpo.totalTrades, 2);
+  assert.equal(tpo.totalTpos, 1);
+  assert.equal(tpo.symbol, "LIVE");
+  assert.equal(tpo.coverage.retainedFrom, day + 1);
+  assert.equal(
+    (await dispatch("tpoProfile", args)).coverage.gaps[0].reason,
+    "saved interruption",
+  );
   assert.equal(live.snapshot().active, false);
   assert.equal((await dispatch("volumeProfile", args)).symbol, "TEST");
 });

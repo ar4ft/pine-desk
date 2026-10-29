@@ -69,4 +69,31 @@ export async function desktopFootprintSmoke({ page, client, call }) {
       "FOOTPRINT-FIXTURE",
     ),
   );
+  const tpo = await call(client, "tpo_profile", {
+    mode: "session",
+    sessionDate: "2026-01-01",
+    sessionMinutes: 2,
+    tickSize: 1,
+    periodMinutes: 1,
+    initialBalanceMinutes: 1,
+  });
+  assert.equal(tpo.totalTpos, 8);
+  assert.deepEqual(tpo.profile[0].periods, [0, 1]);
+  assert.equal(tpo.initialBalance.totalTrades, 8);
+  await page.locator('[data-flow-tab="tpo"]').click();
+  await page.locator("#vp-sessionDate").fill("2026-01-01");
+  await page.locator("#vp-sessionMinutes").fill("2");
+  await page.locator("#vp-tickSize").fill("1");
+  await page.locator("#vp-periodMinutes").fill("1");
+  await page.locator("#vp-initialBalanceMinutes").fill("1");
+  await page.locator("#vp-compute").click();
+  await page.waitForFunction(() =>
+    document.querySelector("#vp-area")?.textContent.includes("75% of TPOs"),
+  );
+  assert.equal(await page.locator(".tpo-letter").count(), 8);
+  assert.ok(
+    (await page.locator("#tpo-ib").textContent()).includes(
+      "Low 100 · high 104",
+    ),
+  );
 }

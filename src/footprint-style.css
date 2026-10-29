@@ -127,3 +127,37 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+#tpo-table {
+  width: 100%;
+}
+#tpo-table td:last-child {
+  width: 65%;
+}
+.tpo-letters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-height: 110px;
+  overflow: auto;
+  min-width: 150px;
+}
+.tpo-letter {
+  display: inline-block;
+  padding: 3px 6px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: monospace;
+}
+.tpo-periods {
+  padding: 16px;
+  margin-top: 16px;
+}
+.tpo-periods summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.tpo-periods td {
+  white-space: normal;
+}

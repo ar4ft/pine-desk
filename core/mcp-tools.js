@@ -174,21 +174,32 @@ export function toolDefinitions() {
     "depthStop",
     false,
   );
+  const profileSchema = {
+    source: z.enum(["imported", "live"]).default("imported"),
+    mode: z.enum(["session", "anchored"]).default("session"),
+    tickSize: z.number().positive().finite().default(10),
+    valueAreaPercent: z.number().min(1).max(100).default(70),
+    sessionDate: z.string().optional(),
+    sessionOpen: z.number().int().min(0).max(1439).default(0),
+    sessionMinutes: z.number().int().min(1).max(1440).default(1440),
+    from: z.number().int().nonnegative().optional(),
+    to: z.number().int().nonnegative().optional(),
+  };
   tool(
     "volume_profile",
     "Compute a UTC session or anchored [from,to) volume profile from saved trades or the shared live retained window. Observed trades only, no backfill. Returns all occupied rows (max 50,000), buy/sell/delta, POC/VA and coverage. Session date names the UTC opening date; duration may cross midnight. VA expands nearest occupied rows; ties higher; VAH exclusive.",
-    {
-      source: z.enum(["imported", "live"]).default("imported"),
-      mode: z.enum(["session", "anchored"]).default("session"),
-      tickSize: z.number().positive().finite().default(10),
-      valueAreaPercent: z.number().min(1).max(100).default(70),
-      sessionDate: z.string().optional(),
-      sessionOpen: z.number().int().min(0).max(1439).default(0),
-      sessionMinutes: z.number().int().min(1).max(1440).default(1440),
-      from: z.number().int().nonnegative().optional(),
-      to: z.number().int().nonnegative().optional(),
-    },
+    profileSchema,
     "volumeProfile",
+  );
+  tool(
+    "tpo_profile",
+    "Compute observed-trade TPO occupancy for a UTC session or anchored [from,to) window. One TPO per price bucket per period; ignores size/side, never fills high-low gaps. Returns period letters/counts, TPO POC/value area (ties higher), observed initial balance and retained/gap coverage. Max 288 periods and 50,000 occupied rows. Snapshot of saved or shared live trades; does not start a stream.",
+    {
+      ...profileSchema,
+      periodMinutes: z.number().int().min(1).max(240).default(30),
+      initialBalanceMinutes: z.number().int().min(1).max(1440).default(60),
+    },
+    "tpoProfile",
   );
   const flowSchema = {
     timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),

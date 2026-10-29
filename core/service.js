@@ -36,6 +36,7 @@ import {
 } from "./data.js";
 import { examples } from "./examples.js";
 import { runBacktest, simulate, validateSource } from "./backtest.js";
+import { tpoProfile } from "./tpo.js";
 import { volumeProfile } from "./volume-profile.js";
 import { orderflow } from "./orderflow.js";
 import { libraryCall } from "./library.js";
@@ -607,6 +608,7 @@ export async function dispatch(action, args = {}) {
         symbol: String(args.symbol || "CSV").slice(0, 40),
         importedAt: Date.now(),
       });
+    case "tpoProfile":
     case "volumeProfile": {
       const snapshot =
         args.source === "live"
@@ -616,7 +618,9 @@ export async function dispatch(action, args = {}) {
         throw Error(
           "Import or save executed trades first under Executed trades.",
         );
-      return volumeProfile(snapshot, args);
+      return action === "tpoProfile"
+        ? tpoProfile(snapshot, args)
+        : volumeProfile(snapshot, args);
     }
     case "orderflow": {
       const stored = await store.read("trades");

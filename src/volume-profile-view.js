@@ -1,3 +1,4 @@
+import { tpoResults } from "./tpo-view.js";
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -14,10 +15,14 @@ const utc = (value) =>
   value == null
     ? "none"
     : new Date(value).toISOString().replace("T", " ").replace("Z", " UTC");
-export function newVolumeProfileState() {
+export function newVolumeProfileState(kind = "volume") {
   const date = new Date().toISOString().slice(0, 10);
   return {
+    kind,
     draft: {
+      ...(kind === "tpo"
+        ? { periodMinutes: 30, initialBalanceMinutes: 60 }
+        : {}),
       source: "imported",
       mode: "session",
       tickSize: 10,
@@ -36,12 +41,18 @@ export function newVolumeProfileState() {
   };
 }
 export function retainVolumeProfileDraft(s) {
+  if (
+    document.getElementById("volume-profile-view")?.dataset.profileKind !==
+    s.kind
+  )
+    return;
   for (const key of Object.keys(s.draft)) {
     const input = document.getElementById("vp-" + key);
     if (input) s.draft[key] = input.value;
   }
 }
 function resultView(s) {
+  if (s.kind === "tpo") return tpoResults(s);
   const r = s.result;
   if (!r)
     return '<div class="empty-state"><h2>Choose the time window.</h2><p>Import trades under Executed trades, or use the existing Binance live buffer. Compute a profile to see volume at price.</p></div>';
@@ -57,11 +68,13 @@ function resultView(s) {
   ${v.gaps.length ? `<details class="footprint-gap"><summary>Known gaps</summary><pre>${esc(JSON.stringify(v.gaps, null, 2))}</pre></details>` : ""}`;
 }
 export function volumeProfileView(s) {
-  const d = s.draft;
-  return `<section id="volume-profile-view"><div class="page-intro"><span class="eyebrow">VOLUME THROUGH A CHOSEN WINDOW</span><h1>Find where trading concentrated.</h1><p>Session and anchored profiles from executed trades. Fixed UTC sessions keep opening times and overnight boundaries explicit.</p></div>
+  const d = s.draft,
+    tpo = s.kind === "tpo";
+  return `<section id="volume-profile-view" data-profile-kind="${s.kind}"><div class="page-intro"><span class="eyebrow">${tpo ? "TIME AT PRICE" : "VOLUME THROUGH A CHOSEN WINDOW"}</span><h1>${tpo ? "See where price returned." : "Find where trading concentrated."}</h1><p>${tpo ? "Observed-trade TPO profiles: each price bucket counts once per period. Separate time occupancy from traded volume." : "Session and anchored profiles from executed trades. Fixed UTC sessions keep opening times and overnight boundaries explicit."}</p></div>
   <div class="searchbar footprint-settings"><label>Source<select id="vp-source"><option value="imported" ${d.source === "imported" ? "selected" : ""}>Imported / saved trades</option><option value="live" ${d.source === "live" ? "selected" : ""}>Live Binance retained window</option></select></label><label>Mode<select id="vp-mode"><option value="session" ${d.mode === "session" ? "selected" : ""}>UTC session</option><option value="anchored" ${d.mode === "anchored" ? "selected" : ""}>Anchored range</option></select></label><label>Price bucket<input id="vp-tickSize" type="number" step="any" min="0" value="${esc(d.tickSize)}"></label><label>Value area %<input id="vp-valueAreaPercent" type="number" min="1" max="100" value="${esc(d.valueAreaPercent)}"></label></div>
   <div id="vp-session-fields" ${d.mode !== "session" ? "hidden" : ""}><div class="searchbar footprint-settings"><button id="vp-previous">← Previous day</button><label>Session opening date (UTC)<input id="vp-sessionDate" type="date" min="1970-01-01" value="${esc(d.sessionDate)}"></label><button id="vp-next">Next day →</button><label>Open (UTC)<input id="vp-sessionOpen" type="time" value="${esc(d.sessionOpen)}"></label><label>Duration (minutes)<input id="vp-sessionMinutes" type="number" min="1" max="1440" value="${esc(d.sessionMinutes)}"></label></div></div>
   <div id="vp-anchor-fields" ${d.mode !== "anchored" ? "hidden" : ""}><div class="searchbar footprint-settings"><label>Anchor start (UTC, inclusive)<input id="vp-from" type="datetime-local" step="1" value="${esc(d.from)}"></label><label>End (UTC, exclusive)<input id="vp-to" type="datetime-local" step="1" value="${esc(d.to)}"></label></div></div>
+  ${tpo ? `<div class="searchbar footprint-settings"><label>TPO period (minutes)<input id="vp-periodMinutes" type="number" min="1" max="240" value="${esc(d.periodMinutes)}"></label><label>Initial balance (minutes)<input id="vp-initialBalanceMinutes" type="number" min="1" max="1440" value="${esc(d.initialBalanceMinutes)}"></label><span class="footnote">Up to 288 periods. Letter A begins at the requested start.</span></div>` : ""}
   <div class="searchbar"><button id="vp-compute" class="primary">Compute profile</button><span class="footnote">Changes apply on Compute. This view does not start or alter a feed.</span></div><p class="footnote">UTC only; exchange calendars, holidays and daylight-saving shifts are not applied. Adjust the UTC open when needed. Results use retained prints; an entire session may need a historical trade import.</p><p id="vp-error" role="alert">${esc(s.error)}</p><div id="vp-results">${resultView(s)}</div></section>`;
 }
 export function bindVolumeProfile({ state: s, call, task, exportFile }) {
@@ -86,7 +99,10 @@ export function bindVolumeProfile({ state: s, call, task, exportFile }) {
     if (exp)
       exp.onclick = () =>
         task(() =>
-          exportFile("volume-profile.json", JSON.stringify(s.result, null, 2)),
+          exportFile(
+            s.kind === "tpo" ? "tpo-profile.json" : "volume-profile.json",
+            JSON.stringify(s.result, null, 2),
+          ),
         );
   };
   const paint = () => {
@@ -128,6 +144,12 @@ export function bindVolumeProfile({ state: s, call, task, exportFile }) {
         mode: d.mode,
         tickSize: Number(d.tickSize),
         valueAreaPercent: Number(d.valueAreaPercent),
+        ...(s.kind === "tpo"
+          ? {
+              periodMinutes: Number(d.periodMinutes),
+              initialBalanceMinutes: Number(d.initialBalanceMinutes),
+            }
+          : {}),
         ...(d.mode === "session"
           ? {
               sessionDate: d.sessionDate,
@@ -140,7 +162,10 @@ export function bindVolumeProfile({ state: s, call, task, exportFile }) {
           : { from: Date.parse(d.from + "Z"), to: Date.parse(d.to + "Z") }),
       };
       try {
-        const result = await call("volumeProfile", args);
+        const result = await call(
+          s.kind === "tpo" ? "tpoProfile" : "volumeProfile",
+          args,
+        );
         s.result = result;
         s.offset = 0;
         s.error = "";

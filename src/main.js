@@ -168,6 +168,7 @@ const state = {
   depth: newDepthState(),
   flowTab: "trades",
   volumeProfile: newVolumeProfileState(),
+  tpoProfile: newVolumeProfileState("tpo"),
   alerts: newAlertsState(),
   learning: newLearningState(),
   crypto: newCryptoState(),
@@ -513,6 +514,7 @@ function render() {
   captureWorkspaceChart();
   linkedCharts.capture();
   retainVolumeProfileDraft(state.volumeProfile);
+  retainVolumeProfileDraft(state.tpoProfile);
   retainDepthHistoryDraft(state.depthHistory);
   retainDepthDraft(state.depth);
   retainAlertDraft(state.alerts);
@@ -670,7 +672,9 @@ function backtestTab(r) {
   return `<div class="plot-card"><div class="panel-heading"><span>MONTE CARLO RESAMPLING</span><button id="simulate" class="primary">Simulate 200 paths</button></div><canvas id="simulation-plot"></canvas><div id="simulation-metrics" class="simulation-metrics">Seed 42 · sampling closed-trade net P&L with replacement, at fixed cash size.<br>This model excludes intra-trade equity, serial dependence, and changing position sizes.</div></div>`;
 }
 function flow() {
-  const tabs = `<div class="flow-tabs" role="group" aria-label="Order flow view"><button data-flow-tab="trades" aria-pressed="${state.flowTab === "trades"}">Executed trades</button><button data-flow-tab="depth" aria-pressed="${state.flowTab === "depth"}">Live order book / DOM</button><button data-flow-tab="history" aria-pressed="${state.flowTab === "history"}">Recorded liquidity</button><button data-flow-tab="profiles" aria-pressed="${state.flowTab === "profiles"}">Volume profiles</button></div>`;
+  const tabs = `<div class="flow-tabs" role="group" aria-label="Order flow view"><button data-flow-tab="trades" aria-pressed="${state.flowTab === "trades"}">Executed trades</button><button data-flow-tab="depth" aria-pressed="${state.flowTab === "depth"}">Live order book / DOM</button><button data-flow-tab="history" aria-pressed="${state.flowTab === "history"}">Recorded liquidity</button><button data-flow-tab="profiles" aria-pressed="${state.flowTab === "profiles"}">Volume profiles</button><button data-flow-tab="tpo" aria-pressed="${state.flowTab === "tpo"}">TPO analysis</button></div>`;
+  if (state.flowTab === "tpo")
+    return tabs + volumeProfileView(state.tpoProfile);
   if (state.flowTab === "profiles")
     return tabs + volumeProfileView(state.volumeProfile);
   if (state.flowTab === "history")
@@ -700,6 +704,7 @@ function mcp() {
     ],
     ["import_trades / order_flow", "Trade footprints, delta, CVD, profile"],
     ["volume_profile", "UTC session and anchored profiles with coverage"],
+    ["tpo_profile", "Price/time occupancy, TPO value area and initial balance"],
     [
       "library_search / library_list / library_source",
       "Browse official catalog and get public source",
@@ -957,6 +962,8 @@ function alertBindings() {
   });
 }
 function bind() {
+  if (state.page === "orderflow" && state.flowTab === "tpo")
+    bindVolumeProfile({ state: state.tpoProfile, call, task, exportFile });
   if (state.page === "orderflow" && state.flowTab === "profiles")
     bindVolumeProfile({ state: state.volumeProfile, call, task, exportFile });
   if (state.page === "orderflow" && state.flowTab === "history")
