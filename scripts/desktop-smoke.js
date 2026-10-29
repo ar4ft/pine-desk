@@ -301,6 +301,13 @@ try {
     (await reopened.evaluate(() => window.desk.call("depthSnapshot"))).active,
     false,
   );
+  const plans = await reopened.evaluate(() => window.desk.call("planList"));
+  const savedPlan = plans.find(
+    (p) => p.estimate.input.name === "Desktop plan fixture",
+  );
+  assert.equal(savedPlan.revision, 2);
+  assert.equal(savedPlan.estimate.input.notes, "Desktop plan reviewed");
+  assert.equal(savedPlan.estimate.quantity, 10);
   const depthArchives = await reopened.evaluate(() =>
     window.desk.call("depthRecordings"),
   );

@@ -40,6 +40,84 @@ export function toolDefinitions() {
       readOnly: capability === "read",
     });
   };
+  const planSchema = z
+    .object({
+      name: z.string().min(1).max(100),
+      symbol: z.string().min(1).max(40),
+      venue: z.string().min(1).max(60),
+      currency: z.string().min(2).max(12),
+      side: z.enum(["long", "short"]).default("long"),
+      assetType: z.enum(["spot", "linear"]).default("spot"),
+      status: z.enum(["draft", "archived"]).default("draft"),
+      equity: z.number().positive().finite(),
+      riskPercent: z.number().min(0.01).max(100),
+      entry: z.number().positive().finite(),
+      stop: z.number().positive().finite(),
+      quantityStep: z.number().min(1e-8).max(1e6),
+      multiplier: z.number().positive().finite().default(1),
+      feePercent: z.number().min(0).max(100).default(0),
+      slippage: z.number().nonnegative().finite().default(0),
+      maxNotional: z.number().positive().finite(),
+      targets: z
+        .array(
+          z
+            .object({
+              price: z.number().positive().finite(),
+              percent: z.number().int().min(1).max(100),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(3),
+      notes: z.string().max(4000).default(""),
+      reference: z
+        .object({
+          symbol: z.string().min(1).max(40),
+          origin: z.string().min(1).max(200),
+          time: z.number().int().positive(),
+          price: z.number().positive().finite(),
+        })
+        .strict()
+        .nullable()
+        .default(null),
+    })
+    .strict();
+  tool(
+    "plan_estimate",
+    "Estimate linear trade-plan size from manual equity, entry/stop/targets, fees, adverse per-fill price slippage, multiplier, quantity increment and notional cap. Quote-currency scenario only; does not create orders, fills or positions.",
+    { input: planSchema },
+    "planEstimate",
+  );
+  tool(
+    "plans_list",
+    "Read saved draft/archived trade plans with revision, assumptions and estimates. Not a paper account or execution ledger.",
+    {},
+    "planList",
+  );
+  tool(
+    "plan_get",
+    "Read a saved trade plan and its revision.",
+    { id: z.string().uuid() },
+    "planGet",
+  );
+  tool(
+    "plan_save",
+    "Create or replace a saved trade plan (research permission). For updates supply id and expectedRevision; stale revisions fail. Recalculates assumptions; does not execute trades.",
+    {
+      input: planSchema,
+      id: z.string().uuid().optional(),
+      expectedRevision: z.number().int().positive().optional(),
+    },
+    "planSave",
+    false,
+  );
+  tool(
+    "plan_delete",
+    "Delete a saved trade plan by id and current expectedRevision (research permission). This does not cancel any orders; plans have no execution state.",
+    { id: z.string().uuid(), expectedRevision: z.number().int().positive() },
+    "planDelete",
+    false,
+  );
   tool(
     "workspace",
     "Read local dataset, saved scripts, and reproducible backtest runs.",
@@ -1021,6 +1099,7 @@ export function toolDefinitions() {
         "backtest",
         "orderflow",
         "alerts",
+        "plans",
         "options",
         "crypto",
         "education",

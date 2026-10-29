@@ -1,3 +1,4 @@
+import { desktopPlanSmoke, planFixture } from "./desktop-plan-smoke.js";
 import { desktopFootprintSmoke } from "./desktop-footprint-smoke.js";
 import { desktopDepthSmoke } from "./desktop-depth-smoke.js";
 import assert from "node:assert/strict";
@@ -43,6 +44,19 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     await waitIdle();
     const readOnly = await connect();
     const original = await call(readOnly, "desktop_state");
+    assert.equal(
+      (await call(readOnly, "plan_estimate", { input: planFixture })).quantity,
+      10,
+    );
+    assert.equal(
+      (
+        await readOnly.callTool({
+          name: "plan_save",
+          arguments: { input: planFixture },
+        })
+      ).isError,
+      true,
+    );
     assert.equal(original.panels[0].id, "workspace");
     const denied = await readOnly.callTool({
       name: "desktop_navigate",
@@ -268,6 +282,7 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     await desktopDepthSmoke({ app, page, first: depthClient, second, call });
     await depthClient.close();
     await desktopFootprintSmoke({ page, client: second, call });
+    await desktopPlanSmoke({ page, client: second, call });
     // Real alert engine, durable store and attached MCP; replace only transport
     // and OS notification submission so packaged CI never depends on permissions.
     await app.evaluate(({ app }) => {

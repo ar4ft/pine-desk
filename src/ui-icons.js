@@ -1,4 +1,5 @@
 const paths = {
+  plans: '<path d="M4 5h16M4 12h16M4 19h16M8 3v4M16 10v4M10 17v4"/>',
   alerts: '<path d="M6 9a6 6 0 0112 0v6l2 3H4l2-3zM10 21h4"/>',
   workspace: '<path d="M4 19h16M5 14l4-5 4 3 6-8"/>',
   library:
@@ -22,6 +23,6 @@ export function uiIcon(name) {
 }
 export const navGroups = [
   ["Markets", ["workspace", "alerts", "orderflow", "options", "crypto"]],
-  ["Research", ["backtest", "library", "edge", "whale", "education"]],
+  ["Research", ["plans", "backtest", "library", "edge", "whale", "education"]],
   ["Connections", ["mcp", "settings"]],
 ];

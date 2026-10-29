@@ -1,3 +1,4 @@
+import { TradePlans, estimatePlan } from "./trade-plans.js";
 import { DepthHistory, DepthRecorder } from "./depth-history.js";
 import { depthSymbol } from "./depth.js";
 import { BinanceDepth } from "./depth.js";
@@ -61,6 +62,12 @@ import { auditStrategy } from "./strategy-audit.js";
 import { dataQuality, providerCapabilities } from "./data-quality.js";
 import { runOptionStudy, stopOptionStudies } from "./option-study.js";
 import { compareOptionRuns } from "./option-comparison.js";
+export const tradePlans = new TradePlans({
+  storage: {
+    read: () => store.read("trade-plans"),
+    write: (doc) => store.write("trade-plans", doc),
+  },
+});
 let liveWrite = Promise.resolve();
 export const live = new BinanceLive({
   onClosed: (dataset) => {
@@ -129,6 +136,7 @@ export const optionsProvider = new UnusualWhales();
 export const whaleRunner = new WhaleRunner();
 export const researchJobs = new ResearchJobs();
 export async function shutdown() {
+  await tradePlans.close();
   await alertEngine.close();
   quoteSubscriptions.stop();
   await depthRecorder.stop("Owning service shut down.");
@@ -158,6 +166,16 @@ async function datasetFor(args) {
 }
 export async function dispatch(action, args = {}) {
   switch (action) {
+    case "planEstimate":
+      return estimatePlan(args.input);
+    case "planList":
+      return tradePlans.list();
+    case "planGet":
+      return tradePlans.get(args.id);
+    case "planSave":
+      return tradePlans.save(args);
+    case "planDelete":
+      return tradePlans.remove(args);
     case "alertStatus":
       await initialize();
       return alertEngine.snapshot();
