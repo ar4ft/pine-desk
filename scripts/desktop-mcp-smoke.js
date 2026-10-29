@@ -1,3 +1,4 @@
+import { desktopFootprintSmoke } from "./desktop-footprint-smoke.js";
 import { desktopDepthSmoke } from "./desktop-depth-smoke.js";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -266,6 +267,7 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     const depthClient = await connect();
     await desktopDepthSmoke({ app, page, first: depthClient, second, call });
     await depthClient.close();
+    await desktopFootprintSmoke({ page, client: second, call });
     // Real alert engine, durable store and attached MCP; replace only transport
     // and OS notification submission so packaged CI never depends on permissions.
     await app.evaluate(({ app }) => {

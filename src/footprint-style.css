@@ -1,0 +1,93 @@
+.footprint-settings,
+.footprint-navigation {
+  flex-wrap: wrap;
+}
+.footprint-settings input {
+  width: 125px;
+}
+.footprint-navigation #footprint-index {
+  width: 95px;
+}
+.footprint-follow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.footprint-follow input {
+  width: auto;
+}
+.footprint-table {
+  max-height: 600px;
+  overflow: auto;
+}
+.footprint-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.footprint-table td,
+.footprint-table th {
+  padding: 10px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.footprint-table small {
+  font-size: 9px;
+  font-weight: 700;
+  display: block;
+}
+.footprint-table .imbalanced.buy,
+.footprint-table .stacked.buy {
+  color: var(--green);
+  background: #1b846526;
+}
+.footprint-table .imbalanced.sell,
+.footprint-table .stacked.sell {
+  color: var(--red);
+  background: #b22c5026;
+}
+.footprint-table .stacked {
+  font-weight: 700;
+  outline: 1px solid currentColor;
+  outline-offset: -2px;
+}
+:root[data-theme="light"] .footprint-table .buy {
+  color: #14795b;
+}
+:root[data-theme="light"] .footprint-table .sell {
+  color: #b62950;
+}
+.footprint-table .in-value-area td:first-child,
+.footprint-profile .in-value-area {
+  background: var(--accent-soft);
+}
+.footprint-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.footprint-profile {
+  max-height: 600px;
+  overflow: auto;
+}
+.footprint-profile > div {
+  grid-template-columns: 90px 1fr 80px;
+}
+.footprint-gap {
+  padding: 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+.footprint-gap pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#footprint-stacks {
+  max-height: 150px;
+  overflow: auto;
+}

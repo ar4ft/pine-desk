@@ -612,7 +612,12 @@ export async function dispatch(action, args = {}) {
         throw new Error(
           "Import trade CSV first. OHLCV candles do not contain aggressor-side data.",
         );
-      return { ...orderflow(stored.trades, args), symbol: stored.symbol };
+      return {
+        ...orderflow(stored.trades, args),
+        symbol: stored.symbol,
+        origin: stored.origin ?? "Imported trade range",
+        gaps: stored.gaps ?? [],
+      };
     }
     case "libraryList":
       return libraryCall("library_list_indicators", {

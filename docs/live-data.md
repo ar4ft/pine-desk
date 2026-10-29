@@ -44,3 +44,7 @@ Check `live_status` and data timestamps before reporting results. Preserve gap a
 ## Live order book
 
 [Live depth / DOM](live-depth.md) uses a separate public Binance snapshot-plus-diff feed. Start it from Order flow. It shares service ownership with MCP, reports bounded coverage and hides stale or unsynchronized prices. It does not change the candle or executed-trade dataset.
+
+## Historical footprints and value areas
+
+[Executed-trade analytics](footprints.md) now support historical bar pinning, explicit diagonal and stacked imbalances, and per-bar/retained-range volume value areas. Live updates preserve unapplied controls; saved live snapshots preserve known coverage gaps.

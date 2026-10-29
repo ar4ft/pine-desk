@@ -1,4 +1,12 @@
 import {
+  newFootprintState,
+  footprintControls,
+  readFootprintSettings,
+  footprintResults,
+  bindFootprints,
+} from "./footprint-view.js";
+import "./footprint-style.css";
+import {
   newDepthHistoryState,
   depthHistoryView,
   retainDepthHistoryDraft,
@@ -170,7 +178,16 @@ const state = {
   diagnostic: null,
   live: { status: "stopped", active: false },
   flowSource: "imported",
-  flowSettings: { timeframe: "1h", tickSize: 10 },
+  footprint: newFootprintState(),
+  flowSettings: {
+    timeframe: "1h",
+    tickSize: 10,
+    imbalanceRatio: 3,
+    minImbalanceVolume: 0,
+    stackLength: 3,
+    zeroDenominator: "exclude",
+    valueAreaPercent: 70,
+  },
   whale: newWhaleState(),
   edge: newEdgeState(),
   page: "workspace",
@@ -650,32 +667,9 @@ function flow() {
     return tabs + depthHistoryView(state.depthHistory);
   if (state.flowTab === "depth") return tabs + depthView(state.depth);
   const f = state.flow;
-  return `${tabs}<div class="page-intro"><span class="eyebrow">FOLLOW THE EXECUTED VOLUME</span><h1>Read what traded.</h1><p>Footprints, cumulative delta, and volume at price from trades with an explicit aggressor side.</p></div><div class="searchbar"><label>Source<select id="flow-source"><option value="imported" ${state.flowSource === "imported" ? "selected" : ""}>Imported / saved trades</option><option value="live" ${state.flowSource === "live" ? "selected" : ""}>Live Binance retained window</option></select></label><label>Market label<input id="trade-symbol" value="${esc(f?.symbol ?? "BTCUSDT")}" aria-label="Trade market label"></label><label>Aggregation<select id="flow-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.flowSettings.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Price bucket<input id="tick-size" type="number" min=".000001" step="any" value="${state.flowSettings.tickSize}"></label><button id="import-trades" class="primary">Import trade CSV</button><button id="refresh-flow">Recompute</button><button id="save-live-trades">Save live trade snapshot</button></div>${
-    f
-      ? `<div class="metrics"><div><span>Executed prints</span><strong>${num(f.totalTrades, 0)}</strong></div><div><span>Aggressor buys</span><strong class="positive">${num(f.buy, 4)}</strong></div><div><span>Aggressor sells</span><strong class="negative">${num(f.sell, 4)}</strong></div><div><span>Net delta</span><strong>${num(f.buy - f.sell, 4)}</strong></div><div><span>Point of control</span><strong>${num(f.poc)}</strong></div></div><div class="plot-card"><div class="panel-heading"><span>CUMULATIVE VOLUME DELTA</span><span>${esc(f.origin ?? "Imported range")} · ${f.gaps?.length ?? 0} gap warnings</span></div><canvas id="cvd-plot"></canvas></div><div class="flow-grid"><section class="plot-card"><div class="panel-heading"><span>FOOTPRINT · MOST RECENT BAR</span><span>Sell / buy volume</span></div><div class="table-wrap"><table><thead><tr><th>Price bucket</th><th class="negative">Sell</th><th class="positive">Buy</th><th>Delta</th></tr></thead><tbody>${f.bars
-          .at(-1)
-          .levels.slice(0, 300)
-          .map(
-            (l) =>
-              `<tr><td>${num(l.price)}</td><td class="negative">${num(l.sell, 4)}</td><td class="positive">${num(l.buy, 4)}</td><td>${num(l.buy - l.sell, 4)}</td></tr>`,
-          )
-          .join(
-            "",
-          )}</tbody></table></div></section><section class="plot-card"><div class="panel-heading"><span>VOLUME PROFILE · RETAINED RANGE</span><span>Base asset size</span></div><div class="profile">${f.profile
-          .slice(0, 200)
-          .map((l) => {
-            const max = f.profile.reduce(
-              (max, l) => Math.max(max, l.buy + l.sell),
-              0,
-            );
-            return `<div><span>${num(l.price)}</span><div class="profile-track"><i style="width:${(l.sell / max) * 100}%;background:var(--red)"></i><i style="width:${(l.buy / max) * 100}%;background:var(--green)"></i></div><small>${num(l.buy + l.sell, 2)}</small></div>`;
-          })
-          .join(
-            "",
-          )}</div></section></div><p class="footnote">${date(f.from)} — ${date(f.to)} UTC · ${esc(f.symbol)} · ${esc(f.status ?? "saved trades")} · profile and CVD cover the retained range only. Missing trade intervals are omitted.${f.gaps?.length ? `<br>INCOMPLETE TRADE COVERAGE: ${esc(JSON.stringify(f.gaps))}` : ""}</p>`
-      : `<div class="empty-state"><span class="empty-icon">${uiIcon("orderflow")}</span><h2>Real trades. Real delta.</h2><p>Import CSV with <code>time,price,size,side</code>.<br>Side is the aggressor: <code>buy</code> or <code>sell</code>. Time accepts ISO, seconds, or milliseconds.<br>Candles cannot supply this data. Label the market before importing.</p><button id="sample-trades">Download CSV template</button></div>`
-  }`;
+  return `${tabs}<div class="page-intro"><span class="eyebrow">FOLLOW THE EXECUTED VOLUME</span><h1>Read what traded.</h1><p>Footprints, cumulative delta, and volume at price from trades with an explicit aggressor side.</p></div><div class="searchbar"><label>Source<select id="flow-source"><option value="imported" ${state.flowSource === "imported" ? "selected" : ""}>Imported / saved trades</option><option value="live" ${state.flowSource === "live" ? "selected" : ""}>Live Binance retained window</option></select></label><label>Market label<input id="trade-symbol" value="${esc(f?.symbol ?? "BTCUSDT")}" aria-label="Trade market label"></label><label>Aggregation<select id="flow-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.flowSettings.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Price bucket<input id="tick-size" type="number" min=".000001" step="any" value="${state.flowSettings.tickSize}"></label><button id="import-trades" class="primary">Import trade CSV</button><button id="refresh-flow">Recompute</button><button id="save-live-trades">Save live trade snapshot</button></div>${footprintControls(state.flowSettings)}<div id="flow-results">${f ? footprintResults(f, state.footprint) : `<div class="empty-state"><span class="empty-icon">${uiIcon("orderflow")}</span><h2>Real trades. Real delta.</h2><p>Import CSV with <code>time,price,size,side</code>.<br>Side is the aggressor: <code>buy</code> or <code>sell</code>. Time accepts ISO, seconds, or milliseconds.<br>Candles cannot supply this data. Label the market before importing.</p><button id="sample-trades">Download CSV template</button></div>`}</div>`;
 }
+
 function mcp() {
   const config = agentConfig(state.dataDir);
   return `<div class="page-intro"><span class="eyebrow">YOUR WORKSPACE, WITH TOOLS</span><h1>Your agent, connected to this desktop.</h1><p>Read the displayed dataset, control the workspace chart and share this app’s existing live connections.</p></div>${agentAccessView(state.agentAccess, esc)}<div class="mcp-grid"><section class="plot-card"><div class="panel-heading"><span>MCP CLIENT CONFIGURATION</span><button id="export-config">Export JSON ↓</button></div><pre>${esc(JSON.stringify(config, null, 2))}</pre><p class="footnote">Install Node.js 22.16+ and this repository's dependencies. Replace the absolute path. Enable access above, then reconnect your MCP client. Desktop mode requires the app and never starts a second data service. The bundled desktop app alone does not install the Node MCP server.</p></section><section class="plot-card"><div class="panel-heading"><span>AVAILABLE LOCAL TOOLS</span><span class="tag">STDIO</span></div>${[
@@ -1208,22 +1202,33 @@ function bind() {
       `Seed 42 · 200 fixed-cash resampled paths · P05 ${money(sim.p05)} · Median ${money(sim.median)} · P95 ${money(sim.p95)} · Loss probability ${num(sim.lossProbability * 100)}% · excludes intra-trade equity and size compounding.`;
   });
   const recompute = async () => {
-    state.flowSource = $("#flow-source").value;
-    state.flowSettings = {
+    const source = $("#flow-source").value;
+    const settings = {
       timeframe: $("#flow-timeframe").value,
       tickSize: Number($("#tick-size").value),
+      ...readFootprintSettings(),
     };
-    state.flow = await call(
-      state.flowSource === "live" ? "liveFlow" : "orderflow",
-      state.flowSettings,
+    const result = await call(
+      source === "live" ? "liveFlow" : "orderflow",
+      settings,
     );
-    render();
+    if (
+      source !== state.flowSource ||
+      settings.timeframe !== state.flowSettings.timeframe ||
+      result.symbol !== state.flow?.symbol
+    )
+      state.footprint = newFootprintState();
+    state.flowSource = source;
+    state.flowSettings = settings;
+    state.flow = result;
+    refreshFootprints();
   };
   on("import-trades", async () => {
     const symbol = $("#trade-symbol").value,
       csv = await getCSV();
     if (csv) {
       await call("importTrades", { csv, symbol });
+      state.footprint = newFootprintState();
       state.flowSource = "imported";
       $("#flow-source").value = "imported";
       await recompute();
@@ -1375,13 +1380,45 @@ function paintBacktest() {
       );
   });
 }
+function refreshFootprints({ background = false } = {}) {
+  if (
+    state.page !== "orderflow" ||
+    state.flowTab !== "trades" ||
+    !$("#flow-results")
+  )
+    return;
+  const focused = document.activeElement;
+  // Do not replace an input currently used to select a historical bar.
+  if (background && focused?.id === "footprint-index") return;
+  const scrollers = [
+    ...document.querySelectorAll(".footprint-table, .footprint-profile"),
+  ].map((el) => el.scrollTop);
+  $("#flow-results").innerHTML = footprintResults(state.flow, state.footprint);
+  bindFootprints({
+    flow: state.flow,
+    state: state.footprint,
+    paint: refreshFootprints,
+  });
+  document
+    .querySelectorAll(".footprint-table, .footprint-profile")
+    .forEach((el, i) => {
+      el.scrollTop = scrollers[i] ?? 0;
+    });
+  paintFlow();
+}
 function paintFlow() {
-  requestAnimationFrame(() =>
-    plot(
-      $("#cvd-plot"),
-      state.flow.bars.map((b) => b.cvd),
-    ),
-  );
+  bindFootprints({
+    flow: state.flow,
+    state: state.footprint,
+    paint: refreshFootprints,
+  });
+  requestAnimationFrame(() => {
+    if ($("#cvd-plot") && state.flow)
+      plot(
+        $("#cvd-plot"),
+        state.flow.bars.map((b) => b.cvd),
+      );
+  });
 }
 function mountEditor() {
   const parent = $("#pine-editor");
@@ -1705,13 +1742,17 @@ async function pollLive() {
         flowPulse = Date.now();
         const source = $("#flow-source")?.value;
         if (source === "live") {
-          state.flowSettings = {
-            timeframe: $("#flow-timeframe").value,
-            tickSize: Number($("#tick-size").value),
-          };
           if (snapshot.tradeCount) {
-            state.flow = await call("liveFlow", state.flowSettings);
-            render();
+            const settings = state.flowSettings;
+            const result = await call("liveFlow", settings);
+            if (
+              !state.busy &&
+              state.flowSource === "live" &&
+              state.flowSettings === settings
+            ) {
+              state.flow = result;
+              refreshFootprints({ background: true });
+            }
           }
         }
       }

@@ -174,13 +174,19 @@ export function toolDefinitions() {
     "depthStop",
     false,
   );
+  const flowSchema = {
+    timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
+    tickSize: z.number().positive().finite(),
+    imbalanceRatio: z.number().min(1).max(100).default(3),
+    minImbalanceVolume: z.number().nonnegative().finite().default(0),
+    stackLength: z.number().int().min(2).max(20).default(3),
+    zeroDenominator: z.enum(["exclude", "flag"]).default("exclude"),
+    valueAreaPercent: z.number().min(1).max(100).default(70),
+  };
   tool(
     "order_flow",
-    "Aggregate imported executed trades into footprints, delta, CVD, trade counts, and price profile. No candle-derived side estimates.",
-    {
-      timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
-      tickSize: z.number().positive(),
-    },
+    "Aggregate imported executed trades into all occupied footprints, diagonal/stacked imbalances, delta/CVD, and bar/range volume value areas. Explicit nearest-occupied-row VA method, ties higher. Retained input only; no candle-derived side estimates.",
+    flowSchema,
     "orderflow",
   );
   tool(
@@ -406,10 +412,7 @@ export function toolDefinitions() {
   tool(
     "live_order_flow",
     "Aggregate the owning service’s bounded live trade buffer. Buyer-is-maker true means SELL aggressor. Preserve trade gaps and retained-window caveats.",
-    {
-      timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
-      tickSize: z.number().positive(),
-    },
+    flowSchema,
     "liveFlow",
   );
   tool(
