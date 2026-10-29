@@ -96,4 +96,44 @@ export async function desktopFootprintSmoke({ page, client, call }) {
       "Low 100 · high 104",
     ),
   );
+  const composite = await call(client, "volume_profile", {
+    mode: "composite",
+    sessionDate: "2026-01-01",
+    sessionEndDate: "2026-01-02",
+    sessionMinutes: 2,
+    tickSize: 1,
+    minTradeSize: 2,
+    maxTradeSize: 9,
+  });
+  assert.equal(composite.totalTrades, 8);
+  assert.equal(composite.filter.observedTrades, 16);
+  assert.equal(composite.sessions.length, 2);
+  assert.equal(composite.sessions[1].observedTrades, 0);
+  const empty = await call(client, "order_flow", {
+    timeframe: "1m",
+    tickSize: 1,
+    minTradeSize: 10,
+  });
+  assert.equal(empty.totalTrades, 0);
+  assert.equal(empty.poc, null);
+  assert.equal(empty.filter.excludedTrades, 16);
+  await page.locator('[data-flow-tab="profiles"]').click();
+  await page.locator("#vp-mode").selectOption("composite");
+  await page.locator("#vp-sessionDate").fill("2026-01-01");
+  await page.locator("#vp-sessionEndDate").fill("2026-01-02");
+  await page.locator("#vp-sessionMinutes").fill("2");
+  await page.locator("#vp-minTradeSize").fill("2");
+  await page.locator("#vp-maxTradeSize").fill("9");
+  await page.locator("#vp-compute").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector(".trade-filter-summary")
+      ?.textContent.includes("8 matching / 16 observed"),
+  );
+  assert.equal(await page.locator("#vp-sessions tbody tr").count(), 2);
+  assert.equal(
+    (await call(client, "order_flow", { timeframe: "1m", tickSize: 1 }))
+      .totalTrades,
+    16,
+  );
 }

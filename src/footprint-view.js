@@ -1,3 +1,8 @@
+import {
+  tradeFilterControls,
+  readTradeFilters,
+  tradeFilterSummary,
+} from "./trade-filter-view.js";
 const esc = (value) =>
   String(value ?? "").replace(
     /[&<>"']/g,
@@ -28,10 +33,11 @@ export const newFootprintState = () => ({
   scope: "range",
 });
 export function footprintControls(s) {
-  return `<div class="searchbar footprint-settings"><label>Imbalance ratio<input id="imbalance-ratio" type="number" min="1" max="100" step=".1" value="${s.imbalanceRatio ?? 3}"></label><label>Minimum side size<input id="imbalance-min" type="number" min="0" step="any" value="${s.minImbalanceVolume ?? 0}"></label><label>Stack length<input id="imbalance-stack" type="number" min="2" max="20" value="${s.stackLength ?? 3}"></label><label>Zero denominator<select id="imbalance-zero"><option value="exclude" ${s.zeroDenominator !== "flag" ? "selected" : ""}>Exclude</option><option value="flag" ${s.zeroDenominator === "flag" ? "selected" : ""}>Flag positive size</option></select></label><label>Value area %<input id="value-area-percent" type="number" min="1" max="100" step="any" value="${s.valueAreaPercent ?? 70}"></label></div><p class="footnote">Apply changes with Recompute. Buy compares to sells one bucket below; sell compares to buys one bucket above. Size uses supplied trade units; Binance spot uses base-asset size.</p>`;
+  return `<div class="searchbar footprint-settings">${tradeFilterControls("ff", s)}<label>Imbalance ratio<input id="imbalance-ratio" type="number" min="1" max="100" step=".1" value="${s.imbalanceRatio ?? 3}"></label><label>Minimum side size<input id="imbalance-min" type="number" min="0" step="any" value="${s.minImbalanceVolume ?? 0}"></label><label>Stack length<input id="imbalance-stack" type="number" min="2" max="20" value="${s.stackLength ?? 3}"></label><label>Zero denominator<select id="imbalance-zero"><option value="exclude" ${s.zeroDenominator !== "flag" ? "selected" : ""}>Exclude</option><option value="flag" ${s.zeroDenominator === "flag" ? "selected" : ""}>Flag positive size</option></select></label><label>Value area %<input id="value-area-percent" type="number" min="1" max="100" step="any" value="${s.valueAreaPercent ?? 70}"></label></div><p class="footnote">Apply changes with Recompute. Buy compares to sells one bucket below; sell compares to buys one bucket above. Size uses supplied trade units; Binance spot uses base-asset size.</p>`;
 }
 export function readFootprintSettings() {
   return {
+    ...readTradeFilters("ff"),
     imbalanceRatio: Number(document.getElementById("imbalance-ratio").value),
     minImbalanceVolume: Number(document.getElementById("imbalance-min").value),
     stackLength: Number(document.getElementById("imbalance-stack").value),
@@ -91,10 +97,10 @@ export function footprintResults(flow, s) {
         ? "imbalanced " + side
         : "";
   const cfg = flow.settings;
-  return `${cfg ? `<p id="flow-applied" class="footnote">Applied: ${esc(flow.symbol)} · ${esc(cfg.timeframe)} · price bucket ${num(cfg.tickSize)} · ratio ≥${num(cfg.imbalanceRatio)}× · minimum side size ${num(cfg.minImbalanceVolume)} · stack ${cfg.stackLength} · zero denominator ${esc(cfg.zeroDenominator)} · VA ${num(cfg.valueAreaPercent)}%</p>` : ""}<div class="metrics"><div><span>Executed prints</span><strong>${num(flow.totalTrades, 0)}</strong></div><div><span>Aggressor buys</span><strong class="positive">${num(flow.buy)}</strong></div><div><span>Aggressor sells</span><strong class="negative">${num(flow.sell)}</strong></div><div><span>Net delta</span><strong>${num(flow.buy - flow.sell)}</strong></div><div><span>Range POC</span><strong>${num(flow.poc)}</strong></div></div>
+  return `${tradeFilterSummary(flow.filter)}${!flow.totalTrades ? '<p class="footprint-gap">No trades match the size filter. Adjust the bounds and Recompute.</p>' : ""}${cfg ? `<p id="flow-applied" class="footnote">Applied: ${esc(flow.symbol)} · ${esc(cfg.timeframe)} · price bucket ${num(cfg.tickSize)} · ratio ≥${num(cfg.imbalanceRatio)}× · minimum side size ${num(cfg.minImbalanceVolume)} · stack ${cfg.stackLength} · zero denominator ${esc(cfg.zeroDenominator)} · VA ${num(cfg.valueAreaPercent)}%</p>` : ""}<div class="metrics"><div><span>Executed prints</span><strong>${num(flow.totalTrades, 0)}</strong></div><div><span>Aggressor buys</span><strong class="positive">${num(flow.buy)}</strong></div><div><span>Aggressor sells</span><strong class="negative">${num(flow.sell)}</strong></div><div><span>Net delta</span><strong>${num(flow.buy - flow.sell)}</strong></div><div><span>Range POC</span><strong>${num(flow.poc)}</strong></div></div>
  <div class="plot-card"><div class="panel-heading"><span>CUMULATIVE VOLUME DELTA</span><span>${esc(flow.origin ?? "Imported range")} · ${gaps.length} gap warnings</span></div><canvas id="cvd-plot"></canvas></div>
  <div class="searchbar footprint-navigation"><button id="footprint-oldest">Oldest</button><button id="footprint-prev" ${index <= 0 ? "disabled" : ""}>← Previous</button><label>Occupied bar<input id="footprint-index" aria-label="Footprint bar number" type="number" min="1" max="${flow.bars.length}" value="${index >= 0 ? index + 1 : ""}" placeholder="Not retained"></label><span>of ${flow.bars.length}</span><button id="footprint-next" ${index < 0 || index >= flow.bars.length - 1 ? "disabled" : ""}>Next →</button><label class="footprint-follow"><input type="checkbox" id="footprint-follow" ${s.follow ? "checked" : ""}> Follow latest</label></div>
- <p id="footprint-selection" class="footnote">${bar ? `${utc(bar.time)} · ${esc(flow.settings?.timeframe ?? "configured timeframe")} · ${num(bar.buyCount + bar.sellCount, 0)} prints · delta ${num(bar.delta)} · ${s.follow ? "following latest" : "pinned historical bar"}` : `Selected bar ${s.time ? utc(s.time) : ""} is outside the current retained data. Choose Oldest or Follow latest.`}</p>
+ <p id="footprint-selection" class="footnote">${bar ? `${utc(bar.time)} · ${esc(flow.settings?.timeframe ?? "configured timeframe")} · ${num(bar.buyCount + bar.sellCount, 0)} prints · delta ${num(bar.delta)} · ${s.follow ? "following latest" : "pinned historical bar"}` : `Selected bar ${s.time ? utc(s.time) : ""} is outside the current retained data or excluded by the size filter. Choose Oldest or Follow latest.`}</p>
  ${barGaps.length ? `<p class="footprint-gap">Incomplete trade coverage: ${barGaps.length} known gap(s) overlap this bar. Imbalances and value area use only observed trades.</p>` : ""}
  <div class="flow-grid"><section class="plot-card"><div class="panel-heading"><span>HISTORICAL FOOTPRINT</span><span>Sell / buy aggressor volume</span></div><p id="footprint-area" class="footnote">${areaText(bar?.valueArea)}</p>
  <div class="table-wrap footprint-table"><table><thead><tr><th>Price bucket</th><th>Sell</th><th>Buy</th><th>Delta</th><th>Sell ratio</th><th>Buy ratio</th></tr></thead><tbody>${rows
@@ -138,7 +144,7 @@ export function bindFootprints({ flow, state: s, paint }) {
   };
   document.getElementById("footprint-follow").onchange = () => {
     s.follow = document.getElementById("footprint-follow").checked;
-    if (!s.follow) s.time = flow.bars.at(-1).time;
+    if (!s.follow) s.time = flow.bars.at(-1)?.time ?? null;
     s.levelOffset = s.profileOffset = 0;
     paint();
   };

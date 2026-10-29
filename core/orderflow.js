@@ -1,3 +1,8 @@
+import {
+  tradeSizeSettings,
+  matchesTradeSize,
+  tradeFilterStats,
+} from "./trade-filter.js";
 import { durations, validateTrades } from "./data.js";
 export const flowDefaults = {
   timeframe: "1h",
@@ -7,9 +12,11 @@ export const flowDefaults = {
   stackLength: 3,
   zeroDenominator: "exclude",
   valueAreaPercent: 70,
+  minTradeSize: 0,
+  maxTradeSize: null,
 };
 export function flowSettings(input = {}) {
-  const s = { ...flowDefaults, ...input };
+  const s = { ...flowDefaults, ...input, ...tradeSizeSettings(input) };
   if (
     !Object.hasOwn(durations, s.timeframe) ||
     !Number.isFinite(s.tickSize) ||
@@ -163,10 +170,13 @@ function footprint(levelMap, settings) {
 }
 export function orderflow(input, options = {}) {
   const settings = flowSettings(options),
-    trades = validateTrades(input),
+    retained = validateTrades(input),
+    trades = retained.filter((t) => matchesTradeSize(t, settings)),
     duration = durations[settings.timeframe],
     buckets = new Map(),
     profile = new Map();
+  if (retained.some((t) => t.time > 8.64e15))
+    throw Error("Trade timestamp exceeds the supported date range.");
   let levelCount = 0;
   for (const t of trades) {
     if (t.time > 8.64e15)
@@ -218,13 +228,14 @@ export function orderflow(input, options = {}) {
   return {
     bars,
     profile: levels,
-    poc: valueArea.poc,
+    poc: valueArea?.poc ?? null,
     valueArea,
     settings,
     totalTrades: trades.length,
+    filter: tradeFilterStats(retained.length, trades.length, settings),
     buy: bars.reduce((s, b) => s + b.buy, 0),
     sell: bars.reduce((s, b) => s + b.sell, 0),
-    from: trades[0].time,
-    to: trades.at(-1).time,
+    from: retained[0].time,
+    to: retained.at(-1).time,
   };
 }

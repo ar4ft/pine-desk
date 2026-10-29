@@ -174,9 +174,20 @@ export function toolDefinitions() {
     "depthStop",
     false,
   );
+  const tradeFilterSchema = {
+    minTradeSize: z.number().finite().nonnegative().default(0),
+    maxTradeSize: z.number().finite().positive().nullable().default(null),
+  };
   const profileSchema = {
+    ...tradeFilterSchema,
     source: z.enum(["imported", "live"]).default("imported"),
-    mode: z.enum(["session", "anchored"]).default("session"),
+    mode: z.enum(["session", "anchored", "composite"]).default("session"),
+    sessionEndDate: z.string().optional(),
+    weekdays: z
+      .array(z.number().int().min(0).max(6))
+      .min(1)
+      .max(7)
+      .default([0, 1, 2, 3, 4, 5, 6]),
     tickSize: z.number().positive().finite().default(10),
     valueAreaPercent: z.number().min(1).max(100).default(70),
     sessionDate: z.string().optional(),
@@ -187,21 +198,23 @@ export function toolDefinitions() {
   };
   tool(
     "volume_profile",
-    "Compute a UTC session or anchored [from,to) volume profile from saved trades or the shared live retained window. Observed trades only, no backfill. Returns all occupied rows (max 50,000), buy/sell/delta, POC/VA and coverage. Session date names the UTC opening date; duration may cross midnight. VA expands nearest occupied rows; ties higher; VAH exclusive.",
+    "Compute a UTC session, anchored [from,to), or composite daily-session volume profile (up to 31 opening dates, optional weekdays; off-session trades excluded) from saved trades or the shared live retained window. Inclusive individual-print minTradeSize/maxTradeSize filters before aggregation; null max means unlimited. Observed trades only, no backfill. Returns all occupied rows (max 50,000), buy/sell/delta, POC/VA and coverage. Session date names the UTC opening date; duration may cross midnight. VA expands nearest occupied rows; ties higher; VAH exclusive.",
     profileSchema,
     "volumeProfile",
   );
   tool(
     "tpo_profile",
-    "Compute observed-trade TPO occupancy for a UTC session or anchored [from,to) window. One TPO per price bucket per period; ignores size/side, never fills high-low gaps. Returns period letters/counts, TPO POC/value area (ties higher), observed initial balance and retained/gap coverage. Max 288 periods and 50,000 occupied rows. Snapshot of saved or shared live trades; does not start a stream.",
+    "Compute observed-trade TPO occupancy for a UTC session or anchored [from,to) window. Inclusive minTradeSize/maxTradeSize filters select prints first; one TPO per price bucket per period ignores remaining size/side, never fills high-low gaps. Returns period letters/counts, TPO POC/value area (ties higher), observed initial balance and retained/gap coverage. Max 288 periods and 50,000 occupied rows. Snapshot of saved or shared live trades; does not start a stream.",
     {
       ...profileSchema,
+      mode: z.enum(["session", "anchored"]).default("session"),
       periodMinutes: z.number().int().min(1).max(240).default(30),
       initialBalanceMinutes: z.number().int().min(1).max(1440).default(60),
     },
     "tpoProfile",
   );
   const flowSchema = {
+    ...tradeFilterSchema,
     timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]),
     tickSize: z.number().positive().finite(),
     imbalanceRatio: z.number().min(1).max(100).default(3),
@@ -212,7 +225,7 @@ export function toolDefinitions() {
   };
   tool(
     "order_flow",
-    "Aggregate imported executed trades into all occupied footprints, diagonal/stacked imbalances, delta/CVD, and bar/range volume value areas. Explicit nearest-occupied-row VA method, ties higher. Retained input only; no candle-derived side estimates.",
+    "Filter individual prints by inclusive minTradeSize/maxTradeSize (null max unlimited), then aggregate imported executed trades into all occupied footprints, diagonal/stacked imbalances, delta/CVD, and bar/range volume value areas. Explicit nearest-occupied-row VA method, ties higher. Retained input only; no candle-derived side estimates.",
     flowSchema,
     "orderflow",
   );

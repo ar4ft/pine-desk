@@ -71,4 +71,6 @@ Volume fields are deliberately absent from the TPO value area. Empty requested w
 
 ## Further order-flow work
 
-Recurring-session composite profiles, trade-size filtering, exchange calendars/DST rules, persistent profile presets and chart-integrated footprint/TPO rendering remain follow-up work. Candle-based approximations, split-column TPO charts and automated pattern classifications are not included in this release.
+[Trade-size filtering and composite volume profiles](composite-profiles.md) are available in v0.17.0. Composite TPO, exchange calendars/DST rules, persistent profile presets and chart-integrated footprint/TPO rendering remain follow-up work. Candle-based approximations, split-column TPO charts and automated pattern classifications are not included in this release.
+
+In v0.17.0, optional individual-print size bounds apply before TPO deduplication and initial-balance calculations. Applied statistics distinguish matching and observed prints; coverage continues to describe unfiltered observations. See [filter semantics](composite-profiles.md).

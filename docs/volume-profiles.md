@@ -56,4 +56,6 @@ Returns `settings`, `symbol`, `origin`, `calculatedAt`, `totalTrades`, `buy`, `s
 
 ## Remaining order-flow work
 
-[TPO/time occupancy](tpo.md) is available in v0.16.0 in its own tab and MCP tool. Recurring-session composite profiles, trade-size filters, exchange calendars/DST rules, chart-anchored drawing interaction and persistent profile presets remain follow-up work. This release supplies explicit UTC session and time-range profiles in their own analysis tab.
+[TPO/time occupancy](tpo.md) is available in v0.16.0 in its own tab and MCP tool. [Composite UTC volume profiles and trade-size filters](composite-profiles.md) are available in v0.17.0. Exchange calendars/DST rules, chart-anchored drawing interaction and persistent profile presets remain follow-up work. This release supplies explicit UTC session and time-range profiles in their own analysis tab.
+
+See [v0.17.0 filters and composites](composite-profiles.md) for matching/observed counts, per-session coverage and the extended `volume_profile` schema.

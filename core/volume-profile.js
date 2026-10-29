@@ -1,3 +1,8 @@
+import {
+  tradeSizeSettings,
+  matchesTradeSize,
+  tradeFilterStats,
+} from "./trade-filter.js";
 import { validateTrades } from "./data.js";
 import { bucketIndex, priceAt, volumeValueArea } from "./orderflow.js";
 const minute = 60000;
@@ -11,13 +16,15 @@ export function profileSettings(input = {}) {
     sessionDate,
     sessionOpen = 0,
     sessionMinutes = 1440,
+    sessionEndDate,
+    weekdays = [0, 1, 2, 3, 4, 5, 6],
   } = input;
   if (
     !["imported", "live"].includes(source) ||
-    !["session", "anchored"].includes(mode)
+    !["session", "anchored", "composite"].includes(mode)
   )
     throw Error(
-      "Choose imported/live trades and session/anchored profile mode.",
+      "Choose imported/live trades and session/anchored/composite profile mode.",
     );
   if (
     !Number.isFinite(tickSize) ||
@@ -28,7 +35,8 @@ export function profileSettings(input = {}) {
   )
     throw Error("Use a positive price bucket and value area 1–100%.");
   let from, to;
-  if (mode === "session") {
+  const windows = [];
+  if (mode !== "anchored") {
     if (
       typeof sessionDate !== "string" ||
       !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate) ||
@@ -48,11 +56,51 @@ export function profileSettings(input = {}) {
       throw Error(
         "Session open must be 0–1439 UTC minutes; duration 1–1440 minutes.",
       );
-    from = Date.parse(sessionDate + "T00:00:00Z") + sessionOpen * minute;
-    to = from + sessionMinutes * minute;
+    const firstDay = Date.parse(sessionDate + "T00:00:00Z");
+    let lastDay = firstDay;
+    if (mode === "composite") {
+      if (
+        typeof sessionEndDate !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(sessionEndDate) ||
+        !Number.isFinite(Date.parse(sessionEndDate + "T00:00:00Z")) ||
+        new Date(sessionEndDate + "T00:00:00Z").toISOString().slice(0, 10) !==
+          sessionEndDate
+      )
+        throw Error("Choose a valid last session opening date (YYYY-MM-DD).");
+      lastDay = Date.parse(sessionEndDate + "T00:00:00Z");
+      if (lastDay < firstDay || lastDay - firstDay > 30 * 86400000)
+        throw Error(
+          "Composite must span 1–31 calendar opening dates in ascending order.",
+        );
+      if (
+        !Array.isArray(weekdays) ||
+        !weekdays.length ||
+        weekdays.length > 7 ||
+        new Set(weekdays).size !== weekdays.length ||
+        weekdays.some((d) => !Number.isInteger(d) || d < 0 || d > 6)
+      )
+        throw Error(
+          "Choose unique opening weekdays 0–6 (Sunday–Saturday), at least one.",
+        );
+    }
+    for (let day = firstDay; day <= lastDay; day += 86400000) {
+      if (mode === "composite" && !weekdays.includes(new Date(day).getUTCDay()))
+        continue;
+      const begin = day + sessionOpen * minute;
+      windows.push({
+        sessionDate: new Date(day).toISOString().slice(0, 10),
+        from: begin,
+        to: begin + sessionMinutes * minute,
+      });
+    }
+    if (!windows.length)
+      throw Error("No opening dates match the selected weekdays.");
+    from = windows[0].from;
+    to = windows.at(-1).to;
   } else {
     from = input.from;
     to = input.to;
+    windows.push({ from, to });
   }
   if (
     !Number.isSafeInteger(from) ||
@@ -69,10 +117,15 @@ export function profileSettings(input = {}) {
     mode,
     tickSize,
     valueAreaPercent,
+    ...tradeSizeSettings(input),
+    windows,
     from,
     to,
-    ...(mode === "session"
+    ...(mode !== "anchored"
       ? { sessionDate, sessionOpen, sessionMinutes, timezone: "UTC" }
+      : {}),
+    ...(mode === "composite"
+      ? { sessionEndDate, weekdays: [...weekdays].sort() }
       : {}),
   };
 }
@@ -103,13 +156,39 @@ export function volumeProfile(snapshot, input = {}) {
     trades = profileTrades(snapshot);
   const { from, to, tickSize, valueAreaPercent } = settings,
     levels = new Map();
+  const sessions = settings.windows.map((w) => ({
+    ...w,
+    observedTrades: 0,
+    totalTrades: 0,
+    buy: 0,
+    sell: 0,
+    first: null,
+    last: null,
+  }));
+  let sessionIndex = 0;
   let buy = 0,
     sell = 0,
     totalTrades = 0,
     first = null,
-    last = null;
+    last = null,
+    observedTrades = 0;
   for (const t of trades) {
-    if (t.time < from || t.time >= to) continue;
+    while (
+      sessionIndex < sessions.length &&
+      t.time >= sessions[sessionIndex].to
+    )
+      sessionIndex++;
+    const session = sessions[sessionIndex];
+    if (!session || t.time < session.from) continue;
+    observedTrades++;
+    session.observedTrades++;
+    first ??= t.time;
+    last = t.time;
+    session.first ??= t.time;
+    session.last = t.time;
+    if (!matchesTradeSize(t, settings)) continue;
+    session.totalTrades++;
+    session[t.side] += t.size;
     const index = bucketIndex(t.price, tickSize);
     if (!levels.has(index)) {
       if (levels.size >= 50000)
@@ -139,11 +218,45 @@ export function volumeProfile(snapshot, input = {}) {
     origin: snapshot.origin ?? "Imported trade range",
     calculatedAt: Date.now(),
     totalTrades,
+    filter: tradeFilterStats(observedTrades, totalTrades, settings),
+    sessions: sessions.map(({ first, last, ...session }) => ({
+      ...session,
+      delta: session.buy - session.sell,
+      filter: tradeFilterStats(
+        session.observedTrades,
+        session.totalTrades,
+        settings,
+      ),
+      coverage: profileCoverage(
+        snapshot,
+        trades,
+        session.from,
+        session.to,
+        first,
+        last,
+      ),
+    })),
     buy,
     sell,
     delta: buy - sell,
     profile,
     valueArea: volumeValueArea(profile, tickSize, valueAreaPercent),
-    coverage: profileCoverage(snapshot, trades, from, to, first, last),
+    coverage: profileCoverage(
+      {
+        ...snapshot,
+        gaps: (snapshot.gaps ?? []).filter((g) =>
+          settings.windows.some(
+            (w) =>
+              (g.from == null || g.from < w.to) &&
+              (g.to == null || g.to >= w.from),
+          ),
+        ),
+      },
+      trades,
+      from,
+      to,
+      first,
+      last,
+    ),
   };
 }

@@ -161,3 +161,26 @@
 .tpo-periods td {
   white-space: normal;
 }
+.profile-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.profile-weekdays legend {
+  color: var(--muted);
+  font-size: 11px;
+}
+.profile-weekdays label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.profile-weekdays input {
+  width: auto;
+}
+#vp-sessions td {
+  white-space: normal;
+}

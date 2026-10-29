@@ -1,3 +1,4 @@
+import { matchesTradeSize, tradeFilterStats } from "./trade-filter.js";
 import {
   profileSettings,
   profileTrades,
@@ -11,6 +12,10 @@ export function periodLabel(index) {
   return label;
 }
 export function tpoProfile(snapshot, input = {}) {
+  if (input.mode === "composite")
+    throw Error(
+      "Composite mode is available for volume profiles; TPO supports session or anchored mode.",
+    );
   const settings = profileSettings(input);
   const { periodMinutes = 30, initialBalanceMinutes = 60 } = input;
   if (
@@ -39,12 +44,15 @@ export function tpoProfile(snapshot, input = {}) {
     from: from + index * duration,
     to: Math.min(to, from + (index + 1) * duration),
     totalTrades: 0,
+    observedTrades: 0,
     tpoCount: 0,
     observedFrom: null,
     observedTo: null,
   }));
   const ibEnd = Math.min(to, from + initialBalanceMinutes * 60000);
-  let totalTrades = 0,
+  let observedTrades = 0,
+    ibObserved = 0,
+    totalTrades = 0,
     totalTpos = 0,
     first = null,
     last = null,
@@ -55,8 +63,20 @@ export function tpoProfile(snapshot, input = {}) {
     ibLast = null;
   for (const t of trades) {
     if (t.time < from || t.time >= to) continue;
-    const index = bucketIndex(t.price, tickSize),
-      p = periods[Math.floor((t.time - from) / duration)];
+    const p = periods[Math.floor((t.time - from) / duration)];
+    observedTrades++;
+    first ??= t.time;
+    last = t.time;
+    p.observedTrades++;
+    p.observedFrom ??= t.time;
+    p.observedTo = t.time;
+    if (t.time < ibEnd) {
+      ibObserved++;
+      ibFirst ??= t.time;
+      ibLast = t.time;
+    }
+    if (!matchesTradeSize(t, settings)) continue;
+    const index = bucketIndex(t.price, tickSize);
     if (!levels.has(index)) {
       if (levels.size >= 50000)
         throw Error(
@@ -75,17 +95,11 @@ export function tpoProfile(snapshot, input = {}) {
       p.tpoCount++;
     }
     p.totalTrades++;
-    p.observedFrom ??= t.time;
-    p.observedTo = t.time;
     totalTrades++;
-    first ??= t.time;
-    last = t.time;
     if (t.time < ibEnd) {
       ibLow = Math.min(ibLow, index);
       ibHigh = Math.max(ibHigh, index);
       ibTrades++;
-      ibFirst ??= t.time;
-      ibLast = t.time;
     }
   }
   const profile = [...levels.values()]
@@ -123,6 +137,7 @@ export function tpoProfile(snapshot, input = {}) {
     method:
       "Observed trade occupancy: one TPO per price bucket per period; no high-low filling; volume and side ignored",
     totalTrades,
+    filter: tradeFilterStats(observedTrades, totalTrades, settings),
     totalTpos,
     occupiedPeriods: periods.filter((p) => p.totalTrades > 0).length,
     onePeriodRows: profile.filter((l) => l.count === 1).length,
@@ -153,6 +168,7 @@ export function tpoProfile(snapshot, input = {}) {
       low: ibTrades ? priceAt(ibLow, tickSize) : null,
       high: ibTrades ? priceAt(ibHigh + 1, tickSize) : null,
       totalTrades: ibTrades,
+      filter: tradeFilterStats(ibObserved, ibTrades, settings),
       coverage: profileCoverage(snapshot, trades, from, ibEnd, ibFirst, ibLast),
       method:
         "Observed bucket range in first configured minutes; upper edge exclusive; no inference from later periods",
