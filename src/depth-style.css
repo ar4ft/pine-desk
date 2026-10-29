@@ -152,3 +152,33 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+.depth-history .searchbar {
+  flex-wrap: wrap;
+}
+.depth-history .searchbar label {
+  min-width: 0;
+}
+#depth-history-select {
+  max-width: 420px;
+}
+#depth-record-status,
+#depth-history-meta {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+#depth-heatmap {
+  display: block;
+  width: 100%;
+  height: 350px;
+  cursor: crosshair;
+}
+.depth-history .depth-scrub {
+  flex: 1;
+  min-width: 150px;
+}
+#depth-replay-scrub {
+  width: 100%;
+}
+.depth-history input[type="checkbox"] {
+  width: auto;
+}

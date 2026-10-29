@@ -58,6 +58,20 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       arguments: { symbol: "BTCUSDT" },
     });
     assert.equal(depthDenied.isError, true);
+    assert.equal(
+      (await readOnly.callTool({ name: "depth_record_start", arguments: {} }))
+        .isError,
+      true,
+    );
+    assert.equal(
+      (
+        await readOnly.callTool({
+          name: "depth_recording_delete",
+          arguments: { id: "untrusted" },
+        })
+      ).isError,
+      true,
+    );
     assert.equal((await call(readOnly, "depth_snapshot")).active, false);
     for (const scope of ["charts", "streams", "research", "alerts"])
       await page.locator("#agent-" + scope).check();

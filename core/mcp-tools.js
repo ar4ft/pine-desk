@@ -8,6 +8,8 @@ export function toolDefinitions() {
     if (["loadMarket", "importBars"].includes(action)) capability = "charts";
     if (
       [
+        "depthRecordStart",
+        "depthRecordStop",
         "depthStart",
         "depthStop",
         "liveStart",
@@ -101,6 +103,55 @@ export function toolDefinitions() {
     "Import executed trade CSV: time,price,size,side. Side must be buy/sell aggressor. Replaces local trade dataset.",
     { csv: z.string().max(20000000), symbol: z.string() },
     "importTrades",
+    false,
+  );
+  tool(
+    "depth_record_start",
+    "Record sampled synchronized depth from the already running monitor. 1/2/5/10-second samples, up to 100 levels per side and 3600 samples. Local chunks; no automatic restart. Requires stream permission.",
+    {
+      name: z.string().min(1).max(100).default("Depth recording"),
+      levels: z.number().int().min(1).max(100).default(50),
+      intervalSeconds: z
+        .union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)])
+        .default(1),
+    },
+    "depthRecordStart",
+    false,
+  );
+  tool(
+    "depth_record_stop",
+    "Flush and stop the active depth recording. Leaves the live order book running.",
+    {},
+    "depthRecordStop",
+    false,
+  );
+  tool(
+    "depth_record_status",
+    "Read depth recorder health, committed and pending sample counts, and source feed status.",
+    {},
+    "depthRecordStatus",
+  );
+  tool(
+    "depth_recordings",
+    "List local sampled depth recordings, bounded coverage, committed counts and interruption status.",
+    {},
+    "depthRecordings",
+  );
+  tool(
+    "depth_recording_get",
+    "Read up to 600 immutable archived depth samples. Default is latest 300. Null books and gapBefore represent missing data; sampled snapshots cannot reconstruct all exchange updates.",
+    {
+      id: z.string(),
+      offset: z.number().int().nonnegative().optional(),
+      limit: z.number().int().min(1).max(600).default(300),
+    },
+    "depthRecordingGet",
+  );
+  tool(
+    "depth_recording_delete",
+    "Permanently delete one stopped depth recording and its chunks. Requires research permission.",
+    { id: z.string() },
+    "depthRecordingDelete",
     false,
   );
   tool(

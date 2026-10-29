@@ -29,7 +29,7 @@ export function depthView(state) {
     <button id="depth-start" class="primary">Start depth</button><button id="depth-stop">Stop depth</button></div>
     <p id="depth-status" role="status">Depth is stopped. Start a public Binance spot feed; no API key is required.</p>
     <div id="depth-content">${depthContent(state)}</div>
-    <p class="footnote">Prices use the pair’s quote asset; sizes and cumulative totals use its base asset. Imbalance compares only the displayed levels. This feed runs independently of candles and executed trades. It stays on while navigating, and stops when the owning app/service quits. Historical depth recording and order entry are not available here.</p>
+    <p class="footnote">Prices use the pair’s quote asset; sizes and cumulative totals use its base asset. Imbalance compares only the displayed levels. This feed runs independently of candles and executed trades. It stays on while navigating, and stops when the owning app/service quits. Use Recorded liquidity to save sampled depth and replay its heatmap. Order entry is not available here.</p>
   </section>`;
 }
 function depthContent(state) {

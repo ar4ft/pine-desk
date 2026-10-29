@@ -9,9 +9,12 @@ export async function desktopDepthSmoke({ app, page, first, second, call }) {
     const require = process
       .getBuiltinModule("node:module")
       .createRequire(path.join(app.getAppPath(), "package.json"));
-    const { depth } = require(path.join(app.getAppPath(), "core/service.js"));
+    const { depth, depthRecorder } = require(
+      path.join(app.getAppPath(), "core/service.js"),
+    );
     const fixture = (globalThis.pineDeskSmokeDepth = {
       depth,
+      depthRecorder,
       createSocket: depth.createSocket,
       fetcher: depth.fetcher,
       starts: 0,
@@ -66,6 +69,16 @@ export async function desktopDepthSmoke({ app, page, first, second, call }) {
     assert.equal(book.stale, false);
     assert.equal(book.bids[0].size, 5);
     assert.equal(book.spread, 2);
+    const recording = await call(first, "depth_record_start", {
+      name: "Native depth recording",
+      levels: 10,
+      intervalSeconds: 1,
+    });
+    assert.equal(recording.meta.count, 1);
+    const archive = await call(second, "depth_recording_get", {
+      id: recording.meta.id,
+    });
+    assert.equal(archive.frames[0].book.bids[0].size, 5);
     await call(second, "desktop_navigate", { page: "orderflow" });
     await page.locator('[data-flow-tab="depth"]').click();
     await page.waitForFunction(() =>
@@ -102,9 +115,23 @@ export async function desktopDepthSmoke({ app, page, first, second, call }) {
       document.querySelector("#depth-status")?.textContent.includes("stopped"),
     );
     assert.equal((await call(second, "depth_snapshot")).active, false);
+    const stopped = await call(first, "depth_record_status");
+    assert.equal(stopped.active, false);
+    assert.equal(stopped.pending, 0);
+    assert.equal(stopped.meta.status, "stopped");
+    await page.locator('[data-flow-tab="history"]').click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#depth-history-meta")
+        ?.textContent.includes("Native depth recording"),
+    );
+    await page.locator("#depth-replay-scrub").fill("0");
+    await page.waitForSelector("#depth-replay-detail table");
+    assert.deepEqual((await call(second, "workspace")).dataset, before.dataset);
   } finally {
-    await app.evaluate(() => {
+    await app.evaluate(async () => {
       const fixture = globalThis.pineDeskSmokeDepth;
+      await fixture.depthRecorder.stop();
       fixture.depth.stop();
       fixture.depth.createSocket = fixture.createSocket;
       fixture.depth.fetcher = fixture.fetcher;

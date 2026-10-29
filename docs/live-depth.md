@@ -16,7 +16,7 @@ Resting quantities are orders available at the observed time, not executed volum
 
 One depth monitor belongs to the desktop's shared data service, or the exclusively owned standalone MCP service. Starting the same symbol again reuses it; applying another symbol replaces that book. It is independent of candle/trade streams, comparison charts, watchlists and alerts, and never changes the primary research dataset.
 
-Navigation does not stop an explicitly started depth feed. **Stop depth** clears its prices and closes its connection. Quitting the owner stops it; there is no automatic restart, background daemon or persisted depth history. Named chart layouts do not restore or switch this separate monitor.
+Navigation does not stop an explicitly started depth feed. **Stop depth** clears its prices and closes its connection. Quitting the owner stops it; there is no automatic restart, background daemon. Since v0.13.0, [explicit depth recording](depth-recording.md) saves sampled snapshots separately. Named chart layouts do not restore or switch this separate monitor.
 
 ## Synchronization and coverage
 
@@ -58,4 +58,4 @@ Clients share the same book as the desktop. Closing a client or revoking its acc
 
 Fixtures cover absolute size replacement/deletion, cumulative calculations, sequence overlap/gaps, buffered synchronization, stale events, reconnects, symbol switches, late REST responses, buffer limits and MCP permissions. Browser tests cover both themes, ladder scrolling, preserved drafts and navigation. Native Electron/installed macOS smoke tests check that desktop IPC and attached MCP share the actual book while exchange transport is deterministic. An opt-in public-network smoke script is available as `npm run smoke:depth`.
 
-Depth recording/replay, liquidity heatmaps, price grouping, additional venues, futures depth, order entry, queue position, iceberg inference and historical depth backfills remain follow-up work. A current order book cannot reconstruct historical liquidity.
+[Sampled recording, heatmaps and replay](depth-recording.md) are available in v0.13.0. Price grouping, additional venues, futures depth, order entry, queue position, iceberg inference and historical depth backfills remain follow-up work. A current order book cannot reconstruct historical liquidity.

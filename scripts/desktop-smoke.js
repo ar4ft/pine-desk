@@ -301,6 +301,23 @@ try {
     (await reopened.evaluate(() => window.desk.call("depthSnapshot"))).active,
     false,
   );
+  const depthArchives = await reopened.evaluate(() =>
+    window.desk.call("depthRecordings"),
+  );
+  const depthArchive = depthArchives.find(
+    (r) => r.name === "Native depth recording",
+  );
+  assert.equal(depthArchive.status, "stopped");
+  const depthWindow = await reopened.evaluate(
+    (id) => window.desk.call("depthRecordingGet", { id }),
+    depthArchive.id,
+  );
+  assert.equal(depthWindow.frames[0].book.bids[0].size, 5);
+  assert.equal(
+    (await reopened.evaluate(() => window.desk.call("depthRecordStatus")))
+      .active,
+    false,
+  );
   const alertStatus = await reopened.evaluate(() =>
     window.desk.call("alertStatus"),
   );

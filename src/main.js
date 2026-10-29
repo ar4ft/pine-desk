@@ -1,4 +1,10 @@
 import {
+  newDepthHistoryState,
+  depthHistoryView,
+  retainDepthHistoryDraft,
+  DepthHistoryView,
+} from "./depth-history-view.js";
+import {
   newDepthState,
   depthView,
   retainDepthDraft,
@@ -144,6 +150,7 @@ const titles = {
   settings: "Settings",
 };
 const state = {
+  depthHistory: newDepthHistoryState(),
   depth: newDepthState(),
   flowTab: "trades",
   alerts: newAlertsState(),
@@ -345,6 +352,7 @@ function syncBusyControls() {
     .forEach((el) => {
       el.disabled = state.busy;
     });
+  depthHistoryController.controls();
   if ($("#depth-stop"))
     $("#depth-stop").disabled = state.busy || !state.depth.snapshot?.active;
 }
@@ -456,6 +464,14 @@ window.addEventListener("keydown", (event) => {
   } else if (event.key === "Escape" && state.focusChart) setChartFocus(false);
 });
 
+const depthHistoryController = new DepthHistoryView({
+  busy: () => state.busy,
+  state: state.depthHistory,
+  call,
+  task,
+  exportFile,
+  canPaint: () => state.page === "orderflow" && state.flowTab === "history",
+});
 function destroyChart() {
   linkedCharts.destroyViews();
   chartOwner = null;
@@ -472,6 +488,7 @@ function render() {
   const destinationChanged = document.body.dataset.section !== state.page;
   captureWorkspaceChart();
   linkedCharts.capture();
+  retainDepthHistoryDraft(state.depthHistory);
   retainDepthDraft(state.depth);
   retainAlertDraft(state.alerts);
   retainOptionsDraft(state.options);
@@ -628,7 +645,9 @@ function backtestTab(r) {
   return `<div class="plot-card"><div class="panel-heading"><span>MONTE CARLO RESAMPLING</span><button id="simulate" class="primary">Simulate 200 paths</button></div><canvas id="simulation-plot"></canvas><div id="simulation-metrics" class="simulation-metrics">Seed 42 · sampling closed-trade net P&L with replacement, at fixed cash size.<br>This model excludes intra-trade equity, serial dependence, and changing position sizes.</div></div>`;
 }
 function flow() {
-  const tabs = `<div class="flow-tabs" role="group" aria-label="Order flow view"><button data-flow-tab="trades" aria-pressed="${state.flowTab === "trades"}">Executed trades</button><button data-flow-tab="depth" aria-pressed="${state.flowTab === "depth"}">Live order book / DOM</button></div>`;
+  const tabs = `<div class="flow-tabs" role="group" aria-label="Order flow view"><button data-flow-tab="trades" aria-pressed="${state.flowTab === "trades"}">Executed trades</button><button data-flow-tab="depth" aria-pressed="${state.flowTab === "depth"}">Live order book / DOM</button><button data-flow-tab="history" aria-pressed="${state.flowTab === "history"}">Recorded liquidity</button></div>`;
+  if (state.flowTab === "history")
+    return tabs + depthHistoryView(state.depthHistory);
   if (state.flowTab === "depth") return tabs + depthView(state.depth);
   const f = state.flow;
   return `${tabs}<div class="page-intro"><span class="eyebrow">FOLLOW THE EXECUTED VOLUME</span><h1>Read what traded.</h1><p>Footprints, cumulative delta, and volume at price from trades with an explicit aggressor side.</p></div><div class="searchbar"><label>Source<select id="flow-source"><option value="imported" ${state.flowSource === "imported" ? "selected" : ""}>Imported / saved trades</option><option value="live" ${state.flowSource === "live" ? "selected" : ""}>Live Binance retained window</option></select></label><label>Market label<input id="trade-symbol" value="${esc(f?.symbol ?? "BTCUSDT")}" aria-label="Trade market label"></label><label>Aggregation<select id="flow-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${t === state.flowSettings.timeframe ? "selected" : ""}>${t}</option>`).join("")}</select></label><label>Price bucket<input id="tick-size" type="number" min=".000001" step="any" value="${state.flowSettings.tickSize}"></label><button id="import-trades" class="primary">Import trade CSV</button><button id="refresh-flow">Recompute</button><button id="save-live-trades">Save live trade snapshot</button></div>${
@@ -933,6 +952,8 @@ function alertBindings() {
   });
 }
 function bind() {
+  if (state.page === "orderflow" && state.flowTab === "history")
+    depthHistoryController.bind();
   document.querySelectorAll("[data-flow-tab]").forEach((el) => {
     el.onclick = () => {
       if (!state.busy) {
@@ -1810,6 +1831,15 @@ if (api) {
   setInterval(pollWatchlist, 1000);
   setInterval(pollAlerts, 2000);
   setInterval(pollOrderBook, 500);
+  setInterval(() => depthHistoryController.tick(), 100);
+  setInterval(() => {
+    if (
+      !state.busy &&
+      state.page === "orderflow" &&
+      state.flowTab === "history"
+    )
+      depthHistoryController.poll();
+  }, 1000);
 }
 
 async function mountOptionsChart() {

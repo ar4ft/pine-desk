@@ -1,3 +1,5 @@
+import { DepthHistory, DepthRecorder } from "./depth-history.js";
+import { depthSymbol } from "./depth.js";
 import { BinanceDepth } from "./depth.js";
 import { AlertEngine } from "./alerts.js";
 import { QuoteSubscriptions } from "./quote-subscriptions.js";
@@ -70,6 +72,11 @@ export const live = new BinanceLive({
   },
 });
 export const depth = new BinanceDepth();
+export const depthHistory = new DepthHistory();
+export const depthRecorder = new DepthRecorder({
+  history: depthHistory,
+  depth,
+});
 export const chartPanels = new ChartPanels({ primary: live });
 export const marketQuotes = new MarketQuotes({ maxSymbols: 100 });
 export const quoteSubscriptions = new QuoteSubscriptions(marketQuotes);
@@ -122,6 +129,7 @@ export const researchJobs = new ResearchJobs();
 export async function shutdown() {
   await alertEngine.close();
   quoteSubscriptions.stop();
+  await depthRecorder.stop("Owning service shut down.");
   depth.stop();
   chartPanels.stop();
   marketQuotes.stop();
@@ -369,9 +377,28 @@ export async function dispatch(action, args = {}) {
       });
     case "chartPanelsSnapshot":
       return chartPanels.snapshot();
+    case "depthRecordStart":
+      return depthRecorder.start(args);
+    case "depthRecordStop":
+      return depthRecorder.stop();
+    case "depthRecordStatus":
+      return depthRecorder.status();
+    case "depthRecordings":
+      return depthHistory.list();
+    case "depthRecordingGet":
+      return depthHistory.get(args);
+    case "depthRecordingDelete":
+      return depthHistory.remove(args.id);
     case "depthStart":
+      depthSymbol(args.symbol ?? "BTCUSDT");
+      if (
+        depthRecorder.state.active &&
+        depth.symbol !== (args.symbol ?? "BTCUSDT")
+      )
+        await depthRecorder.stop("Depth symbol changed.");
       return depth.start(args);
     case "depthStop":
+      await depthRecorder.stop("Depth feed stopped.");
       return depth.stop();
     case "depthSnapshot":
       return depth.snapshot(args);

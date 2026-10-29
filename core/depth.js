@@ -156,6 +156,7 @@ export class BinanceDepth {
     this.status = "stopped";
     this.active = false;
     this.resyncs = 0;
+    this.connection = 0;
   }
   start({ symbol = "BTCUSDT" } = {}) {
     depthSymbol(symbol);
@@ -179,6 +180,7 @@ export class BinanceDepth {
   }
   connect(generation) {
     if (!this.active || generation !== this.generation) return;
+    this.connection++;
     this.status = "connecting";
     this.connectedAt = this.now();
     this.book = null;
@@ -311,6 +313,7 @@ export class BinanceDepth {
       eventAt: this.eventAt ?? null,
       receivedAt: this.receivedAt ?? null,
       resyncs: this.resyncs,
+      connection: this.connection,
       limit,
       units: { price: "quote asset", size: "base asset" },
       ...(stale
