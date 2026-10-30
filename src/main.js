@@ -1,4 +1,11 @@
 import {
+  newPaperState,
+  retainPaperDraft,
+  paperView,
+  bindPaper,
+} from "./paper-view.js";
+import "./paper-style.css";
+import {
   newPlansState,
   retainPlanDraft,
   primeTradePlan,
@@ -161,6 +168,7 @@ const titles = {
   workspace: "Chart workspace",
   alerts: "Local alerts",
   plans: "Trade plans",
+  paper: "Paper trading",
   library: "Indicator library",
   backtest: "Strategy research",
   orderflow: "Order flow",
@@ -180,6 +188,7 @@ const state = {
   tpoProfile: newVolumeProfileState("tpo"),
   alerts: newAlertsState(),
   plans: newPlansState(),
+  paper: newPaperState(),
   learning: newLearningState(),
   crypto: newCryptoState(),
   appearance: defaultAppearance,
@@ -529,6 +538,7 @@ function render() {
   retainDepthDraft(state.depth);
   retainAlertDraft(state.alerts);
   retainPlanDraft(state.plans);
+  retainPaperDraft(state.paper);
   retainOptionsDraft(state.options);
   retainResearchDraft(state.research);
   retainWhaleDraft(state.whale);
@@ -553,6 +563,7 @@ function render() {
     workspace: workspace,
     alerts: () => alertsView(state.alerts),
     plans: () => plansView(state.plans),
+    paper: () => paperView(state.paper),
     library: library,
     backtest: backtests,
     orderflow: flow,
@@ -716,6 +727,10 @@ function mcp() {
     ],
     ["import_trades / order_flow", "Trade footprints, delta, CVD, profile"],
     ["plan_* / plans_list", "Saved trade plans and linear risk sizing"],
+    [
+      "paper_*",
+      "Simulated cash account, orders and fill ledger (research access)",
+    ],
     ["volume_profile", "UTC session and anchored profiles with coverage"],
     ["tpo_profile", "Price/time occupancy, TPO value area and initial balance"],
     [
@@ -975,6 +990,8 @@ function alertBindings() {
   });
 }
 function bind() {
+  if (state.page === "paper")
+    bindPaper({ state: state.paper, call, task, render, exportFile });
   if (state.page === "plans")
     bindPlans({ state: state.plans, call, task, render, exportFile });
   if (state.page === "orderflow" && state.flowTab === "tpo")

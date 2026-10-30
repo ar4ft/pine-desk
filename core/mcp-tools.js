@@ -1,3 +1,4 @@
+import { paperOrderSchema } from "./paper-account.js";
 import { z } from "zod";
 
 // One schema/allowlist for standalone MCP and the authenticated desktop bridge.
@@ -40,6 +41,61 @@ export function toolDefinitions() {
       readOnly: capability === "read",
     });
   };
+  const paperRevision = z.number().int().positive();
+  const paperOrderRef = {
+    id: z.string().uuid(),
+    expectedRevision: paperRevision,
+  };
+  tool(
+    "paper_account",
+    "Read the local simulated USDT spot account, reservations, orders, positions, fills and event ledger. Balances are not marked to market.",
+    {},
+    "paperSnapshot",
+  );
+  tool(
+    "paper_create",
+    "Create the single local simulated USDT cash account. Initial cash is immutable; no exchange funding or real orders.",
+    { initialCash: z.number().positive().max(1e12) },
+    "paperCreate",
+    false,
+  );
+  tool(
+    "paper_submit",
+    "Queue a simulated Binance USDT spot order, reserving cash or held quantity. Does not fill until paper_process. Reuse requestId for a retry; expectedRevision guards concurrent edits. Manual fees/slippage; no shorts, margin or options.",
+    {
+      expectedRevision: paperRevision,
+      requestId: z.string().uuid(),
+      input: paperOrderSchema,
+    },
+    "paperSubmit",
+    false,
+  );
+  tool(
+    "paper_submit_plan",
+    "Queue a limit buy from the exact saved draft long Binance USDT spot plan revision. Copies quantity, entry, fees and slippage. Stops/targets are NOT activated; submit exits separately.",
+    {
+      expectedRevision: paperRevision,
+      requestId: z.string().uuid(),
+      planId: z.string().uuid(),
+      planRevision: paperRevision,
+    },
+    "paperSubmitPlan",
+    false,
+  );
+  tool(
+    "paper_cancel",
+    "Cancel a pending simulated order and release its reservation.",
+    paperOrderRef,
+    "paperCancel",
+    false,
+  );
+  tool(
+    "paper_process",
+    "Explicitly evaluate one pending paper order using a newly fetched public Binance bid/ask. Full synthetic fills only; no liquidity/queue simulation, background execution or exchange routing. Quote errors leave the order pending.",
+    paperOrderRef,
+    "paperProcess",
+    false,
+  );
   const planSchema = z
     .object({
       name: z.string().min(1).max(100),
@@ -1100,6 +1156,7 @@ export function toolDefinitions() {
         "orderflow",
         "alerts",
         "plans",
+        "paper",
         "options",
         "crypto",
         "education",

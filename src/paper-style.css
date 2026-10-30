@@ -1,0 +1,55 @@
+#paper-view .searchbar {
+  flex-wrap: wrap;
+}
+#paper-view > .plot-card,
+#paper-results > .plot-card {
+  margin-bottom: 18px;
+}
+#paper-view .plot-card > button {
+  margin: 0 16px 16px;
+}
+#paper-view .plan-fields label[hidden] {
+  display: none;
+}
+#paper-view table {
+  width: 100%;
+}
+#paper-view td {
+  vertical-align: top;
+}
+#paper-view td small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 5px;
+  max-width: 260px;
+  white-space: normal;
+}
+#paper-view td button {
+  margin: 2px;
+}
+#paper-error {
+  color: var(--red);
+  overflow-wrap: anywhere;
+}
+#paper-message {
+  color: var(--muted);
+  font-size: 12px;
+}
+.paper-ledger {
+  padding: 16px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
+.paper-ledger li {
+  margin: 8px 0;
+}
+.paper-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1150px) {
+  .paper-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,3 +1,4 @@
+import { PaperAccount, paperQuote } from "./paper-account.js";
 import { TradePlans, estimatePlan } from "./trade-plans.js";
 import { DepthHistory, DepthRecorder } from "./depth-history.js";
 import { depthSymbol } from "./depth.js";
@@ -98,6 +99,18 @@ export const alertEngine = new AlertEngine({
 });
 export const initialize = () => alertEngine.initialize();
 export const marketSearch = new MarketSearch();
+export const paperAccount = new PaperAccount({
+  storage: {
+    read: () => store.read("paper-account"),
+    write: (doc) => store.write("paper-account", doc),
+  },
+  quote: paperQuote,
+  validateMarket: async (symbol) => {
+    const { markets } = await marketSearch.search(symbol);
+    if (!markets.some((m) => m.symbol === symbol && m.quote === "USDT"))
+      throw Error("Choose an active Binance USDT spot market.");
+  },
+});
 export const deribit = new DeribitOptions();
 export const cryptoExchanges = {
   deribit,
@@ -136,6 +149,7 @@ export const optionsProvider = new UnusualWhales();
 export const whaleRunner = new WhaleRunner();
 export const researchJobs = new ResearchJobs();
 export async function shutdown() {
+  await paperAccount.close();
   await tradePlans.close();
   await alertEngine.close();
   quoteSubscriptions.stop();
@@ -166,6 +180,51 @@ async function datasetFor(args) {
 }
 export async function dispatch(action, args = {}) {
   switch (action) {
+    case "paperSnapshot":
+      return paperAccount.snapshot();
+    case "paperCreate":
+      return paperAccount.create(args);
+    case "paperSubmit":
+      return paperAccount.submit({
+        expectedRevision: args.expectedRevision,
+        requestId: args.requestId,
+        input: args.input,
+      });
+    case "paperCancel":
+      return paperAccount.cancel(args);
+    case "paperProcess":
+      return paperAccount.process(args);
+    case "paperSubmitPlan": {
+      const plan = await tradePlans.get(args.planId),
+        p = plan.estimate.input;
+      if (plan.revision !== args.planRevision)
+        throw Error("Saved plan changed; refresh the plan list.");
+      if (
+        p.status !== "draft" ||
+        p.side !== "long" ||
+        p.assetType !== "spot" ||
+        p.currency !== "USDT" ||
+        p.venue.toLowerCase() !== "binance" ||
+        plan.estimate.quantity <= 0
+      )
+        throw Error(
+          "Use a draft, long, Binance spot plan in USDT with positive quantity.",
+        );
+      return paperAccount.submit({
+        expectedRevision: args.expectedRevision,
+        requestId: args.requestId,
+        input: {
+          symbol: p.symbol,
+          side: "buy",
+          type: "limit",
+          quantity: plan.estimate.quantity,
+          price: p.entry,
+          feePercent: p.feePercent,
+          slippage: p.slippage,
+        },
+        plan: { id: plan.id, revision: plan.revision, name: p.name },
+      });
+    }
     case "planEstimate":
       return estimatePlan(args.input);
     case "planList":

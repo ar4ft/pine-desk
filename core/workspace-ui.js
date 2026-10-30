@@ -119,6 +119,7 @@ export function validateLayout(input) {
       "orderflow",
       "alerts",
       "plans",
+      "paper",
       "mcp",
       "edge",
       "whale",

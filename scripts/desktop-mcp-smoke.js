@@ -1,3 +1,4 @@
+import { desktopPaperSmoke } from "./desktop-paper-smoke.js";
 import { desktopPlanSmoke, planFixture } from "./desktop-plan-smoke.js";
 import { desktopFootprintSmoke } from "./desktop-footprint-smoke.js";
 import { desktopDepthSmoke } from "./desktop-depth-smoke.js";
@@ -53,6 +54,16 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
         await readOnly.callTool({
           name: "plan_save",
           arguments: { input: planFixture },
+        })
+      ).isError,
+      true,
+    );
+    assert.equal(await call(readOnly, "paper_account"), null);
+    assert.equal(
+      (
+        await readOnly.callTool({
+          name: "paper_create",
+          arguments: { initialCash: 1000 },
         })
       ).isError,
       true,
@@ -283,6 +294,7 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     await depthClient.close();
     await desktopFootprintSmoke({ page, client: second, call });
     await desktopPlanSmoke({ page, client: second, call });
+    await desktopPaperSmoke({ app, page, client: second, call });
     // Real alert engine, durable store and attached MCP; replace only transport
     // and OS notification submission so packaged CI never depends on permissions.
     await app.evaluate(({ app }) => {

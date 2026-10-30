@@ -301,6 +301,13 @@ try {
     (await reopened.evaluate(() => window.desk.call("depthSnapshot"))).active,
     false,
   );
+  const paper = await reopened.evaluate(() =>
+    window.desk.call("paperSnapshot"),
+  );
+  assert.equal(paper.fills.length, 2);
+  assert.equal(paper.positions.BTCUSDT.quantity, 1.5);
+  assert.equal(paper.cash, 845.48);
+  assert.equal(paper.revision, 5);
   const plans = await reopened.evaluate(() => window.desk.call("planList"));
   const savedPlan = plans.find(
     (p) => p.estimate.input.name === "Desktop plan fixture",

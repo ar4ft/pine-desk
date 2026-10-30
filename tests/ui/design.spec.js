@@ -5,7 +5,7 @@ test("desktop navigation and focus mode preserve the chart and editor", async ({
 }) => {
   await page.goto("/");
   await page.locator("#pine-editor .cm-content").waitFor();
-  await expect(page.locator("#nav [data-page]")).toHaveCount(13);
+  await expect(page.locator("#nav [data-page]")).toHaveCount(14);
   await expect(page.locator("#nav .nav-group-label")).toHaveText([
     "Markets",
     "Research",
@@ -59,6 +59,7 @@ test("core screens fit smaller desktop widths in both themes", async ({
       "workspace",
       "alerts",
       "plans",
+      "paper",
       "backtest",
       "education",
       "options",

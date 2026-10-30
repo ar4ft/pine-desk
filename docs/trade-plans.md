@@ -86,4 +86,4 @@ To update, add `id` and `expectedRevision` from the loaded record. Creates omit 
 
 ## Next stage
 
-The simulated account, paper order lifecycle, fresh-quote fill model, persisted fill/position ledger, partial exits, risk rules and journal remain the next milestone. Chart-native draggable entries/stops/targets and options contract planning also remain separate work. This release creates reviewable plans, not executions.
+The [paper account and fill ledger](paper-trading.md), added in v0.19.0, can queue an entry from an exact compatible saved plan. Plans themselves remain calculations; saving a plan does not create or process an order. Paper processing is explicit and does not activate plan stops/targets. Continuous execution, linked brackets, risk rules, journals, chart-native draggable levels and options contract planning remain separate work.
