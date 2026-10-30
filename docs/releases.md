@@ -22,6 +22,8 @@ Pull requests produce test/package artifacts but do not publish releases. The un
 
 A browser-downloaded unsigned preview may show **“Pine Desk is damaged and can’t be opened. You should move it to the Trash.”** This can be a Gatekeeper/quarantine rejection rather than a corrupt DMG. The exact message alone does not prove the cause. Preview 31 (v0.19.0) is unsigned and unnotarized by design. CI launching a local package copy did not reproduce browser-download trust checks.
 
+Unsigned DMGs from v0.20.1 include **READ ME FIRST.txt** beside the app and Applications shortcut. It contains the app-specific Terminal command, including when no “Open Anyway” option appears in System Settings. CI verifies the README inside each mounted DMG against the source instructions.
+
 For a preview you intentionally downloaded from this repository:
 
 1. Download the correct `arm64` (Apple Silicon) or `x64` (Intel) DMG/ZIP and `SHA256SUMS.txt` from **the same release**.

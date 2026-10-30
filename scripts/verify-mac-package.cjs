@@ -101,6 +101,18 @@ async function verifyMacPackage(arch = process.argv[2]) {
       dmg,
     ]);
     mounted = true;
+    const installReadme = "READ ME FIRST.txt";
+    const expectedReadme = await fs.promises.readFile(
+      path.resolve(__dirname, "../build/README-UNSIGNED.txt"),
+      "utf8",
+    );
+    if (
+      (await fs.promises.readFile(path.join(mount, installReadme), "utf8")) !==
+      expectedReadme
+    )
+      throw Error(
+        "DMG installation README is missing or differs from the reviewed instructions.",
+      );
     const installed = path.join(temp, "installed", "Pine Desk.app");
     run("/usr/bin/ditto", [path.join(mount, "Pine Desk.app"), installed]);
     const fromDmg = await verifyApp(installed, arch, version);
@@ -112,6 +124,8 @@ async function verifyMacPackage(arch = process.argv[2]) {
     report.checks.push({
       format: "dmg",
       mounted: true,
+      installReadme,
+      installReadmeVerified: true,
       copiedAppSmokePassed: true,
       ...integrity,
       binaries: fromDmg.binaries,
