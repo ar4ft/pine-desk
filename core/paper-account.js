@@ -1,5 +1,11 @@
 import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
+import {
+  paperRiskSchema,
+  defaultPaperRisk,
+  paperRiskUsage,
+  paperRiskViolation,
+} from "./paper-risk.js";
 
 const clean = (value) => Number(value.toPrecision(15));
 const positive = z.number().finite().positive().max(1e12);
@@ -95,6 +101,9 @@ const planSchema = z
   .strict();
 const eventSchema = z.discriminatedUnion("kind", [
   z
+    .object({ kind: z.literal("risk"), at: timestamp, policy: paperRiskSchema })
+    .strict(),
+  z
     .object({
       kind: z.literal("submit"),
       at: timestamp,
@@ -118,7 +127,7 @@ const eventSchema = z.discriminatedUnion("kind", [
 ]);
 const archiveSchema = z
   .object({
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     id: z.string().uuid(),
     currency: z.literal("USDT"),
     initialCash: positive,
@@ -168,6 +177,10 @@ export function freshPaperQuote(raw, symbol, at) {
   return q;
 }
 function apply(s, e) {
+  if (e.kind === "risk") {
+    s.risk = e.policy;
+    return;
+  }
   if (e.kind === "submit") {
     const contingent = s.orders
       .filter((o) => o.status === "pending")
@@ -189,6 +202,8 @@ function apply(s, e) {
     const p = e.input,
       a = available(s);
     if (p.side === "buy") {
+      const reason = paperRiskViolation(s, p, e.at);
+      if (reason) throw Error(`Paper risk limit: ${reason}`);
       if (!Number.isFinite(reserve(p)) || clean(reserve(p)) > a.availableCash)
         throw Error(
           "Insufficient available paper cash, including reserved orders and fees.",
@@ -251,6 +266,15 @@ function apply(s, e) {
     o.completedAt = e.at;
     o.reason = "Fresh ask plus slippage exceeds the market-buy notional cap.";
     return;
+  }
+  if (o.side === "buy") {
+    const reason = paperRiskViolation(s, o, e.at, clean(notional + fee), o.id);
+    if (reason) {
+      o.status = "rejected";
+      o.completedAt = e.at;
+      o.reason = `Paper risk limit: ${reason}`;
+      return;
+    }
   }
   const pos = s.positions[o.symbol] ?? { quantity: 0, cost: 0, realizedPnl: 0 };
   let realizedPnl = 0;
@@ -326,7 +350,7 @@ function apply(s, e) {
     quote: q,
   });
 }
-function replay(doc) {
+function replay(doc, at = doc.events.at(-1)?.at ?? doc.createdAt) {
   const s = {
     id: doc.id,
     currency: doc.currency,
@@ -334,6 +358,7 @@ function replay(doc) {
     createdAt: doc.createdAt,
     revision: doc.events.length + 1,
     cash: doc.initialCash,
+    risk: defaultPaperRisk(),
     orders: [],
     fills: [],
     positions: {},
@@ -348,6 +373,7 @@ function replay(doc) {
   return {
     ...s,
     ...available(s),
+    riskUsage: paperRiskUsage(s, at),
     realizedPnl: Object.values(s.positions).reduce(
       (n, p) => n + p.realizedPnl,
       0,
@@ -378,7 +404,12 @@ export class PaperAccount {
   snapshot() {
     return this.serial(async () => {
       const doc = await this.read();
-      return doc ? replay(doc) : null;
+      return doc
+        ? replay(
+            doc,
+            Math.max(this.now(), doc.events.at(-1)?.at ?? doc.createdAt),
+          )
+        : null;
     });
   }
   create({ initialCash }) {
@@ -387,7 +418,7 @@ export class PaperAccount {
       if (await this.read())
         throw Error("A paper account already exists. Refresh to load it.");
       const doc = archiveSchema.parse({
-        version: 2,
+        version: 3,
         id: randomUUID(),
         currency: "USDT",
         initialCash,
@@ -413,7 +444,7 @@ export class PaperAccount {
   async commit(doc, event) {
     const next = archiveSchema.parse({
         ...doc,
-        version: 2,
+        version: 3,
         events: [...doc.events, event],
       }),
       result = replay(next);
@@ -435,7 +466,7 @@ export class PaperAccount {
           JSON.stringify(previous.plan) !== JSON.stringify(plan)
         )
           throw Error("Request ID was already used for a different order.");
-        return replay(doc);
+        return replay(doc, this.time(doc));
       }
       this.check(doc, expectedRevision);
       await this.validateMarket(input.symbol);
@@ -447,6 +478,14 @@ export class PaperAccount {
         input,
         plan,
       });
+    });
+  }
+  setRisk({ expectedRevision, policy }) {
+    return this.serial(async () => {
+      policy = paperRiskSchema.parse(policy);
+      const doc = await this.read();
+      this.check(doc, expectedRevision);
+      return this.commit(doc, { kind: "risk", at: this.time(doc), policy });
     });
   }
   cancel({ expectedRevision, id }) {
@@ -467,7 +506,8 @@ export class PaperAccount {
       const quote = await this.quote(order.symbol),
         event = { kind: "process", at: this.time(doc), id, quote };
       const waiting = apply(s, event);
-      if (waiting) return { account: replay(doc), message: waiting };
+      if (waiting)
+        return { account: replay(doc, this.time(doc)), message: waiting };
       return {
         account: await this.commit(doc, event),
         message:
@@ -504,7 +544,7 @@ export class PaperAccount {
       if (!events.length || !current()) return { changed: false };
       const next = archiveSchema.parse({
         ...doc,
-        version: 2,
+        version: 3,
         events: [...doc.events, ...events],
       });
       replay(next);

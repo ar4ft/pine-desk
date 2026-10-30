@@ -1,6 +1,6 @@
 # Paper account, orders and fill ledger
 
-Account foundation in v0.19.0; monitoring, linked exits and valuation added in v0.20.0 under **Research → Paper trading**. This is a local simulation for Binance **USDT-quoted spot holdings**. It uses public market data and never connects to an exchange account or submits real orders. No API key is required.
+Account foundation in v0.19.0; monitoring, linked exits and valuation added in v0.20.0, with persistent entry risk controls in v0.21.0 under **Research → Paper trading**. This is a local simulation for Binance **USDT-quoted spot holdings**. It uses public market data and never connects to an exchange account or submits real orders. No API key is required.
 
 ## Workflow
 
@@ -32,6 +32,25 @@ The model uses displayed top-of-book prices, not a liquidity sweep. It does not 
 
 The symbol is checked against active Binance USDT spot metadata when queued. Metadata is cached by the shared market-search service for up to an hour. Processing reads public `ticker/bookTicker`; no order endpoint is called. Each request has a five-second timeout. The quote must have positive, uncrossed bid/ask prices, match the order symbol, be requested after submission and be no more than five seconds old at processing. Invalid, stale, unavailable or rate-limited responses leave the order pending without changing the ledger. This REST endpoint has **no exchange event timestamp**: freshness measures local request/retrieval time, not proven exchange-event age.
 
+## Persistent entry risk limits
+
+Open **Edit entry risk limits** in Paper trading. All caps start disabled (blank); buys start enabled. **Save risk limits** applies the complete policy to this account, including existing pending orders. **Load saved limits** replaces unsaved fields with the latest shared policy. The status strip shows saved limits and current usage; fields remain drafts until saved. Polling does not overwrite draft edits. Conflicting policy edits require loading the saved policy again; any intervening account change during a save can also require retrying after refresh.
+
+| Control | Definition |
+| --- | --- |
+| Pause all new buy entries | Prevents new buy submissions and executable pending buy fills. Sell exits and cancellation remain available. Persists after restart; separate from the session monitor toggle. |
+| Maximum order cost | Buy reservation at submission (market notional cap or quantity × limit), including entry fees. Rechecked against actual fill cost. |
+| Maximum cost per market | Remaining average-cost basis for that symbol, plus all its pending buy reservations, including fees. Pending sells do not reduce this commitment until filled. |
+| Maximum total committed cost | Sum of held cost basis and pending buy reservations across all markets, including fees. |
+| Maximum open / pending markets | Distinct symbols with positive holdings or pending buy entries. Multiple orders in the same symbol count once; zero holdings without pending buys do not count. |
+| Daily losing-trade budget | Sum of `max(0, -realizedPnl)` for exits on the current **UTC calendar day**, after allocated entry fees and sell fees. Profitable exits do not replenish the budget. Reaching the budget blocks buys; usage resets at UTC midnight without deleting history. |
+
+Cost caps allow equality; the daily loss budget blocks buys at equality. The market-count cap accepts 1–50; monetary caps must be positive and at most 10¹² USDT. Blank/null disables an individual cap. All limits apply equally to desktop orders, saved-plan entries and MCP, and are rechecked during manual and continuous processing. A pending buy is excluded from its own reservation sum during its fill check, then its actual entry cost is counted once.
+
+A blocked new submission reports a reason and changes nothing. A pending buy whose price condition qualifies under a blocking policy becomes **rejected**, with a durable reason and its cash reservation released. It creates no bracket children. Non-executable limit orders remain pending until they qualify or are cancelled. Lowering a cap below existing commitments is permitted: it restricts subsequent buys without rewriting fills, forcing sales or cancelling orders immediately. Sell stops/targets, including OCO pairs, continue to process under their existing rules. Raising/disabling limits or unpausing is an explicit saved policy change.
+
+These are **cost-based entry constraints**, not market-value exposure, stop-distance risk, margin controls or a guaranteed maximum loss. Unrealized losses do not consume the daily budget, and buy fees enter it only when allocated to a losing realized exit. Losses on later exits can exceed the budget; exits are never blocked by it. UTC uses the local service clock. There is no broker enforcement, automatic liquidation or permission separate from MCP research access for changing limits.
+
 ## Saved trade plans
 
 Select a saved plan and choose **Queue saved plan entry**. The exact selected revision must still exist and be a draft, long, Binance spot plan in USDT with a positive calculated quantity. The queued limit buy copies symbol, entry, quantity, fees and slippage, and retains the plan ID, revision and name. Account cash is checked independently of the plan's manually assumed equity.
@@ -57,7 +76,7 @@ A complete exit removes all remaining cost. Realized P&L includes the allocated 
 
 For example, buy 2 units at ask 100 plus slippage 1 with a 1% fee: cost is 204.02 USDT. Sell 0.5 units at bid 120 minus slippage 1 with a 1% fee: proceeds are 58.905, allocated cost is 51.005, and realized P&L is 7.90. Remaining quantity is 1.5 and remaining cost is 153.015.
 
-The owning service writes `paper-account/current.json` using atomic replacement, with archive version 2, immutable account creation data and ordered submit/cancel/process events. It reconstructs balances, reservations and fills from validated events on every read. Existing version-1 accounts replay unchanged and migrate to version 2 on their next successful mutation; opening an account does not rewrite history. Older apps cannot read version-2 archives. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
+The owning service writes `paper-account/current.json` using atomic replacement, with archive version 3, immutable account creation data and ordered submit/cancel/process/risk-policy events. It reconstructs balances, reservations and fills from validated events on every read. Existing version-1/2 accounts replay unchanged with all optional limits disabled and migrate to version 3 on their next successful mutation; opening an account does not rewrite history. Older apps cannot read version-3 archives. Risk policies replay in event order, so later limits never invalidate earlier accepted fills. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
 
 User account mutations run through one service queue and require `expectedRevision`. Monitoring fetches outside that queue, then checks current pending orders inside it before committing the eligible events for one symbol atomically. A concurrent cancellation wins if it commits before that check. Other clients can observe intervening fills, so refresh and reapply a stale edit rather than assuming the screen revision remains current. Stale mutations fail instead of merging. Submit also requires a UUID `requestId`: retry the same request ID and normalized payload to retrieve the already accepted order without creating another. A reused ID with different assumptions fails. After an uncertain response to Process or Cancel, refresh first; terminal orders cannot be processed again. Submitted orders are immutable apart from their lifecycle status.
 
@@ -67,8 +86,9 @@ Bounds: one account, 50 pending orders, 1,000 retained orders, 5,000 events, ini
 
 | Tool | Permission | Purpose |
 | --- | --- | --- |
-| `paper_account` | Read | Account, reservations, orders, positions, fills and full ledger |
+| `paper_account` | Read | Account, reservations, orders, positions, fills, risk policy/usage and full ledger |
 | `paper_create` | Research | Create the one simulated account |
+| `paper_set_risk` | Research | Replace the complete persistent entry policy with `expectedRevision` |
 | `paper_submit` | Research | Queue a simulated order |
 | `paper_submit_plan` | Research | Queue an entry from an exact saved plan revision; optional `linkedExits` |
 | `paper_process` | Research | Fetch a fresh quote and evaluate one pending order |
@@ -99,10 +119,28 @@ Example `paper_submit` arguments (replace the revision with `paper_account.revis
 
 For a limit/stop, omit `maxNotional` and supply `price`. Market sells omit both. `paper_process` and `paper_cancel` take order `id` and `expectedRevision`. Clients cannot inject quote prices through these tool schemas. `paper_submit_plan` takes `planId`, `planRevision`, `expectedRevision`, `requestId` and optional `linkedExits` (default false). `paper_account` remains the durable record; use `paper_monitor_status` for current quotes/valuation. Research permission includes enabling continuous simulated execution; it does not grant exchange trading.
 
+Example `paper_set_risk` arguments (use the current account revision; all policy fields are required):
+
+```json
+{
+  "expectedRevision": 1,
+  "policy": {
+    "pauseBuys": false,
+    "maxOrderCost": 500,
+    "maxSymbolCost": 2000,
+    "maxTotalCost": 5000,
+    "maxMarkets": 5,
+    "dailyLossLimit": 100
+  }
+}
+```
+
+`paper_account.risk` contains the saved policy. `riskUsage` reports the UTC day, realized losing-exit total, held-plus-pending cost by symbol and in total, and distinct market count. Use `null` for an individual disabled cap. Policy changes and processing rejections are retained in the exported event/order ledger; refused new submissions do not create events.
+
 ## Verification
 
 `npm run smoke:paper` validates an active Binance symbol and performs a simulated buy and full exit using real public bid/ask requests and an in-memory ledger. It never reads or changes the desktop account. This network check is separate from deterministic core, browser and native packaged-app tests.
 
 ## Next stage
 
-Risk rules, journal annotations, historical equity/drawdown, chart-native order editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.
+Journal annotations, historical equity/drawdown, chart-native order editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.

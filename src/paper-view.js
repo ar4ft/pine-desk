@@ -1,3 +1,9 @@
+import {
+  riskView,
+  riskStatus,
+  retainRiskDraft,
+  bindRisk,
+} from "./paper-risk-view.js";
 const esc = (v) =>
   String(v ?? "").replace(
     /[&<>"']/g,
@@ -42,6 +48,7 @@ export const newPaperState = () => ({
 });
 export function retainPaperDraft(s) {
   if (!document.getElementById("paper-view")) return;
+  retainRiskDraft(s);
   for (const key of Object.keys(s.draft)) {
     const el = document.getElementById("paper-" + key);
     if (el) s.draft[key] = el.type === "checkbox" ? el.checked : el.value;
@@ -101,7 +108,7 @@ function results(s) {
       .reverse()
       .map(
         (e) =>
-          `<li>${date(e.at)} · ${esc(e.kind)} · <code>${esc(e.id)}</code></li>`,
+          `<li>${date(e.at)} · ${esc(e.kind)} · ${e.kind === "risk" ? `Buy entries ${e.policy.pauseBuys ? "paused" : "enabled"}; policy saved (full caps in export)` : `<code>${esc(e.id)}</code>`}</li>`,
       )
       .join("") || "<li>Account created; no orders yet.</li>"
   }</ol></details>`;
@@ -112,6 +119,7 @@ export function paperView(s) {
     `<label>${label}<input id="paper-${key}" type="${type}" ${type === "number" ? 'step="any"' : ""} value="${esc(d[key])}"></label>`;
   return `<section id="paper-view"><div class="page-intro"><span class="eyebrow">SIMULATED CASH ACCOUNT</span><h1>Practice the execution. Keep the record.</h1><p>Binance USDT spot · long holdings · local paper orders. Process orders manually or enable continuous paper monitoring. No real money or exchange orders.</p></div><div class="searchbar"><button id="paper-refresh">Refresh account</button><button id="paper-export" ${s.account ? "" : "disabled"}>Export account and ledger</button></div><p id="paper-error" role="alert">${esc(s.error)}</p><p id="paper-message" role="status">${esc(s.message)}</p>
   ${!s.loaded ? '<p class="footnote">Loading paper account…</p>' : !s.account ? `<section class="plot-card"><div class="panel-heading"><span>START A PAPER ACCOUNT</span></div><div class="plan-fields">${field("initialCash", "Initial simulated cash (USDT)")}</div><p class="footnote">One persistent account. Initial cash cannot be changed after creation. No automatic resets or deposits.</p><button id="paper-create" class="primary">Create paper account</button></section>` : `<div class="plan-columns"><section class="plot-card"><div class="panel-heading"><span>QUEUE A PAPER ORDER</span><span>Reserves funds / holdings</span></div><div class="plan-fields">${field("symbol", "Binance USDT symbol", "text")}<label>Side<select id="paper-side"><option value="buy" ${d.side === "buy" ? "selected" : ""}>Buy</option><option value="sell" ${d.side === "sell" ? "selected" : ""}>Sell held quantity</option></select></label><label>Order type<select id="paper-type">${["market", "limit", "stop"].map((t) => `<option value="${t}" ${d.type === t ? "selected" : ""}>${t === "stop" ? "Sell stop" : t[0].toUpperCase() + t.slice(1)}</option>`).join("")}</select></label>${field("quantity", "Quantity (base asset)")}${field("price", "Limit price / sell-stop trigger")}${field("maxNotional", "Market-buy notional cap (USDT)")}${field("feePercent", "Fee per fill (%)")}${field("slippage", "Adverse slippage per fill (price units)")}${field("bracketStop", "Optional linked stop (limit buy)")}${field("bracketTarget", "Optional linked target (full quantity)")}</div><p class="footnote">Whole-order synthetic fills at ask + slippage for buys, bid − slippage for sells. Limit fills respect your limit; stops can gap. Fill both linked fields to attach one stop/target pair to a limit buy. Leave both blank for separate exits. Manual quantity and costs; exchange lot sizes, liquidity, queue position and minimum notional are not modeled.</p><button id="paper-submit" class="primary">Queue paper order</button></section><section class="plot-card"><div class="panel-heading"><span>START FROM A SAVED PLAN</span></div><div class="plan-fields"><label>Saved plan<select id="paper-plan"><option value="">Choose a plan</option>${s.plans.map((p) => `<option value="${p.id}" ${p.id === s.planId ? "selected" : ""}>${esc(p.estimate.input.name)} · ${esc(p.estimate.input.symbol)} · r${p.revision}</option>`).join("")}</select></label></div><p class="footnote">Queues a limit buy at the saved entry using the saved quantity, fees and slippage. Requires a draft, long, Binance spot plan in USDT. Available account cash is checked again.</p><p class="footnote"><label><input id="paper-linkedExits" type="checkbox" ${d.linkedExits ? "checked" : ""}> Activate saved stop/target pairs after entry fills</label><br>Each target slice shares its quantity with a linked stop. Filling one cancels its sibling; other slices remain active. Without this option, submit exits separately.</p><button id="paper-plan-submit">Queue saved plan entry</button><p class="footnote">Pending orders survive restart. Nothing processes while the app is closed. When monitoring is stopped, use Process manually. REST retrieval time establishes quote freshness; the endpoint does not provide an exchange event timestamp.</p></section></div>`}
+  ${riskView(s)}
   <section class="plot-card" id="paper-monitor">${monitorView(s)}</section><section class="plot-card" id="paper-valuation">${valuationView(s)}</section>
   <div id="paper-results">${results(s)}</div></section>`;
 }
@@ -158,6 +166,8 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
   };
   const paintMonitor = () => {
     if (!document.getElementById("paper-monitor")) return;
+    const risk = document.getElementById("paper-risk-status");
+    if (risk) risk.innerHTML = riskStatus(s);
     document.getElementById("paper-monitor").innerHTML = monitorView(s);
     document.getElementById("paper-valuation").innerHTML = valuationView(s);
     document.getElementById("paper-monitor-start").onclick = () =>
@@ -231,6 +241,7 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
           })),
     );
   };
+  bindRisk({ s, operation, call });
   document.getElementById("paper-refresh").onclick = () =>
     operation(async () => {
       await refresh();
@@ -242,7 +253,7 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
       const account = await call("paperSnapshot");
       await exportFile(
         "paper-account.json",
-        JSON.stringify({ modelVersion: 2, account }, null, 2),
+        JSON.stringify({ modelVersion: 3, account }, null, 2),
       );
       s.message = "Exported the latest saved account and complete ledger.";
     });

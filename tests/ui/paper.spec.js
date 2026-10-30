@@ -228,3 +228,98 @@ test("continuous monitoring updates fills and valuation without destroying draft
     await monitor.close();
   }
 });
+
+test("risk drafts survive account polling and conflicts, enforce entry caps, and persist after reload", async ({
+  page,
+}) => {
+  let doc = null;
+  const a = new PaperAccount({
+    storage: {
+      read: async () => structuredClone(doc),
+      write: async (d) => {
+        doc = structuredClone(d);
+      },
+    },
+    validateMarket: async () => {},
+    quote: async (symbol) => {
+      const at = Date.now();
+      return {
+        symbol,
+        bid: 99,
+        ask: 100,
+        requestedAt: at,
+        receivedAt: at,
+        source: "Binance public bookTicker REST",
+      };
+    },
+  });
+  const monitor = new PaperMonitor({ account: a });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.exposeFunction("backendCall", (action, args) => {
+    const methods = {
+      paperCreate: "create",
+      paperSubmit: "submit",
+      paperSnapshot: "snapshot",
+      paperSetRisk: "setRisk",
+    };
+    if (methods[action]) return a[methods[action]](args);
+    if (action === "paperMonitorStatus") return monitor.snapshot();
+    return dispatch(action, args);
+  });
+  await page.addInitScript(() => {
+    window.desk = { call: (a, b) => window.backendCall(a, b) };
+  });
+  await page.goto("/");
+  await page.locator('[data-page="paper"]').click();
+  await page.locator("#paper-create").click();
+  await page.locator("#paper-risk-editor summary").click();
+  await page.locator("#paper-risk-maxOrderCost").fill("100");
+  await page.locator("#paper-risk-maxMarkets").fill("2");
+  await page.locator("#paper-risk-save").click();
+  await expect(page.locator("#paper-message")).toContainText(
+    "Risk limits saved",
+  );
+  await page.locator("#paper-quantity").fill("2");
+  await page.locator("#paper-maxNotional").fill("220");
+  await page.locator("#paper-submit").click();
+  await expect(page.locator("#paper-error")).toContainText("per-order limit");
+  await page.locator("#paper-risk-maxOrderCost").fill("500");
+  const s = await a.snapshot();
+  await a.setRisk({
+    expectedRevision: s.revision,
+    policy: { ...s.risk, pauseBuys: true },
+  });
+  await expect(page.locator("#paper-risk-status")).toContainText("BUYS PAUSED");
+  await expect(page.locator("#paper-risk-maxOrderCost")).toHaveValue("500");
+  await page.locator("#paper-risk-save").click();
+  await expect(page.locator("#paper-error")).toContainText(
+    "Risk limits changed elsewhere",
+  );
+  await page.locator("#paper-risk-load").click();
+  await expect(page.locator("#paper-risk-maxOrderCost")).toHaveValue("100");
+  await expect(page.locator("#paper-risk-pauseBuys")).toBeChecked();
+  await page.locator("#paper-risk-maxOrderCost").fill("0");
+  await page.locator("#paper-risk-save").click();
+  await expect(page.locator("#paper-error")).not.toBeEmpty();
+  expect((await a.snapshot()).risk.maxOrderCost).toBe(100);
+  await page.locator("#paper-risk-maxOrderCost").fill("");
+  await page.locator("#paper-risk-save").click();
+  await expect(page.locator("#paper-error")).toBeEmpty();
+  await page.reload();
+  await page.locator('[data-page="paper"]').click();
+  await expect(page.locator("#paper-risk-status")).toContainText("BUYS PAUSED");
+  await page.locator("#paper-risk-editor summary").click();
+  await expect(page.locator("#paper-risk-maxOrderCost")).toHaveValue("");
+  await expect(page.locator("#paper-risk-maxMarkets")).toHaveValue("2");
+  for (const theme of ["dark", "light"]) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.waitForTimeout(200);
+    await page.screenshot({
+      path: `test-results/paper-risk-${theme}.png`,
+      fullPage: true,
+    });
+  }
+  expect(errors).toEqual([]);
+  await monitor.close();
+});

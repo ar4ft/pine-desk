@@ -111,6 +111,30 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
       "cancelled",
     );
     assert.ok(Math.abs(monitor.valuation.equity - 1022.98) < 1e-8);
+    await call(client, "paper_set_risk", {
+      expectedRevision: monitor.account.revision,
+      policy: { ...monitor.account.risk, pauseBuys: true, maxMarkets: 2 },
+    });
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-risk-status")
+        ?.textContent.includes("BUYS PAUSED"),
+    );
+    await page.locator("#paper-risk-editor summary").click();
+    await page.locator("#paper-risk-load").click();
+    await page.waitForFunction(
+      () => document.querySelector("#paper-risk-pauseBuys")?.checked,
+    );
+    await page.locator("#paper-risk-maxOrderCost").fill("150");
+    await page.locator("#paper-risk-save").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-message")
+        ?.textContent.includes("Risk limits saved"),
+    );
+    account = await call(client, "paper_account");
+    assert.equal(account.risk.maxOrderCost, 150);
+    assert.equal(account.risk.pauseBuys, true);
   } finally {
     await app.evaluate(async () => {
       const f = globalThis.pineDeskPaperSmoke;

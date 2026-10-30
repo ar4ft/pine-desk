@@ -99,6 +99,19 @@ test("saved-plan entries use exact compatible revisions and copy only entry assu
         .filter((t) => t.quantity > 0)
         .map((t) => ({ price: t.price, quantity: t.quantity })),
     );
+    const guarded = await dispatch("paperSetRisk", {
+      expectedRevision: linked.revision,
+      policy: { ...linked.risk, pauseBuys: true },
+    });
+    await assert.rejects(
+      dispatch("paperSubmitPlan", {
+        ...args,
+        requestId: randomUUID(),
+        expectedRevision: guarded.revision,
+        planRevision: restored.revision,
+      }),
+      /paused/,
+    );
   } finally {
     await paperAccount.close();
     await tradePlans.close();

@@ -300,7 +300,7 @@ test("version-1 accounts retain history and upgrade only when a mutation commits
   assert.deepEqual(f.doc(), original);
   const s = await a.snapshot();
   await a.cancel({ expectedRevision: s.revision, id: s.orders[0].id });
-  assert.equal(f.doc().version, 2);
+  assert.equal(f.doc().version, 3);
   assert.deepEqual(f.doc().events[0], original.events[0]);
 });
 test("valuation does not present missing holdings or future quotes as zero-priced assets", () => {

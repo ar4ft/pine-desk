@@ -66,3 +66,28 @@
 #paper-valuation .metrics {
   padding: 16px;
 }
+
+#paper-risk .metrics {
+  padding: 16px;
+}
+#paper-risk-editor {
+  padding: 0 16px 16px;
+}
+#paper-risk-editor summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+#paper-risk-editor .paper-risk-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+#paper-risk-editor .paper-risk-toggle input {
+  width: auto;
+}
+
+#paper-risk .metrics > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

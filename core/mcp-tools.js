@@ -1,5 +1,6 @@
 import { paperOrderSchema } from "./paper-account.js";
 import { z } from "zod";
+import { paperRiskSchema } from "./paper-risk.js";
 
 // One schema/allowlist for standalone MCP and the authenticated desktop bridge.
 export function toolDefinitions() {
@@ -62,13 +63,20 @@ export function toolDefinitions() {
     false,
   );
   const paperRevision = z.number().int().positive();
+  tool(
+    "paper_set_risk",
+    "Replace persistent paper-entry risk limits. Null caps disable individual limits; pauseBuys blocks buys only. Cost caps include fees, held cost basis and pending buy reservations, not market values. Daily loss sums losing realized exits in UTC without profit offsets. Rechecked at fills; blocked pending buys reject when executable. Sell exits remain available. Changes require current account revision and research permission.",
+    { expectedRevision: paperRevision, policy: paperRiskSchema },
+    "paperSetRisk",
+    false,
+  );
   const paperOrderRef = {
     id: z.string().uuid(),
     expectedRevision: paperRevision,
   };
   tool(
     "paper_account",
-    "Read the local simulated USDT spot account, reservations, orders, positions, fills and event ledger. For ephemeral bid marks and equity use paper_monitor_status.",
+    "Read the local simulated USDT spot account, reservations, orders, positions, fills, saved risk policy, current UTC risk usage and event ledger. For ephemeral bid marks and equity use paper_monitor_status.",
     {},
     "paperSnapshot",
   );

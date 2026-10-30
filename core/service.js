@@ -199,6 +199,8 @@ export async function dispatch(action, args = {}) {
         requestId: args.requestId,
         input: args.input,
       });
+    case "paperSetRisk":
+      return paperAccount.setRisk(args);
     case "paperCancel":
       return paperAccount.cancel(args);
     case "paperProcess":
