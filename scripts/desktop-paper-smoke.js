@@ -6,21 +6,26 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
       require = process
         .getBuiltinModule("node:module")
         .createRequire(path.join(app.getAppPath(), "package.json"));
-    const { paperAccount } = require(
+    const { paperAccount, paperMonitor } = require(
       path.join(app.getAppPath(), "core/service.js"),
     );
     globalThis.pineDeskPaperSmoke = {
       paperAccount,
+      paperMonitor,
+      clock: paperMonitor.clock,
+      bid: 99,
+      ask: 100,
       quote: paperAccount.quote,
       validateMarket: paperAccount.validateMarket,
     };
+    paperMonitor.clock = { setTimeout: () => 1, clearTimeout: () => {} };
     paperAccount.validateMarket = async () => {};
     paperAccount.quote = async (symbol) => {
       const now = Date.now();
       return {
         symbol,
-        bid: 99,
-        ask: 100,
+        bid: globalThis.pineDeskPaperSmoke.bid,
+        ask: globalThis.pineDeskPaperSmoke.ask,
         requestedAt: now,
         receivedAt: now,
         source: "Binance public bookTicker REST",
@@ -68,9 +73,49 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
     account = await call(client, "paper_account");
     assert.equal(account.positions.BTCUSDT.quantity, 1.5);
     assert.equal(account.cash, 845.48);
-  } finally {
-    await app.evaluate(() => {
+    await call(client, "paper_submit", {
+      expectedRevision: account.revision,
+      requestId: randomUUID(),
+      input: {
+        symbol: "BTCUSDT",
+        side: "buy",
+        type: "limit",
+        quantity: 1,
+        price: 100,
+        feePercent: 0,
+        slippage: 0,
+        bracket: { stop: 90, targets: [{ price: 110, quantity: 1 }] },
+      },
+    });
+    await call(client, "paper_monitor_start");
+    await page.waitForFunction(
+      () => document.querySelectorAll("#paper-fills tbody tr").length === 3,
+    );
+    await page.locator("#paper-quantity").fill("0.123");
+    await app.evaluate(async () => {
       const f = globalThis.pineDeskPaperSmoke;
+      f.bid = 111;
+      f.ask = 112;
+      await f.paperMonitor.cycle();
+    });
+    await page.waitForFunction(
+      () => document.querySelectorAll("#paper-fills tbody tr").length === 4,
+    );
+    assert.equal(await page.locator("#paper-quantity").inputValue(), "0.123");
+    const monitor = await call(client, "paper_monitor_stop");
+    assert.equal(monitor.active, false);
+    assert.equal(monitor.account.cash, 856.48);
+    assert.equal(monitor.account.positions.BTCUSDT.quantity, 1.5);
+    assert.equal(
+      monitor.account.orders.find((o) => o.leg === "stop").status,
+      "cancelled",
+    );
+    assert.ok(Math.abs(monitor.valuation.equity - 1022.98) < 1e-8);
+  } finally {
+    await app.evaluate(async () => {
+      const f = globalThis.pineDeskPaperSmoke;
+      await f.paperMonitor.close();
+      f.paperMonitor.clock = f.clock;
       f.paperAccount.quote = f.quote;
       f.paperAccount.validateMarket = f.validateMarket;
       delete globalThis.pineDeskPaperSmoke;

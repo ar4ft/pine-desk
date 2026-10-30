@@ -41,6 +41,26 @@ export function toolDefinitions() {
       readOnly: capability === "read",
     });
   };
+  tool(
+    "paper_monitor_status",
+    "Read session monitoring status, current paper account and bid-marked valuation. Missing/stale quotes suppress equity totals; marks exclude exit fees/slippage.",
+    {},
+    "paperMonitorStatus",
+  );
+  tool(
+    "paper_monitor_start",
+    "Enable continuous simulated order evaluation and valuation using fresh public bid/ask polling while this service runs. Research permission; up to 50 markets, four concurrent requests, five seconds between cycles. Disabled after restart; never routes real orders.",
+    {},
+    "paperMonitorStart",
+    false,
+  );
+  tool(
+    "paper_monitor_stop",
+    "Stop the session paper monitor and drain in-flight work before returning. Pending orders remain saved; manual paper_process remains available.",
+    {},
+    "paperMonitorStop",
+    false,
+  );
   const paperRevision = z.number().int().positive();
   const paperOrderRef = {
     id: z.string().uuid(),
@@ -48,7 +68,7 @@ export function toolDefinitions() {
   };
   tool(
     "paper_account",
-    "Read the local simulated USDT spot account, reservations, orders, positions, fills and event ledger. Balances are not marked to market.",
+    "Read the local simulated USDT spot account, reservations, orders, positions, fills and event ledger. For ephemeral bid marks and equity use paper_monitor_status.",
     {},
     "paperSnapshot",
   );
@@ -61,7 +81,7 @@ export function toolDefinitions() {
   );
   tool(
     "paper_submit",
-    "Queue a simulated Binance USDT spot order, reserving cash or held quantity. Does not fill until paper_process. Reuse requestId for a retry; expectedRevision guards concurrent edits. Manual fees/slippage; no shorts, margin or options.",
+    "Queue a simulated Binance USDT spot order, reserving cash or held quantity. Fills via paper_process or an explicitly enabled session monitor. Optional bracket on limit buys creates linked stop/target pairs after entry fills. Reuse requestId for a retry; expectedRevision guards concurrent edits. Manual fees/slippage; no shorts, margin or options.",
     {
       expectedRevision: paperRevision,
       requestId: z.string().uuid(),
@@ -72,12 +92,13 @@ export function toolDefinitions() {
   );
   tool(
     "paper_submit_plan",
-    "Queue a limit buy from the exact saved draft long Binance USDT spot plan revision. Copies quantity, entry, fees and slippage. Stops/targets are NOT activated; submit exits separately.",
+    "Queue a limit buy from the exact saved draft long Binance USDT spot plan revision. Copies quantity, entry, fees and slippage. Optional linkedExits activates the saved stop/targets only after entry fills; otherwise exits remain separate.",
     {
       expectedRevision: paperRevision,
       requestId: z.string().uuid(),
       planId: z.string().uuid(),
       planRevision: paperRevision,
+      linkedExits: z.boolean().default(false),
     },
     "paperSubmitPlan",
     false,
@@ -91,7 +112,7 @@ export function toolDefinitions() {
   );
   tool(
     "paper_process",
-    "Explicitly evaluate one pending paper order using a newly fetched public Binance bid/ask. Full synthetic fills only; no liquidity/queue simulation, background execution or exchange routing. Quote errors leave the order pending.",
+    "Explicitly evaluate one pending paper order using a newly fetched public Binance bid/ask. Full synthetic fills only; no liquidity/queue simulation, exchange routing. Continuous paper processing requires paper_monitor_start. Quote errors leave the order pending.",
     paperOrderRef,
     "paperProcess",
     false,

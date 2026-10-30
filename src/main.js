@@ -2,6 +2,7 @@ import {
   newPaperState,
   retainPaperDraft,
   paperView,
+  pollPaper,
   bindPaper,
 } from "./paper-view.js";
 import "./paper-style.css";
@@ -1928,6 +1929,10 @@ if (api) {
   }, 1000);
   setInterval(pollWatchlist, 1000);
   setInterval(pollAlerts, 2000);
+  setInterval(
+    () => pollPaper(state.paper, () => state.page === "paper" && !state.busy),
+    1000,
+  );
   setInterval(pollOrderBook, 500);
   setInterval(() => depthHistoryController.tick(), 100);
   setInterval(() => {

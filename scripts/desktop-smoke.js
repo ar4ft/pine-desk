@@ -304,10 +304,16 @@ try {
   const paper = await reopened.evaluate(() =>
     window.desk.call("paperSnapshot"),
   );
-  assert.equal(paper.fills.length, 2);
+  assert.equal(paper.fills.length, 4);
   assert.equal(paper.positions.BTCUSDT.quantity, 1.5);
-  assert.equal(paper.cash, 845.48);
-  assert.equal(paper.revision, 5);
+  assert.equal(paper.cash, 856.48);
+  assert.equal(paper.revision, 8);
+  const paperMonitor = await reopened.evaluate(() =>
+    window.desk.call("paperMonitorStatus"),
+  );
+  assert.equal(paperMonitor.active, false);
+  assert.equal(paperMonitor.valuation.equity, null);
+
   const plans = await reopened.evaluate(() => window.desk.call("planList"));
   const savedPlan = plans.find(
     (p) => p.estimate.input.name === "Desktop plan fixture",

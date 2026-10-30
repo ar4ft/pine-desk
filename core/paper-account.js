@@ -1,8 +1,26 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 
 const clean = (value) => Number(value.toPrecision(15));
 const positive = z.number().finite().positive().max(1e12);
+const quantity = z
+  .number()
+  .finite()
+  .min(1e-8)
+  .max(1e9)
+  .refine(
+    (n) => clean(n) === n,
+    "Use at most 15 significant digits for quantity.",
+  );
+const bracketSchema = z
+  .object({
+    stop: positive,
+    targets: z
+      .array(z.object({ price: positive, quantity }).strict())
+      .min(1)
+      .max(3),
+  })
+  .strict();
 const timestamp = z.number().int().positive().max(8.64e15);
 export const paperOrderSchema = z
   .object({
@@ -18,6 +36,7 @@ export const paperOrderSchema = z
         (n) => clean(n) === n,
         "Use at most 15 significant digits for quantity.",
       ),
+    bracket: bracketSchema.optional(),
     price: positive.optional(),
     maxNotional: positive.optional(),
     feePercent: z.number().finite().min(0).max(5).default(0.1),
@@ -26,6 +45,23 @@ export const paperOrderSchema = z
   .strict()
   .superRefine((p, ctx) => {
     const fail = (message) => ctx.addIssue({ code: "custom", message });
+    if (p.bracket) {
+      if (p.side !== "buy" || p.type !== "limit")
+        fail("Linked exits require a limit-buy entry.");
+      if (!(p.bracket.stop < p.price))
+        fail("Bracket stop must be below the entry limit.");
+      let previous = p.price;
+      for (const target of p.bracket.targets) {
+        if (!(target.price > previous))
+          fail("Bracket targets must progress above the entry limit.");
+        previous = target.price;
+      }
+      if (
+        clean(p.bracket.targets.reduce((sum, t) => sum + t.quantity, 0)) !==
+        p.quantity
+      )
+        fail("Bracket target quantities must sum to entry quantity.");
+    }
     if (p.type !== "market" && p.price === undefined)
       fail("Limit/stop price is required.");
     if (p.type === "market" && p.price !== undefined)
@@ -82,7 +118,7 @@ const eventSchema = z.discriminatedUnion("kind", [
 ]);
 const archiveSchema = z
   .object({
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
     id: z.string().uuid(),
     currency: z.literal("USDT"),
     initialCash: positive,
@@ -101,7 +137,10 @@ function reserve(order) {
 function available(s) {
   let reservedCash = 0;
   const reservedQuantity = {};
+  const groups = new Set();
   for (const o of s.orders.filter((o) => o.status === "pending")) {
+    if (o.ocoGroup && groups.has(o.ocoGroup)) continue;
+    if (o.ocoGroup) groups.add(o.ocoGroup);
     if (o.side === "buy") reservedCash = clean(reservedCash + reserve(o));
     else
       reservedQuantity[o.symbol] = clean(
@@ -114,7 +153,7 @@ function available(s) {
     reservedQuantity,
   };
 }
-function fresh(raw, symbol, at) {
+export function freshPaperQuote(raw, symbol, at) {
   const q = quoteSchema.parse(raw);
   if (
     q.symbol !== symbol ||
@@ -130,13 +169,22 @@ function fresh(raw, symbol, at) {
 }
 function apply(s, e) {
   if (e.kind === "submit") {
-    if (s.orders.length >= 1000)
+    const contingent = s.orders
+      .filter((o) => o.status === "pending")
+      .reduce((n, o) => n + (o.bracket?.targets.length ?? 0) * 2, 0);
+    const required = 1 + (e.input.bracket?.targets.length ?? 0) * 2;
+    if (s.orders.length + contingent + required > 1000)
       throw Error(
         "Paper ledger is full (1,000 orders). Export it before starting a future account.",
       );
     if (s.orders.some((o) => o.id === e.id || o.requestId === e.requestId))
       throw Error("Duplicate paper order.");
-    if (s.orders.filter((o) => o.status === "pending").length >= 50)
+    if (
+      s.orders.filter((o) => o.status === "pending").length +
+        contingent +
+        required >
+      50
+    )
       throw Error("At most 50 pending paper orders are supported.");
     const p = e.input,
       a = available(s);
@@ -171,9 +219,17 @@ function apply(s, e) {
   if (e.kind === "cancel") {
     o.status = "cancelled";
     o.completedAt = e.at;
+    if (o.ocoGroup)
+      for (const sibling of s.orders.filter(
+        (x) => x.ocoGroup === o.ocoGroup && x.status === "pending",
+      )) {
+        sibling.status = "cancelled";
+        sibling.completedAt = e.at;
+        sibling.reason = "Linked exit pair cancelled.";
+      }
     return;
   }
-  const q = fresh(e.quote, o.symbol, e.at);
+  const q = freshPaperQuote(e.quote, o.symbol, e.at);
   if (q.requestedAt < o.submittedAt)
     throw Error("Quote predates the submitted order.");
   const price = o.side === "buy" ? q.ask + o.slippage : q.bid - o.slippage;
@@ -222,6 +278,41 @@ function apply(s, e) {
   s.positions[o.symbol] = pos;
   o.status = "filled";
   o.completedAt = e.at;
+  if (o.ocoGroup)
+    for (const sibling of s.orders.filter(
+      (x) => x.ocoGroup === o.ocoGroup && x.status === "pending",
+    )) {
+      sibling.status = "cancelled";
+      sibling.completedAt = e.at;
+      sibling.reason = "Other linked exit filled (OCO).";
+    }
+  if (o.bracket)
+    o.bracket.targets.forEach((target, index) => {
+      const group = `${o.id}:${index}`;
+      for (const leg of ["stop", "target"]) {
+        const hash = createHash("sha256")
+          .update(`${group}:${leg}`)
+          .digest("hex");
+        const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+        s.orders.push({
+          id,
+          requestId: id,
+          symbol: o.symbol,
+          side: "sell",
+          type: leg === "stop" ? "stop" : "limit",
+          quantity: target.quantity,
+          price: leg === "stop" ? o.bracket.stop : target.price,
+          feePercent: o.feePercent,
+          slippage: o.slippage,
+          plan: o.plan,
+          parentId: o.id,
+          ocoGroup: group,
+          leg,
+          status: "pending",
+          submittedAt: e.at,
+        });
+      }
+    });
   s.fills.push({
     orderId: o.id,
     symbol: o.symbol,
@@ -296,7 +387,7 @@ export class PaperAccount {
       if (await this.read())
         throw Error("A paper account already exists. Refresh to load it.");
       const doc = archiveSchema.parse({
-        version: 1,
+        version: 2,
         id: randomUUID(),
         currency: "USDT",
         initialCash,
@@ -322,6 +413,7 @@ export class PaperAccount {
   async commit(doc, event) {
     const next = archiveSchema.parse({
         ...doc,
+        version: 2,
         events: [...doc.events, event],
       }),
       result = replay(next);
@@ -385,6 +477,41 @@ export class PaperAccount {
       };
     });
   }
+  evaluateSymbol(symbol, quote, current = () => true) {
+    return this.serial(async () => {
+      if (!current()) return { changed: false };
+      const doc = await this.read();
+      if (!doc) throw Error("Create a paper account first.");
+      const at = this.time(doc);
+      freshPaperQuote(quote, symbol, at);
+      const state = replay(doc),
+        events = [];
+      // Capture candidates before processing: newly activated children wait for a later quote.
+      const ids = state.orders
+        .filter(
+          (o) =>
+            o.status === "pending" &&
+            o.symbol === symbol &&
+            o.submittedAt <= quote.requestedAt,
+        )
+        .map((o) => o.id);
+      for (const id of ids) {
+        if (state.orders.find((o) => o.id === id).status !== "pending")
+          continue;
+        const event = { kind: "process", id, at, quote };
+        if (!apply(state, event)) events.push(event);
+      }
+      if (!events.length || !current()) return { changed: false };
+      const next = archiveSchema.parse({
+        ...doc,
+        version: 2,
+        events: [...doc.events, ...events],
+      });
+      replay(next);
+      await this.storage.write(next);
+      return { changed: true, events: events.length };
+    });
+  }
   close() {
     return this.queue;
   }
@@ -408,7 +535,7 @@ export async function paperQuote(
     );
   const data = await response.json(),
     receivedAt = now();
-  return fresh(
+  return freshPaperQuote(
     {
       symbol: data.symbol,
       bid: Number(data.bidPrice),

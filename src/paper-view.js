@@ -14,6 +14,9 @@ const date = (v) =>
   new Date(v).toISOString().replace("T", " ").replace(".000Z", " UTC");
 export const newPaperState = () => ({
   account: null,
+  monitor: null,
+  operation: 0,
+  polling: false,
   loaded: false,
   loading: false,
   plans: [],
@@ -32,16 +35,36 @@ export const newPaperState = () => ({
     maxNotional: 1000,
     feePercent: 0.1,
     slippage: 0,
+    bracketStop: "",
+    bracketTarget: "",
+    linkedExits: false,
   },
 });
 export function retainPaperDraft(s) {
   if (!document.getElementById("paper-view")) return;
   for (const key of Object.keys(s.draft)) {
     const el = document.getElementById("paper-" + key);
-    if (el) s.draft[key] = el.value;
+    if (el) s.draft[key] = el.type === "checkbox" ? el.checked : el.value;
   }
   const plan = document.getElementById("paper-plan");
   if (plan) s.planId = plan.value;
+}
+function monitorView(s) {
+  const m = s.monitor;
+  return `<div class="panel-heading"><span>PAPER MONITOR · ${m?.active ? "RUNNING" : "STOPPED"}</span><span>${m?.busy ? "Checking quotes…" : m?.lastCycleAt ? `Last cycle ${date(m.lastCycleAt)}` : "No cycle this session"}</span></div><p class="footnote">Opt-in public bid/ask polling: five seconds between cycles, up to four requests at once. Runs across pages while the app is open. Stops on quit; enable again after restart. Missed crossings are never replayed.</p><div class="searchbar"><button id="paper-monitor-start" ${!s.account || m?.active ? "disabled" : ""}>Start monitoring</button><button id="paper-monitor-stop" ${!m?.active ? "disabled" : ""}>Stop monitoring</button><span>${m?.symbols?.length ?? 0} markets</span></div>${Object.entries(
+    m?.errors ?? {},
+  )
+    .map(
+      ([symbol, error]) =>
+        `<p class="paper-monitor-error">${esc(symbol)}: ${esc(error)}</p>`,
+    )
+    .join("")}`;
+}
+function valuationView(s) {
+  const v = s.monitor?.valuation;
+  const current =
+    !!v && !!s.account && v.accountRevision === s.account.revision;
+  return `<div class="metrics paper-metrics"><div><span>Bid-marked equity · USDT</span><strong>${current ? num(v.equity) : "—"}</strong></div><div><span>Unrealized P&L · before exit costs</span><strong>${current ? num(v.unrealizedPnl) : "—"}</strong></div></div><p class="footnote">${current && v.complete ? "All open positions have recent observed bids." : "Valuation incomplete: start monitoring for fresh quotes; totals require every open position."} Marks exclude hypothetical exit fees/slippage. Quotes older than 15 seconds are stale; marks are not executable prices.</p>${current && v.positions.length ? `<div class="table-wrap"><table id="paper-marks"><thead><tr><th>Market</th><th>Observed bid</th><th>Marked value</th><th>Unrealized P&L</th><th>Quote retrieved</th></tr></thead><tbody>${v.positions.map((p) => `<tr><td>${esc(p.symbol)}</td><td>${p.stale ? "Missing / stale" : num(p.bid)}</td><td>${num(p.value)}</td><td>${num(p.unrealizedPnl)}</td><td>${p.receivedAt ? date(p.receivedAt) : "—"}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
 }
 function results(s) {
   const a = s.account;
@@ -52,7 +75,7 @@ function results(s) {
     .slice(-100)
     .reverse();
   const rows = [...pending, ...history];
-  return `<div class="metrics paper-metrics"><div><span>Cash · USDT</span><strong>${num(a.cash)}</strong></div><div><span>Available cash</span><strong>${num(a.availableCash)}</strong></div><div><span>Reserved cash</span><strong>${num(a.reservedCash)}</strong></div><div><span>Realized P&L · after fees</span><strong>${num(a.realizedPnl)}</strong></div></div><p class="footnote">Account revision ${a.revision} · Initial cash ${num(a.initialCash)} USDT · Cost-basis accounting. Cash is not total equity; positions are not marked to market.</p>
+  return `<div class="metrics paper-metrics"><div><span>Cash · USDT</span><strong>${num(a.cash)}</strong></div><div><span>Available cash</span><strong>${num(a.availableCash)}</strong></div><div><span>Reserved cash</span><strong>${num(a.reservedCash)}</strong></div><div><span>Realized P&L · after fees</span><strong>${num(a.realizedPnl)}</strong></div></div><p class="footnote">Account revision ${a.revision} · Initial cash ${num(a.initialCash)} USDT · Cost-basis accounting. Cash is not total equity; current bid valuation appears above when all marks are fresh.</p>
   <section class="plot-card"><div class="panel-heading"><span>POSITIONS</span><span>Spot holdings · USDT cost basis</span></div><div class="table-wrap"><table id="paper-positions"><thead><tr><th>Market</th><th>Quantity</th><th>Reserved exits</th><th>Average cost incl. fees</th><th>Remaining cost</th><th>Realized P&L</th></tr></thead><tbody>${
     Object.entries(a.positions)
       .map(
@@ -61,7 +84,7 @@ function results(s) {
       )
       .join("") || '<tr><td colspan="6">No simulated positions yet.</td></tr>'
   }</tbody></table></div></section>
-  <section class="plot-card"><div class="panel-heading"><span>ORDERS</span><span>${pending.length} pending · ${a.orders.length} total</span></div><p class="footnote">Process checks one order against a new quote now. Limits and stops stay pending until you process them at a qualifying price. No background execution; missed crossings are not replayed.</p><div class="table-wrap"><table id="paper-orders"><thead><tr><th>Market / order</th><th>Quantity</th><th>Price / cap</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows.map((o) => `<tr data-paper-order="${o.id}"><td>${esc(o.symbol)} · ${esc(o.side)} ${esc(o.type)}<small>${date(o.submittedAt)}${o.plan ? `<br>Plan: ${esc(o.plan.name)} · r${o.plan.revision}` : ""}</small></td><td>${num(o.quantity)}</td><td>${o.price ? num(o.price) : o.maxNotional ? `Cap ${num(o.maxNotional)} USDT` : "Current bid"}<small>Fee ${num(o.feePercent)}% · slippage ${num(o.slippage)}</small></td><td>${esc(o.status)}${o.reason ? `<small>${esc(o.reason)}</small>` : ""}</td><td>${o.status === "pending" ? `<button data-paper-process="${o.id}">Process</button><button data-paper-cancel="${o.id}">Cancel</button>` : "—"}</td></tr>`).join("") || '<tr><td colspan="5">No paper orders. Queue one above.</td></tr>'}</tbody></table></div><p class="footnote">All pending orders and the latest 100 completed orders are shown. Export includes the complete ledger.</p></section>
+  <section class="plot-card"><div class="panel-heading"><span>ORDERS</span><span>${pending.length} pending · ${a.orders.length} total</span></div><p class="footnote">Process checks one order against a new quote now. Limits and stops stay pending until you process them at a qualifying price. An enabled paper monitor also processes pending orders. Missed crossings are not replayed. Linked stop/target pairs share one reservation; filling either cancels its sibling.</p><div class="table-wrap"><table id="paper-orders"><thead><tr><th>Market / order</th><th>Quantity</th><th>Price / cap</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows.map((o) => `<tr data-paper-order="${o.id}"><td>${esc(o.symbol)} · ${esc(o.side)} ${esc(o.type)}<small>${date(o.submittedAt)}${o.ocoGroup ? `<br>Linked ${esc(o.leg)} · entry ${esc(o.parentId.slice(0, 8))} · target ${Number(o.ocoGroup.slice(-1)) + 1}` : o.bracket ? "<br>Linked exits activate after entry fill" : ""}${o.plan ? `<br>Plan: ${esc(o.plan.name)} · r${o.plan.revision}` : ""}</small></td><td>${num(o.quantity)}</td><td>${o.price ? num(o.price) : o.maxNotional ? `Cap ${num(o.maxNotional)} USDT` : "Current bid"}<small>Fee ${num(o.feePercent)}% · slippage ${num(o.slippage)}</small></td><td>${esc(o.status)}${o.reason ? `<small>${esc(o.reason)}</small>` : ""}</td><td>${o.status === "pending" ? `<button data-paper-process="${o.id}">Process</button><button data-paper-cancel="${o.id}">${o.ocoGroup ? "Cancel pair" : "Cancel"}</button>` : "—"}</td></tr>`).join("") || '<tr><td colspan="5">No paper orders. Queue one above.</td></tr>'}</tbody></table></div><p class="footnote">All pending orders and the latest 100 completed orders are shown. Export includes the complete ledger.</p></section>
   <section class="plot-card"><div class="panel-heading"><span>SIMULATED FILLS</span><span>${a.fills.length} total · latest 100</span></div><div class="table-wrap"><table id="paper-fills"><thead><tr><th>Time / market</th><th>Side / quantity</th><th>Fill price</th><th>Fee</th><th>Realized P&L</th><th>Observed bid / ask</th></tr></thead><tbody>${
     a.fills
       .slice(-100)
@@ -87,25 +110,32 @@ export function paperView(s) {
   const d = s.draft;
   const field = (key, label, type = "number") =>
     `<label>${label}<input id="paper-${key}" type="${type}" ${type === "number" ? 'step="any"' : ""} value="${esc(d[key])}"></label>`;
-  return `<section id="paper-view"><div class="page-intro"><span class="eyebrow">SIMULATED CASH ACCOUNT</span><h1>Practice the execution. Keep the record.</h1><p>Binance USDT spot · long holdings · local paper orders. Process each order explicitly against a fresh public bid/ask. No real money or exchange orders.</p></div><div class="searchbar"><button id="paper-refresh">Refresh account</button><button id="paper-export" ${s.account ? "" : "disabled"}>Export account and ledger</button></div><p id="paper-error" role="alert">${esc(s.error)}</p><p id="paper-message" role="status">${esc(s.message)}</p>
-  ${!s.loaded ? '<p class="footnote">Loading paper account…</p>' : !s.account ? `<section class="plot-card"><div class="panel-heading"><span>START A PAPER ACCOUNT</span></div><div class="plan-fields">${field("initialCash", "Initial simulated cash (USDT)")}</div><p class="footnote">One persistent account. Initial cash cannot be changed after creation. No automatic resets or deposits.</p><button id="paper-create" class="primary">Create paper account</button></section>` : `<div class="plan-columns"><section class="plot-card"><div class="panel-heading"><span>QUEUE A PAPER ORDER</span><span>Reserves funds / holdings</span></div><div class="plan-fields">${field("symbol", "Binance USDT symbol", "text")}<label>Side<select id="paper-side"><option value="buy" ${d.side === "buy" ? "selected" : ""}>Buy</option><option value="sell" ${d.side === "sell" ? "selected" : ""}>Sell held quantity</option></select></label><label>Order type<select id="paper-type">${["market", "limit", "stop"].map((t) => `<option value="${t}" ${d.type === t ? "selected" : ""}>${t === "stop" ? "Sell stop" : t[0].toUpperCase() + t.slice(1)}</option>`).join("")}</select></label>${field("quantity", "Quantity (base asset)")}${field("price", "Limit price / sell-stop trigger")}${field("maxNotional", "Market-buy notional cap (USDT)")}${field("feePercent", "Fee per fill (%)")}${field("slippage", "Adverse slippage per fill (price units)")}</div><p class="footnote">Whole-order synthetic fills at ask + slippage for buys, bid − slippage for sells. Limit fills respect your limit; stops can gap. Manual quantity and costs; exchange lot sizes, liquidity, queue position and minimum notional are not modeled.</p><button id="paper-submit" class="primary">Queue paper order</button></section><section class="plot-card"><div class="panel-heading"><span>START FROM A SAVED PLAN</span></div><div class="plan-fields"><label>Saved plan<select id="paper-plan"><option value="">Choose a plan</option>${s.plans.map((p) => `<option value="${p.id}" ${p.id === s.planId ? "selected" : ""}>${esc(p.estimate.input.name)} · ${esc(p.estimate.input.symbol)} · r${p.revision}</option>`).join("")}</select></label></div><p class="footnote">Queues a limit buy at the saved entry using the saved quantity, fees and slippage. Requires a draft, long, Binance spot plan in USDT. Available account cash is checked again.</p><p class="footnote"><strong>Stops and targets are not activated.</strong> After entry fills, submit sell exits separately. Each exit reserves its quantity; linked brackets and OCO orders are not supported.</p><button id="paper-plan-submit">Queue saved plan entry</button><p class="footnote">Pending orders survive restart. Nothing processes while the app is closed or until you press Process. REST retrieval time establishes quote freshness; the endpoint does not provide an exchange event timestamp.</p></section></div>`}
+  return `<section id="paper-view"><div class="page-intro"><span class="eyebrow">SIMULATED CASH ACCOUNT</span><h1>Practice the execution. Keep the record.</h1><p>Binance USDT spot · long holdings · local paper orders. Process orders manually or enable continuous paper monitoring. No real money or exchange orders.</p></div><div class="searchbar"><button id="paper-refresh">Refresh account</button><button id="paper-export" ${s.account ? "" : "disabled"}>Export account and ledger</button></div><p id="paper-error" role="alert">${esc(s.error)}</p><p id="paper-message" role="status">${esc(s.message)}</p>
+  ${!s.loaded ? '<p class="footnote">Loading paper account…</p>' : !s.account ? `<section class="plot-card"><div class="panel-heading"><span>START A PAPER ACCOUNT</span></div><div class="plan-fields">${field("initialCash", "Initial simulated cash (USDT)")}</div><p class="footnote">One persistent account. Initial cash cannot be changed after creation. No automatic resets or deposits.</p><button id="paper-create" class="primary">Create paper account</button></section>` : `<div class="plan-columns"><section class="plot-card"><div class="panel-heading"><span>QUEUE A PAPER ORDER</span><span>Reserves funds / holdings</span></div><div class="plan-fields">${field("symbol", "Binance USDT symbol", "text")}<label>Side<select id="paper-side"><option value="buy" ${d.side === "buy" ? "selected" : ""}>Buy</option><option value="sell" ${d.side === "sell" ? "selected" : ""}>Sell held quantity</option></select></label><label>Order type<select id="paper-type">${["market", "limit", "stop"].map((t) => `<option value="${t}" ${d.type === t ? "selected" : ""}>${t === "stop" ? "Sell stop" : t[0].toUpperCase() + t.slice(1)}</option>`).join("")}</select></label>${field("quantity", "Quantity (base asset)")}${field("price", "Limit price / sell-stop trigger")}${field("maxNotional", "Market-buy notional cap (USDT)")}${field("feePercent", "Fee per fill (%)")}${field("slippage", "Adverse slippage per fill (price units)")}${field("bracketStop", "Optional linked stop (limit buy)")}${field("bracketTarget", "Optional linked target (full quantity)")}</div><p class="footnote">Whole-order synthetic fills at ask + slippage for buys, bid − slippage for sells. Limit fills respect your limit; stops can gap. Fill both linked fields to attach one stop/target pair to a limit buy. Leave both blank for separate exits. Manual quantity and costs; exchange lot sizes, liquidity, queue position and minimum notional are not modeled.</p><button id="paper-submit" class="primary">Queue paper order</button></section><section class="plot-card"><div class="panel-heading"><span>START FROM A SAVED PLAN</span></div><div class="plan-fields"><label>Saved plan<select id="paper-plan"><option value="">Choose a plan</option>${s.plans.map((p) => `<option value="${p.id}" ${p.id === s.planId ? "selected" : ""}>${esc(p.estimate.input.name)} · ${esc(p.estimate.input.symbol)} · r${p.revision}</option>`).join("")}</select></label></div><p class="footnote">Queues a limit buy at the saved entry using the saved quantity, fees and slippage. Requires a draft, long, Binance spot plan in USDT. Available account cash is checked again.</p><p class="footnote"><label><input id="paper-linkedExits" type="checkbox" ${d.linkedExits ? "checked" : ""}> Activate saved stop/target pairs after entry fills</label><br>Each target slice shares its quantity with a linked stop. Filling one cancels its sibling; other slices remain active. Without this option, submit exits separately.</p><button id="paper-plan-submit">Queue saved plan entry</button><p class="footnote">Pending orders survive restart. Nothing processes while the app is closed. When monitoring is stopped, use Process manually. REST retrieval time establishes quote freshness; the endpoint does not provide an exchange event timestamp.</p></section></div>`}
+  <section class="plot-card" id="paper-monitor">${monitorView(s)}</section><section class="plot-card" id="paper-valuation">${valuationView(s)}</section>
   <div id="paper-results">${results(s)}</div></section>`;
 }
 export function bindPaper({ state: s, call, task, render, exportFile }) {
   if (!document.getElementById("paper-view")) return;
+  const view = (s.view = (s.view ?? 0) + 1);
   const replace = () => {
     document.getElementById("paper-view")?.remove();
     render();
   };
   const draw = () => {
     if (!document.getElementById("paper-view")) return;
+    const ledgerOpen = document.querySelector(".paper-ledger")?.open;
     document.getElementById("paper-results").innerHTML = results(s);
+    if (ledgerOpen && document.querySelector(".paper-ledger"))
+      document.querySelector(".paper-ledger").open = true;
+    paintMonitor();
     document.getElementById("paper-error").textContent = s.error;
     document.getElementById("paper-message").textContent = s.message;
     actions();
   };
   const operation = (fn) =>
     task(async () => {
+      s.operation++;
       retainPaperDraft(s);
       try {
         await fn();
@@ -117,13 +147,64 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
       draw();
     });
   const refresh = async () => {
-    const [account, plans] = await Promise.all([
-      call("paperSnapshot"),
+    const [monitor, plans] = await Promise.all([
+      call("paperMonitorStatus"),
       call("planList"),
     ]);
-    s.account = account;
+    s.monitor = monitor;
+    s.account = monitor.account;
     s.plans = plans;
     s.loaded = true;
+  };
+  const paintMonitor = () => {
+    if (!document.getElementById("paper-monitor")) return;
+    document.getElementById("paper-monitor").innerHTML = monitorView(s);
+    document.getElementById("paper-valuation").innerHTML = valuationView(s);
+    document.getElementById("paper-monitor-start").onclick = () =>
+      operation(async () => {
+        s.monitor = await call("paperMonitorStart");
+        s.account = s.monitor.account;
+        s.message = "Paper monitoring enabled for this session.";
+      });
+    document.getElementById("paper-monitor-stop").onclick = () =>
+      operation(async () => {
+        s.monitor = await call("paperMonitorStop");
+        s.account = s.monitor.account;
+        s.message = "Paper monitoring stopped. Pending orders remain saved.";
+      });
+  };
+  s.poll = async (canPaint) => {
+    if (s.polling || !s.loaded) return;
+    s.polling = true;
+    const operation = s.operation;
+    try {
+      const monitor = await call("paperMonitorStatus");
+      if (
+        s.view !== view ||
+        s.operation !== operation ||
+        !canPaint() ||
+        !document.getElementById("paper-view")
+      )
+        return;
+      const changed = s.account?.revision !== monitor.account?.revision,
+        created = !!s.account !== !!monitor.account;
+      s.monitor = monitor;
+      s.account = monitor.account;
+      if (created) {
+        retainPaperDraft(s);
+        replace();
+      } else if (changed) draw();
+      else paintMonitor();
+    } catch (e) {
+      if (s.view === view && canPaint()) {
+        s.error = e.message;
+        document
+          .getElementById("paper-error")
+          ?.replaceChildren(document.createTextNode(e.message));
+      }
+    } finally {
+      s.polling = false;
+    }
   };
   const actions = () => {
     document.querySelectorAll("[data-paper-process]").forEach(
@@ -161,7 +242,7 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
       const account = await call("paperSnapshot");
       await exportFile(
         "paper-account.json",
-        JSON.stringify({ modelVersion: 1, account }, null, 2),
+        JSON.stringify({ modelVersion: 2, account }, null, 2),
       );
       s.message = "Exported the latest saved account and complete ledger.";
     });
@@ -182,6 +263,10 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
         side = document.getElementById("paper-side").value;
       document.getElementById("paper-price").parentElement.hidden =
         type === "market";
+      document.getElementById("paper-bracketStop").parentElement.hidden =
+        type !== "limit" || side !== "buy";
+      document.getElementById("paper-bracketTarget").parentElement.hidden =
+        type !== "limit" || side !== "buy";
       document.getElementById("paper-maxNotional").parentElement.hidden =
         type !== "market" || side !== "buy";
     };
@@ -204,6 +289,21 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
             quantity: Number(d.quantity),
             feePercent: Number(d.feePercent),
             slippage: Number(d.slippage),
+            ...(d.type === "limit" &&
+            d.side === "buy" &&
+            (String(d.bracketStop).trim() || String(d.bracketTarget).trim())
+              ? {
+                  bracket: {
+                    stop: Number(d.bracketStop),
+                    targets: [
+                      {
+                        price: Number(d.bracketTarget),
+                        quantity: Number(d.quantity),
+                      },
+                    ],
+                  },
+                }
+              : {}),
             ...(d.type !== "market"
               ? { price: Number(d.price) }
               : d.side === "buy"
@@ -217,7 +317,7 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
         });
         s.requestId = crypto.randomUUID();
         s.message =
-          "Paper order queued. Press Process to evaluate it against a new quote.";
+          "Paper order queued. An active monitor can process it; otherwise press Process.";
       });
     document.getElementById("paper-plan").onchange = () => {
       s.planRequestId = crypto.randomUUID();
@@ -227,16 +327,20 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
         const plan = s.plans.find((p) => p.id === s.planId);
         if (!plan) throw Error("Choose a saved plan first.");
         s.account = await call("paperSubmitPlan", {
+          linkedExits: s.draft.linkedExits,
           planId: plan.id,
           planRevision: plan.revision,
           requestId: s.planRequestId,
           expectedRevision: s.account.revision,
         });
         s.planRequestId = crypto.randomUUID();
-        s.message = "Plan entry queued. Stops and targets are not activated.";
+        s.message = s.draft.linkedExits
+          ? "Plan entry queued with linked exits that activate after it fills."
+          : "Plan entry queued. Stops and targets are not activated.";
       });
   }
   actions();
+  paintMonitor();
   if (!s.loaded && !s.loading) {
     s.loading = true;
     refresh()
@@ -254,4 +358,9 @@ export function bindPaper({ state: s, call, task, render, exportFile }) {
         s.loading = false;
       });
   }
+}
+
+export async function pollPaper(s, canPaint) {
+  if (canPaint() && document.getElementById("paper-view"))
+    await s.poll?.(canPaint);
 }

@@ -53,3 +53,16 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.paper-monitor-error {
+  color: var(--red);
+  padding: 0 16px;
+  overflow-wrap: anywhere;
+}
+#paper-monitor .searchbar {
+  padding: 0 16px 16px;
+}
+
+#paper-valuation .metrics {
+  padding: 16px;
+}

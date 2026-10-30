@@ -60,6 +60,11 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     );
     assert.equal(await call(readOnly, "paper_account"), null);
     assert.equal(
+      (await readOnly.callTool({ name: "paper_monitor_start", arguments: {} }))
+        .isError,
+      true,
+    );
+    assert.equal(
       (
         await readOnly.callTool({
           name: "paper_create",

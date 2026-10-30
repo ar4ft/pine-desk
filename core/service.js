@@ -1,3 +1,4 @@
+import { PaperMonitor } from "./paper-monitor.js";
 import { PaperAccount, paperQuote } from "./paper-account.js";
 import { TradePlans, estimatePlan } from "./trade-plans.js";
 import { DepthHistory, DepthRecorder } from "./depth-history.js";
@@ -111,6 +112,7 @@ export const paperAccount = new PaperAccount({
       throw Error("Choose an active Binance USDT spot market.");
   },
 });
+export const paperMonitor = new PaperMonitor({ account: paperAccount });
 export const deribit = new DeribitOptions();
 export const cryptoExchanges = {
   deribit,
@@ -149,6 +151,7 @@ export const optionsProvider = new UnusualWhales();
 export const whaleRunner = new WhaleRunner();
 export const researchJobs = new ResearchJobs();
 export async function shutdown() {
+  await paperMonitor.close();
   await paperAccount.close();
   await tradePlans.close();
   await alertEngine.close();
@@ -180,6 +183,12 @@ async function datasetFor(args) {
 }
 export async function dispatch(action, args = {}) {
   switch (action) {
+    case "paperMonitorStatus":
+      return paperMonitor.snapshot();
+    case "paperMonitorStart":
+      return paperMonitor.start();
+    case "paperMonitorStop":
+      return paperMonitor.stop();
     case "paperSnapshot":
       return paperAccount.snapshot();
     case "paperCreate":
@@ -221,6 +230,16 @@ export async function dispatch(action, args = {}) {
           price: p.entry,
           feePercent: p.feePercent,
           slippage: p.slippage,
+          ...(args.linkedExits
+            ? {
+                bracket: {
+                  stop: p.stop,
+                  targets: plan.estimate.targets
+                    .filter((t) => t.quantity > 0)
+                    .map((t) => ({ price: t.price, quantity: t.quantity })),
+                },
+              }
+            : {}),
         },
         plan: { id: plan.id, revision: plan.revision, name: p.name },
       });

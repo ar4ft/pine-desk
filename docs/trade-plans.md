@@ -86,4 +86,4 @@ To update, add `id` and `expectedRevision` from the loaded record. Creates omit 
 
 ## Next stage
 
-The [paper account and fill ledger](paper-trading.md), added in v0.19.0, can queue an entry from an exact compatible saved plan. Plans themselves remain calculations; saving a plan does not create or process an order. Paper processing is explicit and does not activate plan stops/targets. Continuous execution, linked brackets, risk rules, journals, chart-native draggable levels and options contract planning remain separate work.
+The [paper account and fill ledger](paper-trading.md), added in v0.19.0, can queue an entry from an exact compatible saved plan. Plans themselves remain calculations; saving a plan does not create or process an order. v0.20.0 adds opt-in continuous paper monitoring and optional linked stop/target pairs when queueing a compatible plan entry. These are not enabled by saving the plan. Risk rules, journals, chart-native draggable levels and options contract planning remain separate work.

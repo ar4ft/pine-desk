@@ -18,7 +18,10 @@ export function agentAccessView(status, esc) {
     ["enabled", "Enable local agent access"],
     ["charts", "Allow chart and editor changes"],
     ["streams", "Allow starting and stopping provider streams"],
-    ["research", "Allow saved-data changes, research jobs and paper orders"],
+    [
+      "research",
+      "Allow saved-data changes, research jobs and paper orders/monitoring",
+    ],
     ["alerts", "Allow alert rules, monitoring and acknowledgements"],
   ]
     .map(

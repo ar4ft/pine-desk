@@ -80,6 +80,25 @@ test("saved-plan entries use exact compatible revisions and copy only entry assu
       /draft, long/,
     );
     assert.equal((await dispatch("paperSnapshot")).orders.length, 1);
+    const restored = await dispatch("planSave", {
+      id: plan.id,
+      expectedRevision: 2,
+      input,
+    });
+    const linked = await dispatch("paperSubmitPlan", {
+      ...args,
+      requestId: randomUUID(),
+      expectedRevision: 2,
+      planRevision: restored.revision,
+      linkedExits: true,
+    });
+    assert.equal(linked.orders[1].bracket.stop, 90);
+    assert.deepEqual(
+      linked.orders[1].bracket.targets,
+      restored.estimate.targets
+        .filter((t) => t.quantity > 0)
+        .map((t) => ({ price: t.price, quantity: t.quantity })),
+    );
   } finally {
     await paperAccount.close();
     await tradePlans.close();

@@ -1,16 +1,20 @@
 # Paper account, orders and fill ledger
 
-Available in v0.19.0 under **Research → Paper trading**. This is a local simulation for Binance **USDT-quoted spot holdings**. It uses public market data and never connects to an exchange account or submits real orders. No API key is required.
+Account foundation in v0.19.0; monitoring, linked exits and valuation added in v0.20.0 under **Research → Paper trading**. This is a local simulation for Binance **USDT-quoted spot holdings**. It uses public market data and never connects to an exchange account or submits real orders. No API key is required.
 
 ## Workflow
 
 1. Create the single paper account with an initial USDT balance. The balance is fixed at creation; deposits, resets and multiple accounts are not available in this version.
 2. Queue a buy or an exit from existing holdings. Pending buys reserve cash including assumed fees; pending sells reserve position quantity. Overspending, overselling and short selling fail.
-3. Press **Process** beside an order to fetch a new public Binance bid/ask and evaluate that one order. Queueing alone does not fill it. A successful fill changes the order, cash, holdings and ledger together.
+3. Press **Process** beside an order for one fresh quote, or **Start monitoring** to evaluate pending orders repeatedly while the owning service is running. Queueing an order can lead to a fill on the next cycle if monitoring is active. A successful fill changes the order, cash, holdings and ledger together.
 4. Inspect positions, fills and realized P&L. Cancel a pending order to release its reservation. Use **Refresh account** after another desktop/MCP client changes the account.
 5. **Export account and ledger** reads the latest durable account and exports every event, order, fill and position to JSON. It is an audit/review export; importing or restoring exports is not supported yet.
 
-Orders do **not** execute in the background. They remain pending across restart and while the app is closed. Missed limit/stop crossings are not backfilled. A stop is therefore not continuously monitored protection. Each press of Process evaluates current conditions, not a historical path.
+Monitoring is **off by default and after every restart**. Enable it explicitly for each service session. It continues across app pages while enabled. It is public bid/ask **polling**, not exchange-hosted execution or a trade-by-trade trigger feed. Cycles wait five seconds after the previous cycle completes, with at most four requests at once across up to 50 distinct pending/held markets. A large set or slow requests makes the interval between observations longer than five seconds. Missed crossings during polling gaps, sleep, outages or shutdown are never replayed.
+
+Stop monitoring invalidates pending quote work and waits for in-flight work to drain before returning. A write already underway can complete; the returned account includes it. No new monitor fill starts from a late fetch after stop. Pending orders remain saved, and manual Process is still available. A valid later quote can resume processing at its current price after an outage; no path or historical fill is inferred. Start/stop controls are shared by desktop and attached MCP clients. A stopped or disconnected monitor is not stop-loss protection.
+
+Quote errors are shown by market, leave affected orders pending and invalidate that market's valuation. Errors are retried on later cycles. More than 50 markets pauses the monitor with an error rather than silently choosing a subset. Monitoring settings and quote marks are session-only; the account and orders remain durable.
 
 ## Orders and fills
 
@@ -32,7 +36,11 @@ The symbol is checked against active Binance USDT spot metadata when queued. Met
 
 Select a saved plan and choose **Queue saved plan entry**. The exact selected revision must still exist and be a draft, long, Binance spot plan in USDT with a positive calculated quantity. The queued limit buy copies symbol, entry, quantity, fees and slippage, and retains the plan ID, revision and name. Account cash is checked independently of the plan's manually assumed equity.
 
-**Plan stops and targets are not activated.** Submit sell exits after the entry fills. There are no linked brackets, OCO groups or automatic cancellation/replacement. Each sell reserves its own quantity, so a full-position stop and full-position target cannot both reserve the same holdings. Editing or deleting a plan does not alter already queued orders; cancel and submit a replacement if necessary.
+The **Activate saved stop/target pairs after entry fills** checkbox is off by default. When selected, the exact saved stop and nonzero rounded target allocations are attached to the entry. For a manually entered limit buy, fill both optional linked stop/target fields to attach one full-quantity pair. MCP can supply 1–3 target slices explicitly as `input.bracket: {stop, targets: [{price, quantity}]}`. Brackets require a limit-buy entry, stop below entry, progressively higher target prices and quantities summing to the entry quantity.
+
+When the entry fills, each target slice creates a linked sell-stop and sell-limit pair. The pair reserves its quantity **once**. Filling either leg cancels its sibling atomically (OCO). A partial-position target cancels only its matching stop; other slices retain their stops and targets. Cancelling either leg cancels that entire pair and releases its slice. Children do not exist before the entry fills, and cancelling the pending entry creates no children. Newly activated exits wait for a later monitor quote; they never consume the quote that filled the entry in that same cycle.
+
+Independent sell orders still reserve quantity separately. Linked exits cannot be attached retrospectively to an existing holding in this version. There is no trailing stop, in-place price editing or auto-replacement. Pending/retained order limits reserve room for contingent children before accepting an entry. Editing/deleting the source plan does not change queued orders. A gap can place the entry fill beyond planned levels; exits are evaluated at later observed bid prices under the same polling/slippage rules.
 
 ## Accounting and persistence
 
@@ -45,13 +53,13 @@ cash += sellNotional − sellFee
 remainingPositionCost -= allocatedCost
 ```
 
-A complete exit removes all remaining cost. Realized P&L includes the allocated buy fees and actual simulated sell fees. Unrealized P&L and marked equity are not calculated; the UI explicitly distinguishes cash from total equity. Open positions show quantity, reserved exits, remaining cost and average cost. Closed positions remain visible with their realized results.
+A complete exit removes all remaining cost. Realized P&L includes the allocated buy fees and actual simulated sell fees. The monitor also fetches quotes for open holdings. Bid-marked value is `quantity × observed bid`; unrealized P&L subtracts remaining cost including entry fees. Equity is cash plus all open-position values. These marks exclude hypothetical exit fees/slippage and are not executable liquidation guarantees. The mark table shows quote retrieval times. A missing, future-dated or more-than-15-second-old quote makes that position stale and suppresses aggregate equity/unrealized P&L; it is never treated as a zero-valued holding. Marks are tied to the account revision and refresh without resetting order-form drafts. Empty portfolios can show cash equity without quotes. No equity history or drawdown series is persisted yet. Closed positions remain visible with their realized results.
 
 For example, buy 2 units at ask 100 plus slippage 1 with a 1% fee: cost is 204.02 USDT. Sell 0.5 units at bid 120 minus slippage 1 with a 1% fee: proceeds are 58.905, allocated cost is 51.005, and realized P&L is 7.90. Remaining quantity is 1.5 and remaining cost is 153.015.
 
-The owning service writes `paper-account/current.json` using atomic replacement, with model version 1, immutable account creation data and ordered submit/cancel/process events. It reconstructs balances, reservations and fills from validated events on every read. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
+The owning service writes `paper-account/current.json` using atomic replacement, with archive version 2, immutable account creation data and ordered submit/cancel/process events. It reconstructs balances, reservations and fills from validated events on every read. Existing version-1 accounts replay unchanged and migrate to version 2 on their next successful mutation; opening an account does not rewrite history. Older apps cannot read version-2 archives. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
 
-Mutations run through one service queue and require `expectedRevision`. Stale mutations fail instead of merging. Submit also requires a UUID `requestId`: retry the same request ID and normalized payload to retrieve the already accepted order without creating another. A reused ID with different assumptions fails. After an uncertain response to Process or Cancel, refresh first; terminal orders cannot be processed again. Submitted orders are immutable apart from their lifecycle status.
+User account mutations run through one service queue and require `expectedRevision`. Monitoring fetches outside that queue, then checks current pending orders inside it before committing the eligible events for one symbol atomically. A concurrent cancellation wins if it commits before that check. Other clients can observe intervening fills, so refresh and reapply a stale edit rather than assuming the screen revision remains current. Stale mutations fail instead of merging. Submit also requires a UUID `requestId`: retry the same request ID and normalized payload to retrieve the already accepted order without creating another. A reused ID with different assumptions fails. After an uncertain response to Process or Cancel, refresh first; terminal orders cannot be processed again. Submitted orders are immutable apart from their lifecycle status.
 
 Bounds: one account, 50 pending orders, 1,000 retained orders, 5,000 events, initial cash up to 10¹² USDT, quantity 10⁻⁸–10⁹, and finite JavaScript arithmetic. Quantities accept at most 15 significant digits; quantity balances, cash balances, fill notionals and fees are normalized to 15 significant digits to avoid common binary-rounding dust. This is not exchange decimal accounting. Large/nonfinite calculations fail. The screen shows all pending orders and the latest 100 completed orders/fills/events; exports and MCP include the complete bounded ledger. There is no automatic pruning, archival rollover or reset.
 
@@ -62,9 +70,12 @@ Bounds: one account, 50 pending orders, 1,000 retained orders, 5,000 events, ini
 | `paper_account` | Read | Account, reservations, orders, positions, fills and full ledger |
 | `paper_create` | Research | Create the one simulated account |
 | `paper_submit` | Research | Queue a simulated order |
-| `paper_submit_plan` | Research | Queue an entry from an exact saved plan revision |
+| `paper_submit_plan` | Research | Queue an entry from an exact saved plan revision; optional `linkedExits` |
 | `paper_process` | Research | Fetch a fresh quote and evaluate one pending order |
-| `paper_cancel` | Research | Cancel a pending order |
+| `paper_cancel` | Research | Cancel a pending order, or both legs of its linked pair |
+| `paper_monitor_status` | Read | Session health, current account and ephemeral bid valuation |
+| `paper_monitor_start` | Research | Enable session polling and simulated execution |
+| `paper_monitor_stop` | Research | Stop polling and drain in-flight work |
 
 `desktop_navigate` accepts `page: "paper"` with charts permission. Attached clients share the desktop's account and durable service. Standalone MCP requires exclusive ownership of its data directory. Research permission includes simulated account changes; there is no live-trading permission or route.
 
@@ -86,7 +97,7 @@ Example `paper_submit` arguments (replace the revision with `paper_account.revis
 }
 ```
 
-For a limit/stop, omit `maxNotional` and supply `price`. Market sells omit both. `paper_process` and `paper_cancel` take order `id` and `expectedRevision`. Clients cannot inject quote prices through these tool schemas. `paper_submit_plan` takes `planId`, `planRevision`, `expectedRevision` and `requestId`.
+For a limit/stop, omit `maxNotional` and supply `price`. Market sells omit both. `paper_process` and `paper_cancel` take order `id` and `expectedRevision`. Clients cannot inject quote prices through these tool schemas. `paper_submit_plan` takes `planId`, `planRevision`, `expectedRevision`, `requestId` and optional `linkedExits` (default false). `paper_account` remains the durable record; use `paper_monitor_status` for current quotes/valuation. Research permission includes enabling continuous simulated execution; it does not grant exchange trading.
 
 ## Verification
 
@@ -94,4 +105,4 @@ For a limit/stop, omit `maxNotional` and supply `price`. Market sells omit both.
 
 ## Next stage
 
-Continuous execution monitoring, linked stop/target brackets and OCO behavior, marked equity/unrealized P&L, risk rules, journal annotations, chart-native order editing, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.
+Risk rules, journal annotations, historical equity/drawdown, chart-native order editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.

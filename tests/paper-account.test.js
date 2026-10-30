@@ -360,7 +360,12 @@ test("paper MCP separates read from research and rejects injected quotes or real
   const defs = toolDefinitions(),
     read = defs.find((d) => d.name === "paper_account");
   assert.equal(read.capability, "read");
-  for (const d of defs.filter((d) => d.name.startsWith("paper_") && d !== read))
+  for (const d of defs.filter(
+    (d) =>
+      d.name.startsWith("paper_") &&
+      d !== read &&
+      d.name !== "paper_monitor_status",
+  ))
     assert.equal(d.capability, "research");
   const process = defs.find((d) => d.name === "paper_process");
   assert.equal(
