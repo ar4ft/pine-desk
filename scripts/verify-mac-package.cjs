@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
+const { checkUnsignedInstall } = require("./unsigned-mac-check.cjs");
 const { packageNames, verifyDmg } = require("./mac-packages.cjs");
 
 function assertArchitectures(actual, arch, exact = false) {
@@ -63,7 +64,7 @@ async function verifyApp(app, arch, version) {
     }
   }
   await walk(path.join(app, "Contents"));
-  return { executable, binaries };
+  return { executable, binaries, unsignedInstall: checkUnsignedInstall(app) };
 }
 
 async function verifyMacPackage(arch = process.argv[2]) {
@@ -114,6 +115,7 @@ async function verifyMacPackage(arch = process.argv[2]) {
       copiedAppSmokePassed: true,
       ...integrity,
       binaries: fromDmg.binaries,
+      unsignedInstall: fromDmg.unsignedInstall,
     });
     run("/usr/bin/hdiutil", ["detach", mount]);
     mounted = false;
@@ -135,6 +137,7 @@ async function verifyMacPackage(arch = process.argv[2]) {
       format: "zip",
       extractedAppSmokePassed: true,
       binaries: fromZip.binaries,
+      unsignedInstall: fromZip.unsignedInstall,
     });
     await fs.promises.mkdir("test-results/desktop", { recursive: true });
     await fs.promises.writeFile(
@@ -142,7 +145,7 @@ async function verifyMacPackage(arch = process.argv[2]) {
       JSON.stringify(report, null, 2),
     );
     console.log(
-      `Verified ${arch}: DMG mounts, ZIP extracts, native binaries and both packaged app smoke tests pass.`,
+      `Verified ${arch}: DMG mounts, ZIP extracts, native binaries and both packaged app smoke tests pass after test-copy quarantine removal. This is not Gatekeeper/notarization approval.`,
     );
   } finally {
     try {

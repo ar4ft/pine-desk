@@ -18,6 +18,44 @@ The publication job keeps architecture artifacts in separate directories, stages
 
 Pull requests produce test/package artifacts but do not publish releases. The unsigned workflow has no manual trigger. **Signed Mac release** remains the only manually started release workflow, and it alone handles signing, notarization and stable update metadata.
 
+## Opening an unsigned preview on macOS
+
+A browser-downloaded unsigned preview may show **“Pine Desk is damaged and can’t be opened. You should move it to the Trash.”** This can be a Gatekeeper/quarantine rejection rather than a corrupt DMG. The exact message alone does not prove the cause. Preview 31 (v0.19.0) is unsigned and unnotarized by design. CI launching a local package copy did not reproduce browser-download trust checks.
+
+For a preview you intentionally downloaded from this repository:
+
+1. Download the correct `arm64` (Apple Silicon) or `x64` (Intel) DMG/ZIP and `SHA256SUMS.txt` from **the same release**.
+2. In Terminal, run `shasum -a 256` on that downloaded DMG/ZIP and compare the entire digest and filename to its entry in `SHA256SUMS.txt`. Do not continue if it differs. For example, for preview 31 on Apple Silicon:
+
+   ```sh
+   shasum -a 256 "$HOME/Downloads/Pine-Desk-0.19.0-unsigned-arm64.dmg"
+   cat "$HOME/Downloads/SHA256SUMS.txt"
+   ```
+
+3. Mount/extract the verified download and copy **Pine Desk.app** into `/Applications`. Quit any running copy first and eject the DMG after copying. Keep your application data; replacing the app bundle does not require deleting it.
+4. Remove only the quarantine attribute from that verified app, then open it:
+
+   ```sh
+   xattr -dr com.apple.quarantine "/Applications/Pine Desk.app"
+   open "/Applications/Pine Desk.app"
+   ```
+
+This is an explicit local exception for a trusted development preview. It does not sign/notarize the app, repair a genuinely corrupt download, or enable updates. Do not disable Gatekeeper system-wide or recursively clear quarantine from Downloads or Applications. If macOS reports a missing attribute, quarantine may already be absent. A permission error means the command did not complete; do not apply broad permission changes.
+
+If the verified, copied app still fails, capture these read-only diagnostics along with release, Mac chip and macOS version:
+
+```sh
+sw_vers
+uname -m
+xattr -p com.apple.quarantine "/Applications/Pine Desk.app"
+codesign --verify --deep --strict --verbose=2 "/Applications/Pine Desk.app"
+spctl --assess --type execute --verbose=4 "/Applications/Pine Desk.app"
+```
+
+Unsigned previews are expected to lack Developer ID/notarization approval; signature diagnostics can also expose modified upstream bundle seals. Do not interpret that as a signed release passing verification. The permanent distribution path is to configure Apple credentials below and manually publish a signed/notarized release. Automatic preview builds remain unsigned.
+
+New package checks record `codesign` and Gatekeeper diagnostics, apply a quarantine attribute to a disposable verified app copy, remove only that attribute, and then run the installed-app smoke test. This tests the documented development-install path. It cannot establish trust on a user's Mac, and it never changes global Gatekeeper settings or signs binaries.
+
 ## Configure later
 
 1. Join the [Apple Developer Program](https://developer.apple.com/programs/) and choose the team that will own Pine Desk. Keep the app ID `dev.pinedesk.app` stable after the first release.

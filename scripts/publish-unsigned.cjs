@@ -129,7 +129,7 @@ async function publishUnsigned({
     await fs.promises.writeFile(
       notes,
       `Unsigned development preview built from commit ${context.sha}.\n\n` +
-        `Apple Silicon (arm64) and Intel (x64) DMG/ZIP packages. Tests and both Mac desktop checks passed before publication. These packages are unsigned and unnotarized; automatic updates are disabled.\n\n` +
+        `Apple Silicon (arm64) and Intel (x64) DMG/ZIP packages. Tests and both Mac desktop checks passed before publication. These packages are unsigned and unnotarized; automatic updates are disabled. macOS may report the downloaded app as damaged or block it. Package integrity/launch checks do not establish Gatekeeper approval. Follow the [verified unsigned installation steps](https://github.com/ar4ft/pine-desk/blob/main/docs/releases.md#opening-an-unsigned-preview-on-macos) before opening the app.\n\n` +
         `SHA256SUMS.txt contains the package checksums. Signed, notarized stable releases are published separately through the manual Signed Mac release workflow.\n\n` +
         `Build: ${context.runUrl}\n`,
     );

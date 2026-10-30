@@ -12,6 +12,8 @@ The [OpenMarket, Alertsify and GoCharting review](docs/platform-feature-review.m
 
 ## Run on your Mac
 
+**If macOS says “Pine Desk is damaged”:** unsigned previews can be blocked after download even when their DMG/ZIP passes integrity checks. Follow the [checksum verification and app-specific quarantine steps](docs/releases.md#opening-an-unsigned-preview-on-macos). Signed/notarized distribution still requires the manual release workflow and Apple credentials.
+
 **Download fix:** Use a **0.8.1 or newer** [unsigned preview](https://github.com/ar4ft/pine-desk/releases). The older `v0.8.0-unsigned.17` Intel DMG is corrupted. New builds verify DMG mounting, ZIP extraction, native CPU architecture and the packaged app on both Apple Silicon and Intel before publication.
 
 Install Node.js **22.16+** (Node 24 recommended), then:
