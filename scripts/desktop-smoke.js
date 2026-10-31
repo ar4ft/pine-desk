@@ -327,8 +327,13 @@ try {
   const equityHistory = await reopened.evaluate(() =>
     window.desk.call("paperHistory"),
   );
-  assert.equal(equityHistory.count, 2);
-  assert.ok(Math.abs(equityHistory.samples.at(-1).equity - 1022.98) < 1e-8);
+  assert.equal(equityHistory.count, 0);
+  assert.equal(equityHistory.period, 2);
+  const oldEquityHistory = await reopened.evaluate(() =>
+    window.desk.call("paperHistory", { period: 1 }),
+  );
+  assert.equal(oldEquityHistory.count, 2);
+  assert.ok(Math.abs(oldEquityHistory.samples.at(-1).equity - 1022.98) < 1e-8);
 
   const plans = await reopened.evaluate(() => window.desk.call("planList"));
   const savedPlan = plans.find(

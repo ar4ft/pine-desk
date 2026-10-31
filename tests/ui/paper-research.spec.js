@@ -7,7 +7,12 @@ import { PaperHistory } from "../../core/paper-history.js";
 import { dispatch } from "../../core/service.js";
 const memory = () => {
   let doc = null;
+  const archives = new Map();
   return {
+    readArchive: async (id) => archives.get(id),
+    writeArchive: async (id, text) => {
+      archives.set(id, text);
+    },
     read: async () => structuredClone(doc),
     write: async (d) => {
       doc = structuredClone(d);
@@ -65,7 +70,8 @@ test("fill journal preserves drafts and rejects conflicting notes; recorded equi
     if (action === "paperMonitorStop") return monitor.stop();
     if (action === "paperJournal") return journal.snapshot();
     if (action === "paperJournalSave") return journal.save(args);
-    if (action === "paperHistory") return history.snapshot();
+    if (action === "paperHistory") return history.snapshot(args);
+    if (action === "paperHistoryRollover") return history.rollover(args);
     return dispatch(action, args);
   });
   await page.exposeFunction("exportResult", (name, text) => {
@@ -173,16 +179,38 @@ test("fill journal preserves drafts and rejects conflicting notes; recorded equi
       "Missing: BTCUSDT",
     );
     await page.locator("#paper-history-export").click();
-    await expect.poll(() => exported?.name).toBe("paper-equity-history.json");
+    await expect
+      .poll(() => exported?.name)
+      .toBe("paper-equity-history-period-1.json");
     expect(JSON.parse(exported.text).history.samples[2].equity).toBeNull();
     await page.locator("#paper-history-csv").click();
-    await expect.poll(() => exported?.name).toBe("paper-equity-history.csv");
+    await expect
+      .poll(() => exported?.name)
+      .toBe("paper-equity-history-period-1.csv");
     expect(exported.text.split("\n")).toHaveLength(5);
     await page.locator("#paper-journal-export").click();
     await expect.poll(() => exported?.name).toBe("paper-journal.json");
     expect(JSON.parse(exported.text).journal.entries[0].input.review).toBe(
       "External review",
     );
+    await page.locator("#paper-history-rollover").click();
+    await expect(page.locator("#paper-message")).toContainText(
+      "Period archived and verified",
+    );
+    await expect(page.locator("#paper-history-body")).toContainText("Period 2");
+    await expect(page.locator("#paper-history-body")).toContainText(
+      "No recorded samples yet",
+    );
+    await page.locator("#paper-history-period").selectOption("1");
+    await expect(page.locator("#paper-history-body")).toContainText(
+      "Period 1 · archived",
+    );
+    await expect(page.locator("#paper-history-rollover")).toBeDisabled();
+    await page.locator("#paper-history-export").click();
+    await expect
+      .poll(() => JSON.parse(exported.text).history?.selectedPeriod)
+      .toBe(1);
+    expect(JSON.parse(exported.text).history.samples).toHaveLength(4);
     for (const theme of ["dark", "light"]) {
       await page.emulateMedia({ colorScheme: theme });
       await page.setViewportSize({ width: 1100, height: 900 });
@@ -207,6 +235,8 @@ test("fill journal preserves drafts and rejects conflicting notes; recorded equi
       "External review",
     );
     await page.locator("#paper-history-load").click();
+    await expect(page.locator("#paper-history-body")).toContainText("Period 2");
+    await page.locator("#paper-history-period").selectOption("1");
     await expect(page.locator("#paper-history-body")).toContainText(
       "latest 4 of 4",
     );

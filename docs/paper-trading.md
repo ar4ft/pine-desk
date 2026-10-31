@@ -63,7 +63,7 @@ Independent sell orders still reserve quantity separately. Linked exits cannot b
 
 ## Journal and equity history
 
-v0.22.0 adds a [fill journal and recorded equity/drawdown](paper-journal-history.md). Annotate each simulated fill with thesis, review, tags and plan adherence. Monitoring records bid-equity observations about once per minute, plus account/session and quote-coverage changes. Missing quotes and stopped sessions remain gaps. Notes and samples have separate storage and never change order revisions. Load/refresh the dedicated panels and export journal JSON or history JSON/CSV.
+v0.22.0 adds a [fill journal and recorded equity/drawdown](paper-journal-history.md). Annotate each simulated fill with thesis, review, tags and plan adherence. Monitoring records bid-equity observations about once per minute, plus account/session and quote-coverage changes. Missing quotes and stopped sessions remain gaps. Notes and samples have separate storage and never change order revisions. Load/refresh the dedicated panels and export journal JSON or per-period history JSON/CSV. v0.23.0 adds automatic 10,000-sample period rollover and manual early rollover, preserving checksummed archives and prior drawdown peaks.
 
 ## Accounting and persistence
 

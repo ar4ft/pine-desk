@@ -109,7 +109,7 @@ function historyBody(s) {
   if (!h)
     return '<p class="footnote">Load recorded history to see equity and sampled drawdown. Recording runs with the paper monitor; this view does not start monitoring.</p>';
   const samples = h.samples.slice(-(s.historyWindow ?? 500));
-  return `<div class="metrics paper-metrics"><div><span>Last recorded equity · USDT</span><strong>${num(h.samples.at(-1)?.equity)}</strong></div><div><span>Recorded peak / initial baseline</span><strong>${num(h.peak)}</strong></div><div><span>Max sampled drawdown · all history</span><strong>${num(h.maxDrawdownPercent)}%</strong></div><div><span>Complete / missing-price samples</span><strong>${h.completeSamples} / ${h.gapSamples}</strong></div></div>${historyChart(samples, s.historyMode ?? "equity")}<p class="footnote">Showing latest ${samples.length} of ${h.count} saved observations. ${esc(h.method)} Hover a point for values. Historical marks are not current quotes.</p><details><summary>Latest 20 recorded observations</summary><div class="table-wrap"><table id="paper-history-table"><thead><tr><th>Time / account revision</th><th>Equity · USDT</th><th>Unrealized P&L</th><th>Sampled drawdown</th><th>Coverage</th></tr></thead><tbody>${h.samples
+  return `<div class="metrics paper-metrics"><div><span>Last recorded equity · USDT</span><strong>${num(h.samples.at(-1)?.equity)}</strong></div><div><span>Recorded peak / initial baseline</span><strong>${num(h.peak)}</strong></div><div><span>Max sampled drawdown · through this period</span><strong>${num(h.maxDrawdownPercent)}%</strong></div><div><span>Complete / missing samples · through period</span><strong>${h.completeSamples} / ${h.gapSamples}</strong></div></div>${historyChart(samples, s.historyMode ?? "equity")}<p class="footnote">Period ${h.selectedPeriod ?? 1}${h.archived ? " · archived" : " · current"}: showing latest ${samples.length} of ${h.count} observations. ${h.totalCount ?? h.count} retained across all periods. ${esc(h.method)} Hover a point for values. Historical marks are not current quotes.</p><details><summary>Latest 20 recorded observations</summary><div class="table-wrap"><table id="paper-history-table"><thead><tr><th>Time / account revision</th><th>Equity · USDT</th><th>Unrealized P&L</th><th>Sampled drawdown</th><th>Coverage</th></tr></thead><tbody>${h.samples
     .slice(-20)
     .reverse()
     .map(
@@ -120,17 +120,34 @@ function historyBody(s) {
 }
 export function paperHistoryStatus(s) {
   const h = s.monitor?.history;
-  return `<p class="footnote">${h?.loaded ? `${h.count} / ${h.limit} samples recorded${h.lastSavedAt ? ` · last ${date(h.lastSavedAt)}` : ""}` : "History records with the owning paper monitor."}${h?.loaded && s.paperHistory && h.count !== s.paperHistory.count ? " · New samples available: refresh history." : ""} About once a minute, plus account/session and quote-coverage changes. No backfill or automatic pruning.</p>${h?.error ? `<p class="paper-monitor-error">Recording: ${esc(h.error)}</p>` : ""}${h?.full ? '<p class="paper-monitor-error">History is full. Export it; existing samples are retained. Paper execution continues.</p>' : ""}`;
+  return `<p class="footnote">${h?.loaded ? `Period ${h.period ?? 1}: ${h.count} / ${h.limit} samples · ${h.archivedPeriods ?? 0} archived periods${h.lastSavedAt ? ` · last ${date(h.lastSavedAt)}` : ""}` : "History records with the owning paper monitor."}${h?.loaded && s.paperHistory && (h.totalCount !== s.paperHistory.totalCount || h.period !== s.paperHistory.period) ? " · New samples available: refresh history." : ""} About once a minute, plus account/session and quote-coverage changes. Full periods roll over automatically; no backfill or deletion.</p>${h?.error ? `<p class="paper-monitor-error">Recording: ${esc(h.error)}</p>` : ""}${h?.full ? '<p class="paper-monitor-error">Archive capacity reached. Existing samples are retained and exportable. Paper execution continues.</p>' : ""}`;
+}
+function periodOptions(s) {
+  const h = s.paperHistory;
+  return `<option value="">Current${h ? ` · ${h.period}` : ""}</option>${(
+    h?.archives ?? []
+  )
+    .slice()
+    .reverse()
+    .map(
+      (a) =>
+        `<option value="${a.period}" ${h.archived && h.selectedPeriod === a.period ? "selected" : ""}>Period ${a.period} · ${date(a.firstAt)} · ${a.count} samples</option>`,
+    )
+    .join("")}`;
 }
 export function paperResearchView(s) {
   if (!s.account) return "";
-  return `<section class="plot-card" id="paper-history"><div class="panel-heading"><span>RECORDED EQUITY & DRAWDOWN</span><span>Sampled observations · USDT</span></div><div id="paper-history-status">${paperHistoryStatus(s)}</div><div class="searchbar"><button id="paper-history-load">Load / refresh history</button><button id="paper-history-export">Export history JSON</button><button id="paper-history-csv">Export history CSV</button><label>Chart<select id="paper-history-mode"><option value="equity" ${s.historyMode !== "drawdown" ? "selected" : ""}>Bid equity</option><option value="drawdown" ${s.historyMode === "drawdown" ? "selected" : ""}>Sampled drawdown %</option></select></label><label>Window<select id="paper-history-window">${[100, 500, 2000].map((n) => `<option value="${n}" ${(s.historyWindow ?? 500) === n ? "selected" : ""}>Latest ${n}</option>`).join("")}</select></label></div><div id="paper-history-body">${historyBody(s)}</div></section>
+  return `<section class="plot-card" id="paper-history"><div class="panel-heading"><span>RECORDED EQUITY & DRAWDOWN</span><span>Sampled observations · USDT</span></div><div id="paper-history-status">${paperHistoryStatus(s)}</div><div class="searchbar"><label>Recorded period<select id="paper-history-period">${periodOptions(s)}</select></label><button id="paper-history-load">Load / refresh history</button><button id="paper-history-rollover" ${!s.paperHistory || s.paperHistory.archived || !s.paperHistory.canRollover ? "disabled" : ""}>Archive current period</button><button id="paper-history-export">Export period JSON</button><button id="paper-history-csv">Export period CSV</button><label>Chart<select id="paper-history-mode"><option value="equity" ${s.historyMode !== "drawdown" ? "selected" : ""}>Bid equity</option><option value="drawdown" ${s.historyMode === "drawdown" ? "selected" : ""}>Sampled drawdown %</option></select></label><label>Window<select id="paper-history-window">${[100, 500, 2000].map((n) => `<option value="${n}" ${(s.historyWindow ?? 500) === n ? "selected" : ""}>Latest ${n}</option>`).join("")}</select></label></div><div id="paper-history-body">${historyBody(s)}</div></section>
   <section class="plot-card" id="paper-journal"><div class="panel-heading"><span>FILL JOURNAL</span><span>Thesis · execution review · source plans</span></div><div class="searchbar"><button id="paper-journal-load">Load / refresh journal</button><button id="paper-journal-export">Export journal JSON</button><label>Filter by market, tag or plan<input id="paper-journal-filter" type="search" value="${esc(s.journalFilter ?? "")}"></label></div><div id="paper-journal-editor">${journalEditor(s)}</div><div id="paper-journal-rows">${journalRows(s)}</div></section>`;
 }
 export function bindPaperResearch({ s, call, operation, exportFile }) {
   if (!document.getElementById("paper-history")) return;
   const paintHistory = () => {
     document.getElementById("paper-history-body").innerHTML = historyBody(s);
+    document.getElementById("paper-history-period").innerHTML =
+      periodOptions(s);
+    document.getElementById("paper-history-rollover").disabled =
+      !s.paperHistory || s.paperHistory.archived || !s.paperHistory.canRollover;
   };
   const loadDraft = (e) => {
     s.journalDraft = {
@@ -241,11 +258,39 @@ export function bindPaperResearch({ s, call, operation, exportFile }) {
     s.journalPage = 0;
     paintRows();
   };
-  document.getElementById("paper-history-load").onclick = () =>
+  const loadPeriod = () =>
     operation(async () => {
-      s.paperHistory = await call("paperHistory");
+      const value = document.getElementById("paper-history-period").value;
+      try {
+        s.paperHistory = await call(
+          "paperHistory",
+          value ? { period: Number(value) } : {},
+        );
+        s.message = "Recorded period loaded; no monitoring was started.";
+      } finally {
+        paintHistory();
+      }
+    });
+  document.getElementById("paper-history-load").onclick = loadPeriod;
+  document.getElementById("paper-history-period").onchange = loadPeriod;
+  document.getElementById("paper-history-rollover").onclick = () =>
+    operation(async () => {
+      const h = s.paperHistory;
+      const status = await call("paperHistoryRollover", {
+        expectedPeriod: h.period,
+        expectedTotalCount: h.totalCount,
+      });
+      if (s.monitor) s.monitor.history = { ...s.monitor.history, ...status };
+      try {
+        s.paperHistory = await call("paperHistory");
+      } catch (e) {
+        throw Error(
+          `Period archived successfully; refresh failed: ${e.message}`,
+        );
+      }
       paintHistory();
-      s.message = "Recorded history loaded; no monitoring was started.";
+      s.message =
+        "Period archived and verified. Recording will continue in the new period while monitoring is enabled.";
     });
   document.getElementById("paper-history-mode").onchange = (e) => {
     s.historyMode = e.target.value;
@@ -269,7 +314,10 @@ export function bindPaperResearch({ s, call, operation, exportFile }) {
       format === "json" ? "paper-history-export" : "paper-history-csv",
     ).onclick = () =>
       operation(async () => {
-        const history = await call("paperHistory");
+        const history = await call(
+          "paperHistory",
+          s.paperHistory ? { period: s.paperHistory.selectedPeriod } : {},
+        );
         const csv = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
         const keys = [
           "at",
@@ -307,9 +355,12 @@ export function bindPaperResearch({ s, call, operation, exportFile }) {
                     .join(","),
                 ),
               ].join("\n");
-        await exportFile(`paper-equity-history.${format}`, content);
+        await exportFile(
+          `paper-equity-history-period-${history.selectedPeriod}.${format}`,
+          content,
+        );
         s.message =
-          "Complete recorded history exported. Missing observations remain empty.";
+          "Selected recorded period exported. Missing observations remain empty. Export other periods separately.";
       });
   bindEditor();
   paintRows();

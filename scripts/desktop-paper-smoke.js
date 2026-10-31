@@ -168,7 +168,14 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
     const history = await call(client, "paper_history");
     assert.equal(history.count, 2);
     assert.ok(Math.abs(history.samples.at(-1).equity - 1022.98) < 1e-8);
+    await call(client, "paper_history_rollover", {
+      expectedPeriod: history.period,
+      expectedTotalCount: history.totalCount,
+    });
+    assert.equal((await call(client, "paper_history")).count, 0);
+    assert.equal((await call(client, "paper_history", { period: 1 })).count, 2);
     await page.locator("#paper-history-load").click();
+    await page.locator("#paper-history-period").selectOption("1");
     await page.waitForFunction(() =>
       document
         .querySelector("#paper-history-body")

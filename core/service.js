@@ -1,3 +1,4 @@
+import { paperHistoryStorage } from "./paper-history-storage.js";
 import { PaperJournal } from "./paper-journal.js";
 import { PaperHistory } from "./paper-history.js";
 import { PaperMonitor } from "./paper-monitor.js";
@@ -123,10 +124,7 @@ export const paperJournal = new PaperJournal({
 });
 export const paperHistory = new PaperHistory({
   account: paperAccount,
-  storage: {
-    read: () => store.read("paper-history"),
-    write: (doc) => store.write("paper-history", doc),
-  },
+  storage: paperHistoryStorage(),
 });
 export const paperMonitor = new PaperMonitor({
   account: paperAccount,
@@ -209,7 +207,9 @@ export async function dispatch(action, args = {}) {
     case "paperJournalSave":
       return paperJournal.save(args);
     case "paperHistory":
-      return paperHistory.snapshot();
+      return paperHistory.snapshot(args);
+    case "paperHistoryRollover":
+      return paperHistory.rollover(args);
     case "paperMonitorStatus":
       return paperMonitor.snapshot();
     case "paperMonitorStart":

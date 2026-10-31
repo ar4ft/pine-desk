@@ -64,6 +64,15 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     assert.equal(
       (
         await readOnly.callTool({
+          name: "paper_history_rollover",
+          arguments: { expectedPeriod: 1, expectedTotalCount: 0 },
+        })
+      ).isError,
+      true,
+    );
+    assert.equal(
+      (
+        await readOnly.callTool({
           name: "paper_journal_save",
           arguments: {
             orderId: "11111111-1111-4111-a111-111111111111",

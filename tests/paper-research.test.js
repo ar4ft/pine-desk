@@ -325,7 +325,7 @@ test("history handles failed writes, invalid clocks, foreign/corrupt data and ca
     assert.deepEqual(f.historyStore.raw(), raw);
   }
 });
-test("full equity history remains exportable and stops recording without deleting any sample", async () => {
+test("full equity history remains exportable when archive storage is unavailable", async () => {
   const f = fixture();
   await f.a.create({ initialCash: 1000 });
   await f.record(undefined, {});
@@ -337,7 +337,10 @@ test("full equity history remains exportable and stops recording without deletin
   }));
   f.historyStore.set(doc);
   f.advance(MAX_PAPER_SAMPLES * 60000);
-  await assert.rejects(f.record(undefined, {}), /history is full/);
+  await assert.rejects(
+    f.record(undefined, {}),
+    /archive storage is unavailable/,
+  );
   assert.equal((await f.history.snapshot()).count, MAX_PAPER_SAMPLES);
   assert.deepEqual(f.historyStore.raw(), doc);
 });

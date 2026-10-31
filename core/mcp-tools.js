@@ -62,9 +62,19 @@ export function toolDefinitions() {
   );
   tool(
     "paper_history",
-    "Read recorded bid-equity samples and sampled drawdown. Monitoring records once per minute and on account, session or completeness changes; capped at 10,000 samples without pruning. Gaps and missing quotes are explicit; no backfill or live marks after restart. Drawdown uses initial cash and observed peaks, excluding hypothetical exit costs. Cannot establish intraperiod worst drawdown.",
-    {},
+    "Read the current or a selected archived equity period and its archive catalog. At 10,000 samples the monitor rolls into a new period, preserving immutable checksummed archives (up to 100). Optional period selects an older period; exports are per period. Sampled drawdown carries prior recorded peaks forward. No backfill or live marks after restart.",
+    { period: z.number().int().positive().optional() },
     "paperHistory",
+  );
+  tool(
+    "paper_history_rollover",
+    "Archive the current nonempty equity period early and start an empty period, preserving prior peaks and all samples. Requires research permission and the current history period/totalCount. Does not reset the account or enable monitoring.",
+    {
+      expectedPeriod: z.number().int().positive(),
+      expectedTotalCount: z.number().int().nonnegative(),
+    },
+    "paperHistoryRollover",
+    false,
   );
   tool(
     "paper_monitor_status",
