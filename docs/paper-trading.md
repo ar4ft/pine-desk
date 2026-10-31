@@ -61,6 +61,10 @@ When the entry fills, each target slice creates a linked sell-stop and sell-limi
 
 Independent sell orders still reserve quantity separately. Linked exits cannot be attached retrospectively to an existing holding in this version. There is no trailing stop, in-place price editing or auto-replacement. Pending/retained order limits reserve room for contingent children before accepting an entry. Editing/deleting the source plan does not change queued orders. A gap can place the entry fill beyond planned levels; exits are evaluated at later observed bid prices under the same polling/slippage rules.
 
+## Journal and equity history
+
+v0.22.0 adds a [fill journal and recorded equity/drawdown](paper-journal-history.md). Annotate each simulated fill with thesis, review, tags and plan adherence. Monitoring records bid-equity observations about once per minute, plus account/session and quote-coverage changes. Missing quotes and stopped sessions remain gaps. Notes and samples have separate storage and never change order revisions. Load/refresh the dedicated panels and export journal JSON or history JSON/CSV.
+
 ## Accounting and persistence
 
 The account uses average cost including buy fees. For a partial sell:
@@ -72,7 +76,7 @@ cash += sellNotional − sellFee
 remainingPositionCost -= allocatedCost
 ```
 
-A complete exit removes all remaining cost. Realized P&L includes the allocated buy fees and actual simulated sell fees. The monitor also fetches quotes for open holdings. Bid-marked value is `quantity × observed bid`; unrealized P&L subtracts remaining cost including entry fees. Equity is cash plus all open-position values. These marks exclude hypothetical exit fees/slippage and are not executable liquidation guarantees. The mark table shows quote retrieval times. A missing, future-dated or more-than-15-second-old quote makes that position stale and suppresses aggregate equity/unrealized P&L; it is never treated as a zero-valued holding. Marks are tied to the account revision and refresh without resetting order-form drafts. Empty portfolios can show cash equity without quotes. No equity history or drawdown series is persisted yet. Closed positions remain visible with their realized results.
+A complete exit removes all remaining cost. Realized P&L includes the allocated buy fees and actual simulated sell fees. The monitor also fetches quotes for open holdings. Bid-marked value is `quantity × observed bid`; unrealized P&L subtracts remaining cost including entry fees. Equity is cash plus all open-position values. These marks exclude hypothetical exit fees/slippage and are not executable liquidation guarantees. The mark table shows quote retrieval times. A missing, future-dated or more-than-15-second-old quote makes that position stale and suppresses aggregate equity/unrealized P&L; it is never treated as a zero-valued holding. Marks are tied to the account revision and refresh without resetting order-form drafts. Empty portfolios can show cash equity without quotes. The separate recorded-history panel persists sampled equity and drawdown during monitoring; historical marks are never reused as live prices. Closed positions remain visible with their realized results.
 
 For example, buy 2 units at ask 100 plus slippage 1 with a 1% fee: cost is 204.02 USDT. Sell 0.5 units at bid 120 minus slippage 1 with a 1% fee: proceeds are 58.905, allocated cost is 51.005, and realized P&L is 7.90. Remaining quantity is 1.5 and remaining cost is 153.015.
 
@@ -143,4 +147,4 @@ Example `paper_set_risk` arguments (use the current account revision; all policy
 
 ## Next stage
 
-Journal annotations, historical equity/drawdown, chart-native order editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.
+Round-trip trade grouping, historical performance statistics, chart-native order editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.

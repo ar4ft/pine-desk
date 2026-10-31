@@ -1,3 +1,4 @@
+import { journalInput } from "./paper-journal.js";
 import { paperOrderSchema } from "./paper-account.js";
 import { z } from "zod";
 import { paperRiskSchema } from "./paper-risk.js";
@@ -43,8 +44,31 @@ export function toolDefinitions() {
     });
   };
   tool(
+    "paper_journal",
+    "Read simulated fills joined with their latest journal thesis, review, tags, plan adherence, immutable source-plan reference and linked-exit parent. One entry per fill, not a round-trip trade or win-rate statistic. Unsaved fills have entry revision 0.",
+    {},
+    "paperJournal",
+  );
+  tool(
+    "paper_journal_save",
+    "Save the latest annotation for an existing simulated fill. expectedRevision is the journal ENTRY revision (0 for new notes), independent of account/order revisions. Conflicting edits fail. Clear fields explicitly to remove text; prior note text is not retained. Does not modify orders or fills.",
+    {
+      orderId: z.string().uuid(),
+      expectedRevision: z.number().int().nonnegative(),
+      input: journalInput,
+    },
+    "paperJournalSave",
+    false,
+  );
+  tool(
+    "paper_history",
+    "Read recorded bid-equity samples and sampled drawdown. Monitoring records once per minute and on account, session or completeness changes; capped at 10,000 samples without pruning. Gaps and missing quotes are explicit; no backfill or live marks after restart. Drawdown uses initial cash and observed peaks, excluding hypothetical exit costs. Cannot establish intraperiod worst drawdown.",
+    {},
+    "paperHistory",
+  );
+  tool(
     "paper_monitor_status",
-    "Read session monitoring status, current paper account and bid-marked valuation. Missing/stale quotes suppress equity totals; marks exclude exit fees/slippage.",
+    "Read session monitoring status, current paper account, equity recording health and bid-marked valuation. Missing/stale quotes suppress equity totals; marks exclude exit fees/slippage.",
     {},
     "paperMonitorStatus",
   );

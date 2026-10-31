@@ -135,6 +135,45 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
     account = await call(client, "paper_account");
     assert.equal(account.risk.maxOrderCost, 150);
     assert.equal(account.risk.pauseBuys, true);
+    const journal = await call(client, "paper_journal");
+    assert.equal(journal.entries.length, 4);
+    const entry = journal.entries[0];
+    await call(client, "paper_journal_save", {
+      orderId: entry.orderId,
+      expectedRevision: 0,
+      input: {
+        thesis: "MCP entry thesis",
+        review: "MCP review",
+        tags: ["practice"],
+        adherence: "followed-plan",
+      },
+    });
+    await page.locator("#paper-journal-load").click();
+    await page.locator(`[data-journal-edit="${entry.orderId}"]`).click();
+    assert.equal(
+      await page.locator("#paper-journal-review").inputValue(),
+      "MCP review",
+    );
+    await page
+      .locator("#paper-journal-review")
+      .fill("Desktop fill review survives restart");
+    await page.locator("#paper-journal-save").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-message")
+        ?.textContent.includes("Fill review saved"),
+    );
+    assert.equal((await call(client, "paper_journal")).entries[0].revision, 2);
+    assert.equal((await call(client, "paper_account")).revision, 10);
+    const history = await call(client, "paper_history");
+    assert.equal(history.count, 2);
+    assert.ok(Math.abs(history.samples.at(-1).equity - 1022.98) < 1e-8);
+    await page.locator("#paper-history-load").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-history-body")
+        ?.textContent.includes("1,022.98"),
+    );
   } finally {
     await app.evaluate(async () => {
       const f = globalThis.pineDeskPaperSmoke;

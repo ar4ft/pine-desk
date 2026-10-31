@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { paperValuation } from "./paper-valuation.js";
+export { paperValuation } from "./paper-valuation.js";
 import { freshPaperQuote } from "./paper-account.js";
 const symbolsFor = (account) =>
   [
@@ -10,49 +13,11 @@ const symbolsFor = (account) =>
         .map(([symbol]) => symbol),
     ]),
   ].sort();
-export function paperValuation(account, quotes, now) {
-  if (!account) return null;
-  const positions = Object.entries(account.positions)
-    .filter(([, p]) => p.quantity > 0)
-    .map(([symbol, p]) => {
-      const q = quotes[symbol],
-        valid = q && q.receivedAt <= now && now - q.requestedAt <= 15000;
-      const value = valid ? p.quantity * q.bid : null;
-      const usable =
-        value !== null &&
-        Number.isFinite(value) &&
-        Number.isFinite(value - p.cost);
-      return {
-        symbol,
-        quantity: p.quantity,
-        cost: p.cost,
-        bid: usable ? q.bid : null,
-        value: usable ? value : null,
-        unrealizedPnl: usable ? value - p.cost : null,
-        receivedAt: q?.receivedAt ?? null,
-        stale: !usable,
-      };
-    });
-  const complete = positions.every((p) => !p.stale),
-    equity = complete
-      ? account.cash + positions.reduce((n, p) => n + p.value, 0)
-      : null;
-  return {
-    at: now,
-    accountRevision: account.revision,
-    complete: complete && Number.isFinite(equity),
-    equity: Number.isFinite(equity) ? equity : null,
-    unrealizedPnl: complete
-      ? positions.reduce((n, p) => n + p.unrealizedPnl, 0)
-      : null,
-    positions,
-    method:
-      "Current observed bid; excludes hypothetical exit fees/slippage. Missing or >15-second-old quotes suppress totals.",
-  };
-}
 export class PaperMonitor {
-  constructor({ account, now = Date.now, clock = globalThis }) {
+  constructor({ account, history = null, now = Date.now, clock = globalThis }) {
     this.account = account;
+    this.history = history;
+    this.historyError = null;
     this.now = now;
     this.clock = clock;
     this.active = false;
@@ -74,6 +39,9 @@ export class PaperMonitor {
       errors: { ...this.errors },
       account,
       valuation: paperValuation(account, this.quotes, this.now()),
+      history: this.history
+        ? { ...this.history.status, error: this.historyError }
+        : null,
     };
   }
   async start() {
@@ -89,6 +57,7 @@ export class PaperMonitor {
       );
     this.active = true;
     this.startedAt = this.now();
+    this.sessionId = randomUUID();
     this.errors = {};
     this.quotes = {};
     this.cycle(generation);
@@ -132,7 +101,25 @@ export class PaperMonitor {
             }
           }),
         );
-        if (current()) this.lastCycleAt = this.now();
+        if (current()) {
+          this.lastCycleAt = this.now();
+          if (this.history) {
+            try {
+              const observed = await this.account.snapshot();
+              if (!current()) return;
+              await this.history.record(
+                observed,
+                this.quotes,
+                this.now(),
+                this.sessionId,
+                current,
+              );
+              if (current()) this.historyError = null;
+            } catch (e) {
+              if (current()) this.historyError = e.message;
+            }
+          }
+        }
       } catch (e) {
         if (current()) {
           this.errors.monitor = e.message;

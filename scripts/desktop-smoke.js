@@ -316,6 +316,19 @@ try {
   );
   assert.equal(paperMonitor.active, false);
   assert.equal(paperMonitor.valuation.equity, null);
+  const journal = await reopened.evaluate(() =>
+    window.desk.call("paperJournal"),
+  );
+  assert.equal(
+    journal.entries[0].input.review,
+    "Desktop fill review survives restart",
+  );
+  assert.equal(journal.entries[0].revision, 2);
+  const equityHistory = await reopened.evaluate(() =>
+    window.desk.call("paperHistory"),
+  );
+  assert.equal(equityHistory.count, 2);
+  assert.ok(Math.abs(equityHistory.samples.at(-1).equity - 1022.98) < 1e-8);
 
   const plans = await reopened.evaluate(() => window.desk.call("planList"));
   const savedPlan = plans.find(

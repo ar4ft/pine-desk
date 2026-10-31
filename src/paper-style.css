@@ -91,3 +91,67 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+#paper-history .searchbar,
+#paper-journal .searchbar {
+  padding: 0 16px 16px;
+  align-items: end;
+}
+#paper-history label,
+#paper-journal .searchbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+#paper-journal textarea {
+  width: 100%;
+  resize: vertical;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 10px;
+  border-radius: 6px;
+}
+#paper-history .metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 16px;
+}
+#paper-history .metrics > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#paper-history details > summary {
+  padding: 16px;
+  cursor: pointer;
+}
+.paper-history-chart {
+  width: 100%;
+  display: block;
+  color: var(--accent);
+}
+.paper-history-chart.drawdown {
+  color: var(--red);
+}
+.paper-history-chart path {
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+.paper-history-chart circle {
+  fill: currentColor;
+}
+.history-axis line {
+  stroke: var(--border);
+}
+.history-axis text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+@media (max-width: 1150px) {
+  #paper-history .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

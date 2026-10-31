@@ -1,3 +1,5 @@
+import { PaperJournal } from "./paper-journal.js";
+import { PaperHistory } from "./paper-history.js";
 import { PaperMonitor } from "./paper-monitor.js";
 import { PaperAccount, paperQuote } from "./paper-account.js";
 import { TradePlans, estimatePlan } from "./trade-plans.js";
@@ -112,7 +114,24 @@ export const paperAccount = new PaperAccount({
       throw Error("Choose an active Binance USDT spot market.");
   },
 });
-export const paperMonitor = new PaperMonitor({ account: paperAccount });
+export const paperJournal = new PaperJournal({
+  account: paperAccount,
+  storage: {
+    read: () => store.read("paper-journal"),
+    write: (doc) => store.write("paper-journal", doc),
+  },
+});
+export const paperHistory = new PaperHistory({
+  account: paperAccount,
+  storage: {
+    read: () => store.read("paper-history"),
+    write: (doc) => store.write("paper-history", doc),
+  },
+});
+export const paperMonitor = new PaperMonitor({
+  account: paperAccount,
+  history: paperHistory,
+});
 export const deribit = new DeribitOptions();
 export const cryptoExchanges = {
   deribit,
@@ -152,6 +171,8 @@ export const whaleRunner = new WhaleRunner();
 export const researchJobs = new ResearchJobs();
 export async function shutdown() {
   await paperMonitor.close();
+  await paperJournal.close();
+  await paperHistory.close();
   await paperAccount.close();
   await tradePlans.close();
   await alertEngine.close();
@@ -183,6 +204,12 @@ async function datasetFor(args) {
 }
 export async function dispatch(action, args = {}) {
   switch (action) {
+    case "paperJournal":
+      return paperJournal.snapshot();
+    case "paperJournalSave":
+      return paperJournal.save(args);
+    case "paperHistory":
+      return paperHistory.snapshot();
     case "paperMonitorStatus":
       return paperMonitor.snapshot();
     case "paperMonitorStart":
