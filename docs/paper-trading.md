@@ -4,6 +4,8 @@ Account foundation in v0.19.0; monitoring, linked exits and valuation added in v
 
 [Chart-based pending price editing](paper-order-editing.md) was added in v0.24.0 with explicit Apply and revision checks.
 
+[Completed trades and performance](paper-performance.md) were added in v0.25.0, grouping each market from flat to flat and keeping open-cycle realized results separate.
+
 ## Workflow
 
 1. Create the single paper account with an initial USDT balance. The balance is fixed at creation; deposits, resets and multiple accounts are not available in this version.
@@ -149,4 +151,4 @@ Example `paper_set_risk` arguments (use the current account revision; all policy
 
 ## Next stage
 
-Round-trip trade grouping, historical performance statistics, chart-based order creation and quantity editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.
+Per-plan lot attribution, portfolio return statistics, chart-based order creation and quantity editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.

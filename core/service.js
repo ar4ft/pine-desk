@@ -1,3 +1,4 @@
+import { paperPerformance } from "./paper-performance.js";
 import { paperOrderChart } from "./paper-order-chart.js";
 import { paperHistoryStorage } from "./paper-history-storage.js";
 import { PaperJournal } from "./paper-journal.js";
@@ -203,6 +204,8 @@ async function datasetFor(args) {
 }
 export async function dispatch(action, args = {}) {
   switch (action) {
+    case "paperPerformance":
+      return paperPerformance(await paperAccount.snapshot(), args);
     case "paperJournal":
       return paperJournal.snapshot();
     case "paperJournalSave":

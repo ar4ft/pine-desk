@@ -364,4 +364,16 @@ export function bindPaperResearch({ s, call, operation, exportFile }) {
       });
   bindEditor();
   paintRows();
+  return {
+    reviewFill: async (id) => {
+      s.journal = await call("paperJournal");
+      const entry = s.journal.entries.find((e) => e.orderId === id);
+      if (!entry) throw Error("Fill is no longer in this account.");
+      loadDraft(entry);
+      paintRows();
+      document
+        .getElementById("paper-journal-editor")
+        .scrollIntoView({ block: "center" });
+    },
+  };
 }

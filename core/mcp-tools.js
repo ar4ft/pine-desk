@@ -1,3 +1,4 @@
+import { paperPerformanceFields } from "./paper-performance.js";
 import { journalInput } from "./paper-journal.js";
 import { paperOrderSchema, paperAmendSchema } from "./paper-account.js";
 import { z } from "zod";
@@ -43,6 +44,12 @@ export function toolDefinitions() {
       readOnly: capability === "read",
     });
   };
+  tool(
+    "paper_performance",
+    "Read flat-to-flat simulated spot trades and completed-trade statistics after fees. Scale-ins, partial exits and overlapping plans belong to one trade per market until holdings reach zero. Optional symbol and close-time from inclusive/to exclusive milliseconds filter completed trades; open trades ignore the date window and are excluded from win rate/profit factor. Includes fill/plan references, cumulative closed P&L (not equity) and whole-account realized-P&L reconciliation. No quotes, monitoring or writes.",
+    paperPerformanceFields,
+    "paperPerformance",
+  );
   tool(
     "paper_journal",
     "Read simulated fills joined with their latest journal thesis, review, tags, plan adherence, immutable source-plan reference and linked-exit parent. One entry per fill, not a round-trip trade or win-rate statistic. Unsaved fills have entry revision 0.",

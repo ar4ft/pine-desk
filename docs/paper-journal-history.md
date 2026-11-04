@@ -98,4 +98,4 @@ The save response includes the new entry revision and document `journalRevision`
 
 `paper_history_rollover` takes `{ "expectedPeriod": 1, "expectedTotalCount": 10000 }` using the latest current-history response. Both guards must match. It returns updated recording status and requires research permission; reading an archive does not grant rollover permission.
 
-[Pending price editing on charts](paper-order-editing.md) arrived in v0.24.0. Next extensions include round-trip trade grouping, chart-based order creation, richer performance statistics and options paper accounting.
+[Pending price editing on charts](paper-order-editing.md) arrived in v0.24.0. [Flat-to-flat trade grouping and completed-trade performance](paper-performance.md) arrived in v0.25.0, with fill-level journal links. Next extensions include chart-based order creation, cycle-level annotations, portfolio return statistics and options paper accounting.

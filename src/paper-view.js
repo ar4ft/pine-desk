@@ -1,4 +1,9 @@
 import {
+  paperPerformanceView,
+  bindPaperPerformance,
+  paperPerformanceStatus,
+} from "./paper-performance-view.js";
+import {
   paperOrderEditorView,
   bindPaperOrderEditor,
 } from "./paper-order-editor.js";
@@ -133,6 +138,7 @@ export function paperView(s) {
   ${paperOrderEditorView(s)}
   ${riskView(s)}
   <section class="plot-card" id="paper-monitor">${monitorView(s)}</section><section class="plot-card" id="paper-valuation">${valuationView(s)}</section>
+  ${paperPerformanceView(s)}
   ${paperResearchView(s)}
   <div id="paper-results">${results(s)}</div></section>`;
 }
@@ -189,6 +195,11 @@ export function bindPaper({
     const historyStatus = document.getElementById("paper-history-status");
     if (historyStatus) historyStatus.innerHTML = paperHistoryStatus(s);
     orderEditor.paint();
+    const performanceStatus = document.getElementById(
+      "paper-performance-status",
+    );
+    if (performanceStatus)
+      performanceStatus.textContent = paperPerformanceStatus(s);
     const risk = document.getElementById("paper-risk-status");
     if (risk) risk.innerHTML = riskStatus(s);
     document.getElementById("paper-monitor").innerHTML = monitorView(s);
@@ -267,7 +278,14 @@ export function bindPaper({
   };
   const orderEditor = bindPaperOrderEditor({ s, call, operation, appearance });
   bindRisk({ s, operation, call });
-  bindPaperResearch({ s, operation, call, exportFile });
+  const research = bindPaperResearch({ s, operation, call, exportFile });
+  bindPaperPerformance({
+    s,
+    operation,
+    call,
+    exportFile,
+    reviewFill: research?.reviewFill,
+  });
   document.getElementById("paper-refresh").onclick = () =>
     operation(async () => {
       await refresh();

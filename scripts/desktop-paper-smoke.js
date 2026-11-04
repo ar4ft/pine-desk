@@ -242,6 +242,34 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
     });
     assert.equal(account.revision, 13);
     assert.equal(account.orders.at(-1).price, 136);
+    const performance = await call(client, "paper_performance");
+    assert.equal(performance.accountRevision, 13);
+    assert.equal(performance.summary.closedCount, 0);
+    assert.equal(performance.openTrades.length, 1);
+    assert.equal(performance.openTrades[0].fills.length, 4);
+    assert.ok(
+      Math.abs(
+        performance.reconciliation.openRealizedPnl - account.realizedPnl,
+      ) < 1e-8,
+    );
+    await page.locator("#paper-performance-load").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-performance-status")
+        ?.textContent.includes("Loaded account r13"),
+    );
+    await page.locator("#paper-performance-tab").selectOption("open");
+    await page.locator("[data-paper-trade]").click();
+    assert.equal(
+      await page.locator("#paper-performance-fills tbody tr").count(),
+      4,
+    );
+    await page.locator("[data-performance-review]").first().click();
+    assert.equal(
+      await page.locator("#paper-journal-review").inputValue(),
+      "Desktop fill review survives restart",
+    );
+    assert.equal((await call(client, "paper_account")).revision, 13);
   } finally {
     await app.evaluate(async () => {
       const f = globalThis.pineDeskPaperSmoke;

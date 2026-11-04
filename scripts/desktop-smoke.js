@@ -308,6 +308,18 @@ try {
   assert.equal(paper.positions.BTCUSDT.quantity, 1.5);
   assert.equal(paper.cash, 856.48);
   assert.equal(paper.revision, 13);
+  const performance = await reopened.evaluate(() =>
+    window.desk.call("paperPerformance"),
+  );
+  assert.equal(performance.accountRevision, 13);
+  assert.equal(performance.summary.closedCount, 0);
+  assert.equal(performance.openTrades.length, 1);
+  assert.equal(performance.openTrades[0].fills.length, 4);
+  assert.ok(
+    Math.abs(
+      performance.reconciliation.accountRealizedPnl - paper.realizedPnl,
+    ) < 1e-8,
+  );
   assert.equal(paper.orders.at(-1).price, 136);
   assert.equal(paper.orders.at(-1).amendments, 2);
   assert.equal(paper.orders.at(-1).status, "pending");

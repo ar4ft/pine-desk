@@ -60,6 +60,10 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
     );
     assert.equal(await call(readOnly, "paper_account"), null);
     assert.equal(
+      (await call(readOnly, "paper_performance")).summary.closedCount,
+      0,
+    );
+    assert.equal(
       (
         await readOnly.callTool({
           name: "paper_amend",

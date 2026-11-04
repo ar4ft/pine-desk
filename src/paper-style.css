@@ -179,3 +179,38 @@
 #paper-edit-chart-status {
   overflow-wrap: anywhere;
 }
+
+#paper-performance .searchbar {
+  padding: 0 16px 16px;
+  align-items: end;
+}
+#paper-performance label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+#paper-performance .metrics {
+  padding: 16px;
+}
+#paper-performance .metrics > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.paper-performance-method > summary {
+  padding: 16px;
+  cursor: pointer;
+}
+#paper-performance-status {
+  overflow-wrap: anywhere;
+}
+
+#paper-performance .metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1150px) {
+  #paper-performance .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
