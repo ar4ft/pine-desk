@@ -59,6 +59,19 @@ export async function desktopMcpSmoke({ app, page, dataDir }) {
       true,
     );
     assert.equal(await call(readOnly, "paper_account"), null);
+    assert.equal(
+      (
+        await readOnly.callTool({
+          name: "paper_amend",
+          arguments: {
+            id: "11111111-1111-4111-a111-111111111111",
+            expectedRevision: 1,
+            price: 100,
+          },
+        })
+      ).isError,
+      true,
+    );
     assert.equal((await call(readOnly, "paper_journal")).entries.length, 0);
     assert.equal((await call(readOnly, "paper_history")).count, 0);
     assert.equal(

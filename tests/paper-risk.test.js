@@ -244,7 +244,7 @@ test("legacy accounts retain disabled defaults without rewriting and migrate on 
     assert.deepEqual((await f.a.snapshot()).risk, defaultPaperRisk());
     assert.deepEqual(f.doc(), legacy);
     await f.risk({ maxMarkets: 3 });
-    assert.equal(f.doc().version, 3);
+    assert.equal(f.doc().version, 4);
     assert.equal(
       (await new PaperAccount(f.opts).snapshot()).risk.maxMarkets,
       3,

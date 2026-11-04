@@ -155,3 +155,27 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+#paper-order-editor .searchbar {
+  padding: 0 16px 16px;
+  align-items: end;
+}
+#paper-order-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+#paper-edit-chart {
+  height: 420px;
+  position: relative;
+  margin: 0 16px;
+}
+#paper-edit-chart:empty {
+  height: 0;
+}
+#paper-edit-notice,
+#paper-edit-chart-status {
+  overflow-wrap: anywhere;
+}

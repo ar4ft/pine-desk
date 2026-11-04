@@ -1,3 +1,4 @@
+import { destroyPaperOrderEditor } from "./paper-order-editor.js";
 import {
   newPaperState,
   retainPaperDraft,
@@ -346,6 +347,7 @@ function chartAppearance() {
   };
 }
 function updateAppearance() {
+  state.paper.orderEditorController?.appearance();
   linkedCharts.updateAppearance();
   applyAppearance(state.appearance);
   if (chart) {
@@ -540,6 +542,7 @@ function render() {
   retainAlertDraft(state.alerts);
   retainPlanDraft(state.plans);
   retainPaperDraft(state.paper);
+  destroyPaperOrderEditor(state.paper);
   retainOptionsDraft(state.options);
   retainResearchDraft(state.research);
   retainWhaleDraft(state.whale);
@@ -992,7 +995,14 @@ function alertBindings() {
 }
 function bind() {
   if (state.page === "paper")
-    bindPaper({ state: state.paper, call, task, render, exportFile });
+    bindPaper({
+      state: state.paper,
+      call,
+      task,
+      render,
+      exportFile,
+      appearance: chartAppearance,
+    });
   if (state.page === "plans")
     bindPlans({ state: state.plans, call, task, render, exportFile });
   if (state.page === "orderflow" && state.flowTab === "tpo")

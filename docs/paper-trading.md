@@ -2,6 +2,8 @@
 
 Account foundation in v0.19.0; monitoring, linked exits and valuation added in v0.20.0, with persistent entry risk controls in v0.21.0 under **Research → Paper trading**. This is a local simulation for Binance **USDT-quoted spot holdings**. It uses public market data and never connects to an exchange account or submits real orders. No API key is required.
 
+[Chart-based pending price editing](paper-order-editing.md) was added in v0.24.0 with explicit Apply and revision checks.
+
 ## Workflow
 
 1. Create the single paper account with an initial USDT balance. The balance is fixed at creation; deposits, resets and multiple accounts are not available in this version.
@@ -59,7 +61,7 @@ The **Activate saved stop/target pairs after entry fills** checkbox is off by de
 
 When the entry fills, each target slice creates a linked sell-stop and sell-limit pair. The pair reserves its quantity **once**. Filling either leg cancels its sibling atomically (OCO). A partial-position target cancels only its matching stop; other slices retain their stops and targets. Cancelling either leg cancels that entire pair and releases its slice. Children do not exist before the entry fills, and cancelling the pending entry creates no children. Newly activated exits wait for a later monitor quote; they never consume the quote that filled the entry in that same cycle.
 
-Independent sell orders still reserve quantity separately. Linked exits cannot be attached retrospectively to an existing holding in this version. There is no trailing stop, in-place price editing or auto-replacement. Pending/retained order limits reserve room for contingent children before accepting an entry. Editing/deleting the source plan does not change queued orders. A gap can place the entry fill beyond planned levels; exits are evaluated at later observed bid prices under the same polling/slippage rules.
+Independent sell orders still reserve quantity separately. Linked exits cannot be attached retrospectively to an existing holding in this version. Pending prices can be edited with explicit Apply; attached bracket levels remain fixed until their child orders activate. There is no trailing stop or auto-replacement. Pending/retained order limits reserve room for contingent children before accepting an entry. Editing/deleting the source plan does not change queued orders. A gap can place the entry fill beyond planned levels; exits are evaluated at later observed bid prices under the same polling/slippage rules.
 
 ## Journal and equity history
 
@@ -80,7 +82,7 @@ A complete exit removes all remaining cost. Realized P&L includes the allocated 
 
 For example, buy 2 units at ask 100 plus slippage 1 with a 1% fee: cost is 204.02 USDT. Sell 0.5 units at bid 120 minus slippage 1 with a 1% fee: proceeds are 58.905, allocated cost is 51.005, and realized P&L is 7.90. Remaining quantity is 1.5 and remaining cost is 153.015.
 
-The owning service writes `paper-account/current.json` using atomic replacement, with archive version 3, immutable account creation data and ordered submit/cancel/process/risk-policy events. It reconstructs balances, reservations and fills from validated events on every read. Existing version-1/2 accounts replay unchanged with all optional limits disabled and migrate to version 3 on their next successful mutation; opening an account does not rewrite history. Older apps cannot read version-3 archives. Risk policies replay in event order, so later limits never invalidate earlier accepted fills. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
+The owning service writes `paper-account/current.json` using atomic replacement, with archive version 4, immutable account creation data and ordered submit/cancel/process/risk-policy/amend events. It reconstructs balances, reservations and fills from validated events on every read. Existing version-1/2/3 accounts replay unchanged (legacy accounts without risk events keep optional limits disabled) and migrate to version 4 on their next successful mutation; opening an account does not rewrite history. Older apps cannot read version-4 archives. Risk policies replay in event order, so later limits never invalidate earlier accepted fills. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
 
 User account mutations run through one service queue and require `expectedRevision`. Monitoring fetches outside that queue, then checks current pending orders inside it before committing the eligible events for one symbol atomically. A concurrent cancellation wins if it commits before that check. Other clients can observe intervening fills, so refresh and reapply a stale edit rather than assuming the screen revision remains current. Stale mutations fail instead of merging. Submit also requires a UUID `requestId`: retry the same request ID and normalized payload to retrieve the already accepted order without creating another. A reused ID with different assumptions fails. After an uncertain response to Process or Cancel, refresh first; terminal orders cannot be processed again. Submitted orders are immutable apart from their lifecycle status.
 
@@ -147,4 +149,4 @@ Example `paper_set_risk` arguments (use the current account revision; all policy
 
 ## Next stage
 
-Round-trip trade grouping, historical performance statistics, chart-native order editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.
+Round-trip trade grouping, historical performance statistics, chart-based order creation and quantity editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.

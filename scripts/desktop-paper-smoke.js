@@ -13,10 +13,30 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
       paperAccount,
       paperMonitor,
       clock: paperMonitor.clock,
+      fetch: globalThis.fetch,
       bid: 99,
       ask: 100,
       quote: paperAccount.quote,
       validateMarket: paperAccount.validateMarket,
+    };
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, options) => {
+      const u = new URL(String(url));
+      if (
+        u.hostname === "data-api.binance.vision" &&
+        u.pathname === "/api/v3/klines"
+      ) {
+        const end = Number(u.searchParams.get("endTime"));
+        const rows = Array.from(
+          { length: Number(u.searchParams.get("limit")) },
+          (_, i) => {
+            const time = end - (300 - i) * 3600000;
+            return [time, "110", "115", "105", "112", "100", time + 3599999];
+          },
+        );
+        return new Response(JSON.stringify(rows), { status: 200 });
+      }
+      return originalFetch(url, options);
     };
     paperMonitor.clock = { setTimeout: () => 1, clearTimeout: () => {} };
     paperAccount.validateMarket = async () => {};
@@ -181,10 +201,52 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
         .querySelector("#paper-history-body")
         ?.textContent.includes("1,022.98"),
     );
+    account = await call(client, "paper_submit", {
+      expectedRevision: (await call(client, "paper_account")).revision,
+      requestId: randomUUID(),
+      input: {
+        symbol: "BTCUSDT",
+        side: "sell",
+        type: "limit",
+        quantity: 0.5,
+        price: 130,
+        feePercent: 0,
+      },
+    });
+    const pending = account.orders.at(-1);
+    const chart = await call(client, "paper_order_chart", {
+      id: pending.id,
+      timeframe: "1h",
+    });
+    assert.equal(chart.symbol, "BTCUSDT");
+    assert.equal(chart.bars.length, 300);
+    await page.locator(`[data-paper-edit="${pending.id}"]`).click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#paper-edit-chart")?.dataset.ready === "true",
+    );
+    await page.locator("#paper-edit-price").fill("135");
+    await page.locator("#paper-edit-apply").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-message")
+        ?.textContent.includes("Paper order price updated"),
+    );
+    account = await call(client, "paper_account");
+    assert.equal(account.revision, 12);
+    assert.equal(account.orders.at(-1).price, 135);
+    account = await call(client, "paper_amend", {
+      id: pending.id,
+      expectedRevision: account.revision,
+      price: 136,
+    });
+    assert.equal(account.revision, 13);
+    assert.equal(account.orders.at(-1).price, 136);
   } finally {
     await app.evaluate(async () => {
       const f = globalThis.pineDeskPaperSmoke;
       await f.paperMonitor.close();
+      globalThis.fetch = f.fetch;
       f.paperMonitor.clock = f.clock;
       f.paperAccount.quote = f.quote;
       f.paperAccount.validateMarket = f.validateMarket;

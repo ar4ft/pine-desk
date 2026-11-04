@@ -1,5 +1,5 @@
 import { journalInput } from "./paper-journal.js";
-import { paperOrderSchema } from "./paper-account.js";
+import { paperOrderSchema, paperAmendSchema } from "./paper-account.js";
 import { z } from "zod";
 import { paperRiskSchema } from "./paper-risk.js";
 
@@ -103,6 +103,22 @@ export function toolDefinitions() {
     { expectedRevision: paperRevision, policy: paperRiskSchema },
     "paperSetRisk",
     false,
+  );
+  tool(
+    "paper_amend",
+    "Change only the price of a pending simulated limit or sell-stop order. Preserves identity, quantity, costs, plan reference and OCO linkage. Revalidates cash, entry risk limits and bracket/pair price relationships. expectedRevision guards fills and concurrent changes. New fills require a quote requested strictly after the amendment; chart candles are never execution quotes.",
+    paperAmendSchema.shape,
+    "paperAmend",
+    false,
+  );
+  tool(
+    "paper_order_chart",
+    "Read up to 300 settled public Binance candles for a pending limit/stop order's own symbol. Independent chart snapshot; does not change workspace bars, start streaming or process orders.",
+    {
+      id: z.string().uuid(),
+      timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]).default("1h"),
+    },
+    "paperOrderChart",
   );
   const paperOrderRef = {
     id: z.string().uuid(),

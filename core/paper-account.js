@@ -99,7 +99,22 @@ const planSchema = z
     name: z.string().max(100),
   })
   .strict();
+export const paperAmendSchema = z
+  .object({
+    expectedRevision: z.number().int().positive(),
+    id: z.string().uuid(),
+    price: positive,
+  })
+  .strict();
 const eventSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("amend"),
+      at: timestamp,
+      id: z.string().uuid(),
+      price: positive,
+    })
+    .strict(),
   z
     .object({ kind: z.literal("risk"), at: timestamp, policy: paperRiskSchema })
     .strict(),
@@ -127,7 +142,7 @@ const eventSchema = z.discriminatedUnion("kind", [
 ]);
 const archiveSchema = z
   .object({
-    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
     id: z.string().uuid(),
     currency: z.literal("USDT"),
     initialCash: positive,
@@ -231,6 +246,48 @@ function apply(s, e) {
   const o = s.orders.find((o) => o.id === e.id);
   if (!o || o.status !== "pending")
     throw Error("Order is no longer pending; refresh the paper account.");
+  if (e.kind === "amend") {
+    if (o.type === "market")
+      throw Error("Only pending limit and sell-stop prices can be edited.");
+    if (e.price === o.price) throw Error("Choose a different order price.");
+    const input = paperOrderSchema.parse({
+      symbol: o.symbol,
+      side: o.side,
+      type: o.type,
+      quantity: o.quantity,
+      price: e.price,
+      feePercent: o.feePercent,
+      slippage: o.slippage,
+      ...(o.bracket ? { bracket: o.bracket } : {}),
+    });
+    if (o.ocoGroup) {
+      const sibling = s.orders.find(
+        (x) =>
+          x.id !== o.id && x.ocoGroup === o.ocoGroup && x.status === "pending",
+      );
+      if (
+        !sibling ||
+        (o.leg === "stop" ? e.price >= sibling.price : e.price <= sibling.price)
+      )
+        throw Error("A linked stop must remain below its paired target.");
+    }
+    if (o.side === "buy") {
+      const cost = clean(reserve(input));
+      const reason = paperRiskViolation(s, input, e.at, cost, o.id);
+      if (reason) throw Error(`Paper risk limit: ${reason}`);
+      if (
+        !Number.isFinite(cost) ||
+        cost > clean(available(s).availableCash + clean(reserve(o)))
+      )
+        throw Error(
+          "Insufficient available paper cash for the edited price, including fees and other reservations.",
+        );
+    }
+    o.price = e.price;
+    o.amendedAt = e.at;
+    o.amendments = (o.amendments ?? 0) + 1;
+    return;
+  }
   if (e.kind === "cancel") {
     o.status = "cancelled";
     o.completedAt = e.at;
@@ -245,8 +302,13 @@ function apply(s, e) {
     return;
   }
   const q = freshPaperQuote(e.quote, o.symbol, e.at);
-  if (q.requestedAt < o.submittedAt)
-    throw Error("Quote predates the submitted order.");
+  if (
+    q.requestedAt < o.submittedAt ||
+    (o.amendedAt !== undefined && q.requestedAt <= o.amendedAt)
+  )
+    throw Error(
+      "Quote predates the submitted order or latest price edit; request a new quote after the edit.",
+    );
   const price = o.side === "buy" ? q.ask + o.slippage : q.bid - o.slippage;
   if (!(price > 0) || !Number.isFinite(price))
     throw Error("Slippage produces an invalid fill price.");
@@ -418,7 +480,7 @@ export class PaperAccount {
       if (await this.read())
         throw Error("A paper account already exists. Refresh to load it.");
       const doc = archiveSchema.parse({
-        version: 3,
+        version: 4,
         id: randomUUID(),
         currency: "USDT",
         initialCash,
@@ -444,7 +506,7 @@ export class PaperAccount {
   async commit(doc, event) {
     const next = archiveSchema.parse({
         ...doc,
-        version: 3,
+        version: 4,
         events: [...doc.events, event],
       }),
       result = replay(next);
@@ -486,6 +548,14 @@ export class PaperAccount {
       const doc = await this.read();
       this.check(doc, expectedRevision);
       return this.commit(doc, { kind: "risk", at: this.time(doc), policy });
+    });
+  }
+  amend(args) {
+    return this.serial(async () => {
+      const { expectedRevision, id, price } = paperAmendSchema.parse(args);
+      const doc = await this.read();
+      this.check(doc, expectedRevision);
+      return this.commit(doc, { kind: "amend", at: this.time(doc), id, price });
     });
   }
   cancel({ expectedRevision, id }) {
@@ -532,7 +602,8 @@ export class PaperAccount {
           (o) =>
             o.status === "pending" &&
             o.symbol === symbol &&
-            o.submittedAt <= quote.requestedAt,
+            o.submittedAt <= quote.requestedAt &&
+            (o.amendedAt === undefined || quote.requestedAt > o.amendedAt),
         )
         .map((o) => o.id);
       for (const id of ids) {
@@ -544,7 +615,7 @@ export class PaperAccount {
       if (!events.length || !current()) return { changed: false };
       const next = archiveSchema.parse({
         ...doc,
-        version: 3,
+        version: 4,
         events: [...doc.events, ...events],
       });
       replay(next);

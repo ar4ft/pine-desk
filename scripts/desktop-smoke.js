@@ -307,7 +307,10 @@ try {
   assert.equal(paper.fills.length, 4);
   assert.equal(paper.positions.BTCUSDT.quantity, 1.5);
   assert.equal(paper.cash, 856.48);
-  assert.equal(paper.revision, 10);
+  assert.equal(paper.revision, 13);
+  assert.equal(paper.orders.at(-1).price, 136);
+  assert.equal(paper.orders.at(-1).amendments, 2);
+  assert.equal(paper.orders.at(-1).status, "pending");
   assert.equal(paper.risk.pauseBuys, true);
   assert.equal(paper.risk.maxOrderCost, 150);
   assert.equal(paper.risk.maxMarkets, 2);
