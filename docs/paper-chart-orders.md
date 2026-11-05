@@ -19,7 +19,7 @@ The reviewed input, account revision and request UUID are frozen for submission.
 
 If the request exists, the panel displays its order ID even if it has since filled or changed. If it is not found, the draft unlocks and must be reviewed again; the request UUID is retained until an explicit draft edit or New draft. Existing backend request-ID deduplication prevents an identical retry from creating another order. Closing the app discards the screen draft/confirmation state, while any submitted order remains in the durable ledger. Inspect the order list after reopening before creating a replacement.
 
-Unsaved drafts and chart context survive page navigation during the session. They are not persisted across app restarts or exported as named layouts. The original manual order form, saved-plan handoff and [pending price editor](paper-order-editing.md) remain available.
+Unsaved drafts and chart context survive page navigation during the session. They are not persisted across app restarts or exported as named layouts. The original manual order form, saved-plan handoff and [pending order editor](paper-order-editing.md) remain available.
 
 ## MCP
 
@@ -51,4 +51,4 @@ Example preview (replace the revision and price assumptions):
 
 The response includes the parsed input, `accountRevision`, available cash before/after, additional cash/quantity reservation, and projected risk usage. These are hypothetical reservations only. Use the existing **research-scoped** `paper_submit` with the reviewed input, revision and a stable `requestId` to queue. Read-only clients can preview but cannot submit. Never use candle highs/lows as evidence of a live fill.
 
-No new archive format or account migration is introduced. Existing account version 4 and order limits apply. Multi-target chart creation, chart-based sizing by cash risk, quantity edits on existing orders, trailing stops, retrospective linked exits on existing holdings, and options paper execution remain separate work.
+Chart creation introduced no new archive format. Account version 5 applies since v0.27.0; see [quantity editing](paper-order-quantity.md) for migration details. Existing order limits apply. Multi-target chart creation, chart-based sizing by cash risk, trailing stops, retrospective linked exits on existing holdings, and options paper execution remain separate work.

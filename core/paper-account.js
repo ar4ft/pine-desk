@@ -104,6 +104,8 @@ export const paperAmendSchema = z
     expectedRevision: z.number().int().positive(),
     id: z.string().uuid(),
     price: positive,
+    quantity: quantity.optional(),
+    targetQuantities: z.array(quantity).min(1).max(3).optional(),
   })
   .strict();
 const eventSchema = z.discriminatedUnion("kind", [
@@ -113,6 +115,8 @@ const eventSchema = z.discriminatedUnion("kind", [
       at: timestamp,
       id: z.string().uuid(),
       price: positive,
+      quantity: quantity.optional(),
+      targetQuantities: z.array(quantity).min(1).max(3).optional(),
     })
     .strict(),
   z
@@ -142,7 +146,13 @@ const eventSchema = z.discriminatedUnion("kind", [
 ]);
 const archiveSchema = z
   .object({
-    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+    version: z.union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+    ]),
     id: z.string().uuid(),
     currency: z.literal("USDT"),
     initialCash: positive,
@@ -248,20 +258,56 @@ function apply(s, e) {
     throw Error("Order is no longer pending; refresh the paper account.");
   if (e.kind === "amend") {
     if (o.type === "market")
-      throw Error("Only pending limit and sell-stop prices can be edited.");
-    if (e.price === o.price) throw Error("Choose a different order price.");
+      throw Error("Only pending limit and sell-stop orders can be edited.");
+    const nextQuantity = e.quantity ?? o.quantity;
+    if (e.targetQuantities && (!o.bracket || e.quantity === undefined))
+      throw Error(
+        "Target quantities require a bracket entry and an explicit entry quantity.",
+      );
+    if (o.bracket && nextQuantity !== o.quantity && !e.targetQuantities)
+      throw Error(
+        "Resizing a bracket entry requires explicit quantities for every target.",
+      );
+    if (
+      e.targetQuantities &&
+      e.targetQuantities.length !== o.bracket.targets.length
+    )
+      throw Error(
+        "Keep the existing target count when resizing a bracket entry.",
+      );
+    const bracket = o.bracket
+      ? {
+          ...o.bracket,
+          targets: o.bracket.targets.map((t, i) => ({
+            ...t,
+            quantity: e.targetQuantities?.[i] ?? t.quantity,
+          })),
+        }
+      : null;
+    const allocationChanged =
+      !!bracket &&
+      bracket.targets.some(
+        (t, i) => t.quantity !== o.bracket.targets[i].quantity,
+      );
+    if (
+      e.price === o.price &&
+      nextQuantity === o.quantity &&
+      !allocationChanged
+    )
+      throw Error("Choose a different order price or quantity.");
     const input = paperOrderSchema.parse({
       symbol: o.symbol,
       side: o.side,
       type: o.type,
-      quantity: o.quantity,
+      quantity: nextQuantity,
       price: e.price,
       feePercent: o.feePercent,
       slippage: o.slippage,
-      ...(o.bracket ? { bracket: o.bracket } : {}),
+      ...(bracket ? { bracket } : {}),
     });
+    let sibling;
     if (o.ocoGroup) {
-      const sibling = s.orders.find(
+      sibling = s.orders.find(
         (x) =>
           x.id !== o.id && x.ocoGroup === o.ocoGroup && x.status === "pending",
       );
@@ -270,20 +316,52 @@ function apply(s, e) {
         (o.leg === "stop" ? e.price >= sibling.price : e.price <= sibling.price)
       )
         throw Error("A linked stop must remain below its paired target.");
+      if (nextQuantity !== o.quantity) {
+        const parent = s.orders.find((x) => x.id === o.parentId),
+          index = Number(o.ocoGroup.split(":").at(-1));
+        const maximum = parent?.bracket?.targets[index]?.quantity;
+        if (maximum === undefined || nextQuantity > maximum)
+          throw Error(
+            "A linked pair cannot exceed its original target allocation.",
+          );
+      }
     }
     if (o.side === "buy") {
-      const cost = clean(reserve(input));
-      const reason = paperRiskViolation(s, input, e.at, cost, o.id);
+      const cost = clean(reserve(input)),
+        reason = paperRiskViolation(s, input, e.at, cost, o.id);
       if (reason) throw Error(`Paper risk limit: ${reason}`);
-      if (
-        !Number.isFinite(cost) ||
-        cost > clean(available(s).availableCash + clean(reserve(o)))
-      )
+      const other = available({
+        ...s,
+        orders: s.orders.filter((x) => x.id !== o.id),
+      });
+      if (!Number.isFinite(cost) || cost > other.availableCash)
         throw Error(
-          "Insufficient available paper cash for the edited price, including fees and other reservations.",
+          "Insufficient available paper cash for the edited order, including fees and other reservations.",
+        );
+    } else {
+      const other = available({
+        ...s,
+        orders: s.orders.filter(
+          (x) => x.id !== o.id && (!o.ocoGroup || x.ocoGroup !== o.ocoGroup),
+        ),
+      });
+      const free = clean(
+        (s.positions[o.symbol]?.quantity ?? 0) -
+          (other.reservedQuantity[o.symbol] ?? 0),
+      );
+      if (nextQuantity > free)
+        throw Error(
+          "Insufficient unreserved held quantity for the edited exit.",
         );
     }
+    if (sibling && nextQuantity !== o.quantity) {
+      sibling.quantity = nextQuantity;
+      sibling.amendedAt = e.at;
+      sibling.amendments = (sibling.amendments ?? 0) + 1;
+    }
     o.price = e.price;
+    o.quantity = nextQuantity;
+    if (bracket) o.bracket = bracket;
     o.amendedAt = e.at;
     o.amendments = (o.amendments ?? 0) + 1;
     return;
@@ -307,7 +385,7 @@ function apply(s, e) {
     (o.amendedAt !== undefined && q.requestedAt <= o.amendedAt)
   )
     throw Error(
-      "Quote predates the submitted order or latest price edit; request a new quote after the edit.",
+      "Quote predates the submitted order or latest edit; request a new quote after the edit.",
     );
   const price = o.side === "buy" ? q.ask + o.slippage : q.bid - o.slippage;
   if (!(price > 0) || !Number.isFinite(price))
@@ -480,7 +558,7 @@ export class PaperAccount {
       if (await this.read())
         throw Error("A paper account already exists. Refresh to load it.");
       const doc = archiveSchema.parse({
-        version: 4,
+        version: 5,
         id: randomUUID(),
         currency: "USDT",
         initialCash,
@@ -506,7 +584,7 @@ export class PaperAccount {
   async commit(doc, event) {
     const next = archiveSchema.parse({
         ...doc,
-        version: 4,
+        version: 5,
         events: [...doc.events, event],
       }),
       result = replay(next);
@@ -586,12 +664,51 @@ export class PaperAccount {
       return this.commit(doc, { kind: "risk", at: this.time(doc), policy });
     });
   }
+  amendPreview(args) {
+    return this.serial(async () => {
+      const { expectedRevision, ...edit } = paperAmendSchema.parse(args),
+        doc = await this.read();
+      this.check(doc, expectedRevision);
+      const at = this.time(doc),
+        state = replay(doc, at),
+        before = available(state);
+      const order = state.orders.find((o) => o.id === edit.id);
+      if (!order || order.status !== "pending")
+        throw Error("Order is no longer pending; refresh the paper account.");
+      const old = structuredClone(order);
+      apply(state, { kind: "amend", at, ...edit });
+      const after = available(state),
+        held = state.positions[old.symbol]?.quantity ?? 0;
+      return {
+        accountRevision: expectedRevision,
+        previous: old,
+        orders: state.orders.filter(
+          (o) =>
+            o.id === edit.id || (old.ocoGroup && o.ocoGroup === old.ocoGroup),
+        ),
+        cashReservationBefore: old.side === "buy" ? clean(reserve(old)) : 0,
+        cashReservationAfter: old.side === "buy" ? clean(reserve(order)) : 0,
+        quantityReservationBefore: old.side === "sell" ? old.quantity : 0,
+        quantityReservationAfter: old.side === "sell" ? order.quantity : 0,
+        availableCashBefore: before.availableCash,
+        availableCashAfter: after.availableCash,
+        unreservedHoldingBefore: clean(
+          held - (before.reservedQuantity[old.symbol] ?? 0),
+        ),
+        unreservedHoldingAfter: clean(
+          held - (after.reservedQuantity[old.symbol] ?? 0),
+        ),
+        risk: state.risk,
+        riskUsage: paperRiskUsage(state, at),
+      };
+    });
+  }
   amend(args) {
     return this.serial(async () => {
-      const { expectedRevision, id, price } = paperAmendSchema.parse(args);
+      const { expectedRevision, ...edit } = paperAmendSchema.parse(args);
       const doc = await this.read();
       this.check(doc, expectedRevision);
-      return this.commit(doc, { kind: "amend", at: this.time(doc), id, price });
+      return this.commit(doc, { kind: "amend", at: this.time(doc), ...edit });
     });
   }
   cancel({ expectedRevision, id }) {
@@ -651,7 +768,7 @@ export class PaperAccount {
       if (!events.length || !current()) return { changed: false };
       const next = archiveSchema.parse({
         ...doc,
-        version: 4,
+        version: 5,
         events: [...doc.events, ...events],
       });
       replay(next);

@@ -321,6 +321,7 @@ try {
     ) < 1e-8,
   );
   assert.equal(paper.orders.at(-2).price, 136);
+  assert.equal(paper.orders.at(-2).quantity, 0.3);
   assert.equal(paper.orders.at(-1).price, 150);
   assert.equal(paper.orders.at(-1).quantity, 0.25);
   assert.equal(paper.orders.at(-2).amendments, 2);

@@ -112,8 +112,14 @@ export function toolDefinitions() {
     false,
   );
   tool(
+    "paper_amend_preview",
+    "Read-only validation of a proposed pending price/quantity edit against its account revision. Uses the same edit rules as paper_amend; returns affected orders and reservation/free-holding changes without changing the ledger, requesting execution quotes or reserving extra funds. Current orders remain active during review.",
+    paperAmendSchema.shape,
+    "paperAmendPreview",
+  );
+  tool(
     "paper_amend",
-    "Change only the price of a pending simulated limit or sell-stop order. Preserves identity, quantity, costs, plan reference and OCO linkage. Revalidates cash, entry risk limits and bracket/pair price relationships. expectedRevision guards fills and concurrent changes. New fills require a quote requested strictly after the amendment; chart candles are never execution quotes.",
+    "Edit price and optional quantity of a pending simulated limit/sell-stop order. Quantity changes on bracket entries require explicit targetQuantities in existing target order; prices and target count stay fixed. An active OCO pair resizes both legs atomically, never above its original target allocation. Rechecks cash/holdings/risk and revision; requires quotes requested strictly after edits for affected orders. Preserves identity, fees, slippage and source plan.",
     paperAmendSchema.shape,
     "paperAmend",
     false,

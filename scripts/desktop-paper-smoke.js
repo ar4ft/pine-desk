@@ -225,12 +225,28 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
       () =>
         document.querySelector("#paper-edit-chart")?.dataset.ready === "true",
     );
+    const resizePreview = await call(client, "paper_amend_preview", {
+      id: pending.id,
+      expectedRevision: account.revision,
+      price: 135,
+      quantity: 0.4,
+    });
+    assert.equal(resizePreview.quantityReservationAfter, 0.4);
+    assert.equal(
+      (await call(client, "paper_account")).revision,
+      account.revision,
+    );
     await page.locator("#paper-edit-price").fill("135");
+    await page.locator("#paper-edit-quantity").fill("0.4");
+    await page.locator("#paper-edit-review").click();
+    await page.waitForFunction(
+      () => !document.querySelector("#paper-edit-apply")?.disabled,
+    );
     await page.locator("#paper-edit-apply").click();
     await page.waitForFunction(() =>
       document
         .querySelector("#paper-message")
-        ?.textContent.includes("Paper order price updated"),
+        ?.textContent.includes("Paper order updated"),
     );
     account = await call(client, "paper_account");
     assert.equal(account.revision, 12);
@@ -239,9 +255,11 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
       id: pending.id,
       expectedRevision: account.revision,
       price: 136,
+      quantity: 0.3,
     });
     assert.equal(account.revision, 13);
     assert.equal(account.orders.at(-1).price, 136);
+    assert.equal(account.orders.at(-1).quantity, 0.3);
     const performance = await call(client, "paper_performance");
     assert.equal(performance.accountRevision, 13);
     assert.equal(performance.summary.closedCount, 0);

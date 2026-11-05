@@ -2,7 +2,7 @@
 
 Account foundation in v0.19.0; monitoring, linked exits and valuation added in v0.20.0, with persistent entry risk controls in v0.21.0 under **Research → Paper trading**. This is a local simulation for Binance **USDT-quoted spot holdings**. It uses public market data and never connects to an exchange account or submits real orders. No API key is required.
 
-[Chart-based pending price editing](paper-order-editing.md) was added in v0.24.0 with explicit Apply and revision checks.
+[Chart-based pending price editing](paper-order-editing.md) was added in v0.24.0 with revision checks; v0.27.0 adds [quantity editing and reservation review](paper-order-quantity.md) before Apply.
 
 [Completed trades and performance](paper-performance.md) were added in v0.25.0, grouping each market from flat to flat and keeping open-cycle realized results separate.
 
@@ -86,9 +86,9 @@ A complete exit removes all remaining cost. Realized P&L includes the allocated 
 
 For example, buy 2 units at ask 100 plus slippage 1 with a 1% fee: cost is 204.02 USDT. Sell 0.5 units at bid 120 minus slippage 1 with a 1% fee: proceeds are 58.905, allocated cost is 51.005, and realized P&L is 7.90. Remaining quantity is 1.5 and remaining cost is 153.015.
 
-The owning service writes `paper-account/current.json` using atomic replacement, with archive version 4, immutable account creation data and ordered submit/cancel/process/risk-policy/amend events. It reconstructs balances, reservations and fills from validated events on every read. Existing version-1/2/3 accounts replay unchanged (legacy accounts without risk events keep optional limits disabled) and migrate to version 4 on their next successful mutation; opening an account does not rewrite history. Older apps cannot read version-4 archives. Risk policies replay in event order, so later limits never invalidate earlier accepted fills. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
+The owning service writes `paper-account/current.json` using atomic replacement, with archive version 5, immutable account creation data and ordered submit/cancel/process/risk-policy/amend events. It reconstructs balances, reservations and fills from validated events on every read. Existing version-1/2/3/4 accounts replay unchanged (legacy accounts without risk events keep optional limits disabled) and migrate to version 5 on their next successful mutation; opening an account does not rewrite history. Older apps cannot read version-5 archives. Risk policies replay in event order, so later limits never invalidate earlier accepted fills. Events are retained; invalid or unsupported archives fail explicitly rather than silently resetting. This is a local audit trail, not a cryptographically authenticated or tamper-proof financial record. Shutdown waits for pending operations. A failed write preserves the previous archive; no fill is reported as durable before the write succeeds.
 
-User account mutations run through one service queue and require `expectedRevision`. Monitoring fetches outside that queue, then checks current pending orders inside it before committing the eligible events for one symbol atomically. A concurrent cancellation wins if it commits before that check. Other clients can observe intervening fills, so refresh and reapply a stale edit rather than assuming the screen revision remains current. Stale mutations fail instead of merging. Submit also requires a UUID `requestId`: retry the same request ID and normalized payload to retrieve the already accepted order without creating another. A reused ID with different assumptions fails. After an uncertain response to Process or Cancel, refresh first; terminal orders cannot be processed again. Submitted orders are immutable apart from their lifecycle status.
+User account mutations run through one service queue and require `expectedRevision`. Monitoring fetches outside that queue, then checks current pending orders inside it before committing the eligible events for one symbol atomically. A concurrent cancellation wins if it commits before that check. Other clients can observe intervening fills, so refresh and reapply a stale edit rather than assuming the screen revision remains current. Stale mutations fail instead of merging. Submit also requires a UUID `requestId`: retry the same request ID and normalized payload to retrieve the already accepted order without creating another. A reused ID with different assumptions fails. After an uncertain response to Process or Cancel, refresh first; terminal orders cannot be processed again. Original submit events remain immutable; pending limit and sell-stop orders can be amended through revision-checked price/quantity edits.
 
 Bounds: one account, 50 pending orders, 1,000 retained orders, 5,000 events, initial cash up to 10¹² USDT, quantity 10⁻⁸–10⁹, and finite JavaScript arithmetic. Quantities accept at most 15 significant digits; quantity balances, cash balances, fill notionals and fees are normalized to 15 significant digits to avoid common binary-rounding dust. This is not exchange decimal accounting. Large/nonfinite calculations fail. The screen shows all pending orders and the latest 100 completed orders/fills/events; exports and MCP include the complete bounded ledger. There is no automatic pruning, archival rollover or reset.
 
@@ -102,6 +102,8 @@ Bounds: one account, 50 pending orders, 1,000 retained orders, 5,000 events, ini
 | `paper_submit` | Research | Queue a simulated order |
 | `paper_submit_plan` | Research | Queue an entry from an exact saved plan revision; optional `linkedExits` |
 | `paper_process` | Research | Fetch a fresh quote and evaluate one pending order |
+| `paper_amend_preview` | Read | Review a pending price/quantity edit and its reservations without writing |
+| `paper_amend` | Research | Apply a pending edit with account revision, cash, holdings and risk checks |
 | `paper_cancel` | Research | Cancel a pending order, or both legs of its linked pair |
 | `paper_monitor_status` | Read | Session health, current account and ephemeral bid valuation |
 | `paper_monitor_start` | Research | Enable session polling and simulated execution |
@@ -153,4 +155,4 @@ Example `paper_set_risk` arguments (use the current account revision; all policy
 
 ## Next stage
 
-Per-plan lot attribution, portfolio return statistics, multi-target chart creation and quantity editing, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.
+Per-plan lot attribution, portfolio return statistics, multi-target chart creation, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.

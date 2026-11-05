@@ -38,6 +38,7 @@ test("drag is draft-only, Apply persists, stale orders preserve drafts, and offl
     if (action === "paperMonitorStatus") return monitor.snapshot();
     if (action === "paperSnapshot") return a.snapshot();
     if (action === "paperAmend") return a.amend(args);
+    if (action === "paperAmendPreview") return a.amendPreview(args);
     if (action === "paperOrderChart")
       return paperOrderChart(a, args, async ({ symbol }) => {
         expect(symbol).toBe("ETHUSDT");
@@ -113,9 +114,10 @@ test("drag is draft-only, Apply persists, stale orders preserve drafts, and offl
     const draft = Number(await page.locator("#paper-edit-price").inputValue());
     expect(draft).toBeGreaterThan(100);
     expect(draft).toBeLessThan(120);
+    await page.locator("#paper-edit-review").click();
     await page.locator("#paper-edit-apply").click();
     await expect(page.locator("#paper-message")).toContainText(
-      "Paper order price updated",
+      "Paper order updated",
     );
     expect((await a.snapshot()).orders[0].price).toBe(draft);
     await page.locator("#paper-edit-price").fill("110");
@@ -132,7 +134,7 @@ test("drag is draft-only, Apply persists, stale orders preserve drafts, and offl
     await page.locator("#paper-edit-reload").click();
     await expect(page.locator("#paper-edit-price")).toHaveValue("108");
     await page.locator("#paper-edit-price").fill("120");
-    await page.locator("#paper-edit-apply").click();
+    await page.locator("#paper-edit-review").click();
     await expect(page.locator("#paper-edit-error")).toContainText(
       "above the entry limit",
     );
@@ -161,6 +163,7 @@ test("drag is draft-only, Apply persists, stale orders preserve drafts, and offl
       "Numeric editing remains available",
     );
     await page.locator("#paper-edit-price").fill("109");
+    await page.locator("#paper-edit-review").click();
     await page.locator("#paper-edit-apply").click();
     await expect
       .poll(async () => (await a.snapshot()).orders[0].price)

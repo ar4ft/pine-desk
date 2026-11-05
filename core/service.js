@@ -236,6 +236,8 @@ export async function dispatch(action, args = {}) {
       return paperDraftChart(paperAccount, args);
     case "paperOrderChart":
       return paperOrderChart(paperAccount, args);
+    case "paperAmendPreview":
+      return paperAccount.amendPreview(args);
     case "paperAmend":
       return paperAccount.amend(args);
     case "paperSetRisk":

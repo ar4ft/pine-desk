@@ -8,13 +8,31 @@ const esc = (v) =>
         c
       ],
   );
+const editArgs = (d) => ({
+  id: d.id,
+  expectedRevision: d.expectedRevision,
+  price: Number(d.price),
+  quantity: Number(d.quantity),
+  ...(d.order.bracket
+    ? { targetQuantities: d.targetQuantities.map(Number) }
+    : {}),
+});
+const display = (n) => n.toLocaleString("en-US", { maximumFractionDigits: 8 });
+const errorText = (e) => {
+  try {
+    const items = JSON.parse(e.message);
+    if (Array.isArray(items))
+      return items.map((x) => `${x.path?.join(".")}: ${x.message}`).join("; ");
+  } catch {}
+  return e.message;
+};
 export function destroyPaperOrderEditor(s) {
   s.orderEditorController?.dispose();
   s.orderEditorController = null;
 }
 export function paperOrderEditorView(s) {
   return s.account
-    ? '<section class="plot-card" id="paper-order-editor"><div class="panel-heading"><span>EDIT A PAPER ORDER ON THE CHART</span><span>Draft changes · explicit Apply</span></div><div id="paper-order-editor-body"></div></section>'
+    ? '<section class="plot-card" id="paper-order-editor"><div class="panel-heading"><span>EDIT A PAPER ORDER ON THE CHART</span><span>Draft → review → Apply</span></div><div id="paper-order-editor-body"></div></section>'
     : "";
 }
 export function bindPaperOrderEditor({
@@ -59,19 +77,38 @@ export function bindPaperOrderEditor({
         ? "This order is no longer pending. Choose another order; this draft cannot be applied."
         : stale
           ? "Account changed while editing. Reload order before applying; your draft is preserved until then."
-          : "Drag the amber draft line or enter a price, then Apply. The saved order remains active until Apply succeeds.";
+          : "Edit price, quantity or target allocations, then Review and Apply. The saved order remains active until Apply succeeds.";
+    const changed =
+      Number(d.price) !== d.order.price ||
+      Number(d.quantity) !== d.order.quantity ||
+      d.targetQuantities.some(
+        (q, i) => Number(q) !== d.order.bracket.targets[i].quantity,
+      );
+    const editable = !applying && !terminal && !stale;
+    const review = document.getElementById("paper-edit-review");
+    if (review)
+      review.disabled =
+        !editable ||
+        !priceValid() ||
+        !Number.isFinite(Number(d.quantity)) ||
+        Number(d.quantity) <= 0 ||
+        !changed;
     const apply = document.getElementById("paper-edit-apply");
     if (apply)
       apply.disabled =
-        applying ||
-        terminal ||
-        stale ||
-        !priceValid() ||
-        Number(d.price) === d.order.price;
+        !editable ||
+        !d.review ||
+        d.review.fingerprint !== JSON.stringify(editArgs(d));
     const error = document.getElementById("paper-edit-error");
     if (error) error.textContent = d.applyError || "";
-    const input = document.getElementById("paper-edit-price");
-    if (input) input.disabled = applying || terminal;
+    for (const input of host.querySelectorAll("[data-paper-edit-input]"))
+      input.disabled = applying || terminal;
+    const summary = document.getElementById("paper-edit-review-body"),
+      r = d.review?.result;
+    if (summary)
+      summary.innerHTML = r
+        ? `<p class="footnote"><strong>Reviewed account r${r.accountRevision}</strong> · ${r.orders.map((o) => `${esc(o.leg ?? o.type)} ${esc(o.quantity)} @ ${esc(o.price)}${o.bracket ? ` · target quantities ${o.bracket.targets.map((t) => esc(t.quantity)).join(", ")}` : ""}`).join(" · ")}<br>Cash reservation: ${display(r.cashReservationBefore)} → ${display(r.cashReservationAfter)} USDT. Held quantity reservation (pair counted once): ${display(r.quantityReservationBefore)} → ${display(r.quantityReservationAfter)}. Available cash after edit: ${display(r.availableCashAfter)} USDT; unreserved holdings: ${display(r.unreservedHoldingAfter)}. This is a preview; Apply saves it.</p>`
+        : "";
     if (chart && lineId) {
       const locked = applying || terminal;
       if (
@@ -208,6 +245,8 @@ export function bindPaperOrderEditor({
         const line = instance.drawings.all().find((l) => l.id === lineId),
           price = line?.anchors?.[0]?.price;
         if (!Number.isFinite(price)) return;
+        d.review = null;
+        d.applyError = "";
         d.price = String(Number(price.toPrecision(12)));
         document.getElementById("paper-edit-price").value = d.price;
         node.dataset.draftPrice = d.price;
@@ -243,11 +282,48 @@ export function bindPaperOrderEditor({
       .map((l) => `${esc(l.title)}: ${esc(l.price)}`)
       .join(
         " · ",
-      )}</p><p id="paper-edit-notice" role="status" class="footnote"></p><p id="paper-edit-error" role="alert" class="footnote"></p><div class="searchbar"><label>Draft price (USDT)<input id="paper-edit-price" type="number" step="any" value="${esc(d.price)}"></label><button id="paper-edit-apply">Apply price edit</button><button id="paper-edit-reload">Reload order · discard draft</button><label>Candle interval<select id="paper-edit-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option value="${t}" ${d.timeframe === t ? "selected" : ""}>${t}</option>`).join("")}</select></label><button id="paper-edit-candles">Refresh candles</button><button id="paper-edit-fit">Fit draft level</button></div><p id="paper-edit-chart-status" class="footnote"></p><div id="paper-edit-chart" data-order-id="${d.id}" aria-label="Paper order price editor"></div><p class="footnote">Only the amber line changes this price draft. Reference lines are saved levels. No quantity, cost assumption or source-plan edits. Attached bracket levels stay unchanged. Deleting a drawing does not cancel an order; use Cancel in the order list. Monitoring can fill orders while you edit; stale drafts must be reloaded.</p>`;
+      )}</p><p id="paper-edit-notice" role="status" class="footnote"></p><p id="paper-edit-error" role="alert" class="footnote"></p><div class="searchbar"><label>Draft price (USDT)<input id="paper-edit-price" type="number" step="any" data-paper-edit-input value="${esc(d.price)}"></label><label>Draft quantity<input id="paper-edit-quantity" data-paper-edit-input type="number" step="any" value="${esc(d.quantity)}"></label>${d.order.bracket ? d.order.bracket.targets.map((t, i) => `<label>Target ${i + 1} quantity @ ${esc(t.price)}<input id="paper-edit-target-${i}" data-paper-edit-input type="number" step="any" value="${esc(d.targetQuantities[i])}"></label>`).join("") : ""}<button id="paper-edit-review">Review edit</button><button id="paper-edit-apply">Apply reviewed edit</button><button id="paper-edit-reload">Reload order · discard draft</button><label>Candle interval<select id="paper-edit-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option value="${t}" ${d.timeframe === t ? "selected" : ""}>${t}</option>`).join("")}</select></label><button id="paper-edit-candles">Refresh candles</button><button id="paper-edit-fit">Fit draft level</button></div><div id="paper-edit-review-body"></div><p id="paper-edit-chart-status" class="footnote"></p><div id="paper-edit-chart" data-order-id="${d.id}" aria-label="Paper order price editor"></div><p class="footnote">Only the amber line changes this price draft. Reference lines are saved levels. Quantity edits recheck reservations. Bracket target quantities must sum to the entry quantity; prices and target count stay unchanged. Active stop/target pairs resize together, up to their original allocation; released holdings receive no replacement exit. Fees, slippage and source plans stay unchanged. Deleting a drawing does not cancel an order; use Cancel in the order list. Monitoring can fill orders while you edit; stale drafts must be reloaded.</p>`;
     document.getElementById("paper-edit-price").oninput = (e) => {
+      d.review = null;
+      d.applyError = "";
       d.price = e.target.value;
       setLine();
     };
+    document.getElementById("paper-edit-quantity").oninput = (e) => {
+      d.quantity = e.target.value;
+      d.review = null;
+      d.applyError = "";
+      paint();
+    };
+    d.targetQuantities.forEach(
+      (_, i) =>
+        (document.getElementById(`paper-edit-target-${i}`).oninput = (e) => {
+          d.targetQuantities[i] = e.target.value;
+          d.review = null;
+          d.applyError = "";
+          paint();
+        }),
+    );
+    document.getElementById("paper-edit-review").onclick = () =>
+      operation(async () => {
+        const args = editArgs(d),
+          fingerprint = JSON.stringify(args);
+        d.review = null;
+        d.applyError = "";
+        applying = true;
+        paint();
+        try {
+          const result = await call("paperAmendPreview", args);
+          if (valid() && JSON.stringify(editArgs(d)) === fingerprint)
+            d.review = { result, fingerprint };
+        } catch (e) {
+          d.applyError = errorText(e);
+          throw Error(d.applyError);
+        } finally {
+          applying = false;
+          paint();
+        }
+      });
     document.getElementById("paper-edit-fit").onclick = () => setLine(true);
     document.getElementById("paper-edit-candles").onclick = () =>
       operation(async () => {
@@ -264,25 +340,24 @@ export function bindPaperOrderEditor({
       });
     document.getElementById("paper-edit-apply").onclick = () =>
       operation(async () => {
-        const price = Number(d.price);
+        const args = editArgs(d);
+        if (!d.review || d.review.fingerprint !== JSON.stringify(args))
+          throw Error("Review this edit before applying it.");
         d.applyError = "";
         applying = true;
         paint();
         try {
-          s.account = await call("paperAmend", {
-            id: d.id,
-            expectedRevision: d.expectedRevision,
-            price,
-          });
+          s.account = await call("paperAmend", args);
           if (!valid()) return;
           choose(d.id, d.dataset);
           renderEditor();
           await mount();
           s.message =
-            "Paper order price updated. Its next fill requires a new quote requested after the edit.";
+            "Paper order updated. Affected orders require a new quote requested after the edit.";
         } catch (e) {
-          d.applyError = e.message;
-          throw e;
+          d.review = null;
+          d.applyError = errorText(e);
+          throw Error(d.applyError);
         } finally {
           applying = false;
           paint();
@@ -298,6 +373,10 @@ export function bindPaperOrderEditor({
       id,
       order: structuredClone(order),
       price: String(order.price),
+      quantity: String(order.quantity),
+      targetQuantities:
+        order.bracket?.targets.map((t) => String(t.quantity)) ?? [],
+      review: null,
       expectedRevision: s.account.revision,
       timeframe: s.orderEdit?.timeframe ?? "1h",
       dataset: dataset?.symbol === order.symbol ? dataset : null,

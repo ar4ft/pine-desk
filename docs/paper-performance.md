@@ -40,7 +40,7 @@ The trade list and fill inspector paginate at 100 rows. **Inspect fills** shows 
 
 **Export loaded JSON** includes the method, filters, account revision, totals, reconciliation, all selected trades and their fills. **Export trades CSV** contains one row per selected completed/open trade, including the account revision and raw epoch-millisecond timestamps. JSON preserves the full scope and fill references; CSV is the tabular trade summary. Both include all matching rows, not just the displayed page.
 
-Results and exports remain tied to the loaded account revision. New orders/fills show a refresh notice but do not overwrite the report. Exports do not silently recalculate against a newer account. The screen snapshot survives page navigation during the session; after an app restart, load it again from the durable account. No archive migration or additional storage format is needed; the account remains version 4.
+Results and exports remain tied to the loaded account revision. New orders/fills show a refresh notice but do not overwrite the report. Exports do not silently recalculate against a newer account. The screen snapshot survives page navigation during the session; after an app restart, load it again from the durable account. Performance reports introduce no additional storage format. Account archives use version 5 since v0.27.0; see [quantity editing](paper-order-quantity.md) for migration details.
 
 ## Reconciliation and MCP
 

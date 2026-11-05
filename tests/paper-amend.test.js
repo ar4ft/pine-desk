@@ -113,7 +113,7 @@ test("amendments recheck risk without double reservation, reject malformed and n
     { price: 0 },
     { price: Infinity },
     { price: NaN },
-    { quantity: 2 },
+    { quantity: 0 },
     { id: "bad" },
     { expectedRevision: 0 },
   ])
@@ -221,8 +221,8 @@ test("amend versus cancel or fill races serialize behind revision guards; market
   s = await f.submit({ type: "market", price: undefined, maxNotional: 120 });
   await assert.rejects(f.amend(s.orders.at(-1).id, 120), /Only pending/);
 });
-test("legacy v1-v3 accounts migrate on price edit, with no read-time rewrite", async () => {
-  for (const version of [1, 2, 3]) {
+test("legacy v1-v4 accounts migrate on price edit, with no read-time rewrite", async () => {
+  for (const version of [1, 2, 3, 4]) {
     const f = fixture();
     await f.a.create({ initialCash: 1000 });
     const s = await f.submit();
@@ -230,7 +230,7 @@ test("legacy v1-v3 accounts migrate on price edit, with no read-time rewrite", a
     await f.a.snapshot();
     assert.equal(f.doc().version, version);
     await f.amend(s.orders[0].id, 110);
-    assert.equal(f.doc().version, 4);
+    assert.equal(f.doc().version, 5);
     assert.equal(
       (await new PaperAccount(f.opts).snapshot()).orders[0].price,
       110,
@@ -283,7 +283,7 @@ test("MCP amendments require research and strict revision/price inputs; order ch
       id: randomUUID(),
       price: 100,
       expectedRevision: 2,
-      quantity: 3,
+      feePercent: 1,
     }).success,
     false,
   );

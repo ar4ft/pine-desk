@@ -128,7 +128,7 @@ function results(s) {
       .reverse()
       .map(
         (e) =>
-          `<li>${date(e.at)} · ${esc(e.kind)} · ${e.kind === "risk" ? `Buy entries ${e.policy.pauseBuys ? "paused" : "enabled"}; policy saved (full caps in export)` : `<code>${esc(e.id)}</code>${e.kind === "amend" ? ` · price → ${num(e.price)}` : ""}`}</li>`,
+          `<li>${date(e.at)} · ${esc(e.kind)} · ${e.kind === "risk" ? `Buy entries ${e.policy.pauseBuys ? "paused" : "enabled"}; policy saved (full caps in export)` : `<code>${esc(e.id)}</code>${e.kind === "amend" ? ` · price → ${num(e.price)}${e.quantity === undefined ? "" : ` · quantity → ${num(e.quantity)}`}${e.targetQuantities ? ` · target quantities: ${e.targetQuantities.map(num).join(", ")}` : ""}` : ""}`}</li>`,
       )
       .join("") || "<li>Account created; no orders yet.</li>"
   }</ol></details>`;
@@ -304,7 +304,7 @@ export function bindPaper({
       const account = await call("paperSnapshot");
       await exportFile(
         "paper-account.json",
-        JSON.stringify({ modelVersion: 4, account }, null, 2),
+        JSON.stringify({ modelVersion: 5, account }, null, 2),
       );
       s.message = "Exported the latest saved account and complete ledger.";
     });
