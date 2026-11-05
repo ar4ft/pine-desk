@@ -270,6 +270,49 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
       "Desktop fill review survives restart",
     );
     assert.equal((await call(client, "paper_account")).revision, 13);
+    const draftBars = await call(client, "paper_draft_chart", {
+      symbol: "BTCUSDT",
+      timeframe: "1h",
+    });
+    assert.equal(draftBars.bars.length, 300);
+    const preview = await call(client, "paper_preview", {
+      expectedRevision: 13,
+      input: {
+        symbol: "BTCUSDT",
+        side: "sell",
+        type: "limit",
+        quantity: 0.25,
+        price: 150,
+        feePercent: 0,
+        slippage: 0,
+      },
+    });
+    assert.equal(preview.reservedQuantityAdded, 0.25);
+    assert.equal((await call(client, "paper_account")).revision, 13);
+    await page.locator("#paper-compose-mode").selectOption("sell-limit");
+    await page.locator("#paper-compose-quantity").fill("0.25");
+    await page.locator("#paper-compose-price").fill("150");
+    await page.locator("#paper-compose-load").click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#paper-compose-chart")?.dataset.ready ===
+        "true",
+    );
+    await page.locator("#paper-compose-review").click();
+    await page.waitForFunction(
+      () => !document.querySelector("#paper-compose-submit")?.disabled,
+    );
+    await page.locator("#paper-compose-submit").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-compose-notice")
+        ?.textContent.includes("is recorded"),
+    );
+    account = await call(client, "paper_account");
+    assert.equal(account.revision, 14);
+    assert.equal(account.orders.at(-1).price, 150);
+    assert.equal(account.orders.at(-1).quantity, 0.25);
+    assert.equal(account.fills.length, 4);
   } finally {
     await app.evaluate(async () => {
       const f = globalThis.pineDeskPaperSmoke;

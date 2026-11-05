@@ -542,6 +542,42 @@ export class PaperAccount {
       });
     });
   }
+  preview(args) {
+    return this.serial(async () => {
+      const { input, expectedRevision } = z
+        .object({
+          input: paperOrderSchema,
+          expectedRevision: z.number().int().positive(),
+        })
+        .strict()
+        .parse(args);
+      const doc = await this.read();
+      this.check(doc, expectedRevision);
+      await this.validateMarket(input.symbol);
+      const at = this.time(doc),
+        state = replay(doc, at),
+        before = available(state);
+      apply(state, {
+        kind: "submit",
+        at,
+        id: randomUUID(),
+        requestId: randomUUID(),
+        input,
+        plan: null,
+      });
+      const after = available(state);
+      return {
+        accountRevision: expectedRevision,
+        input,
+        availableCashBefore: before.availableCash,
+        availableCashAfter: after.availableCash,
+        reservedCashAdded: input.side === "buy" ? clean(reserve(input)) : 0,
+        reservedQuantityAdded: input.side === "sell" ? input.quantity : 0,
+        risk: state.risk,
+        riskUsage: paperRiskUsage(state, at),
+      };
+    });
+  }
   setRisk({ expectedRevision, policy }) {
     return this.serial(async () => {
       policy = paperRiskSchema.parse(policy);

@@ -1,5 +1,5 @@
 import { paperPerformance } from "./paper-performance.js";
-import { paperOrderChart } from "./paper-order-chart.js";
+import { paperOrderChart, paperDraftChart } from "./paper-order-chart.js";
 import { paperHistoryStorage } from "./paper-history-storage.js";
 import { PaperJournal } from "./paper-journal.js";
 import { PaperHistory } from "./paper-history.js";
@@ -230,6 +230,10 @@ export async function dispatch(action, args = {}) {
         requestId: args.requestId,
         input: args.input,
       });
+    case "paperPreview":
+      return paperAccount.preview(args);
+    case "paperDraftChart":
+      return paperDraftChart(paperAccount, args);
     case "paperOrderChart":
       return paperOrderChart(paperAccount, args);
     case "paperAmend":

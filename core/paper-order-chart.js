@@ -26,3 +26,22 @@ export async function paperOrderChart(account, args, fetchBars = fetchBinance) {
     origin: "Binance public settled candles · chart snapshot only",
   };
 }
+
+export async function paperDraftChart(account, args, fetchBars = fetchBinance) {
+  const { symbol, timeframe } = z
+    .object({
+      symbol: z.string().regex(/^[A-Z0-9]{2,20}USDT$/),
+      timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]).default("1h"),
+    })
+    .strict()
+    .parse(args);
+  await account.validateMarket(symbol);
+  const bars = await fetchBars({ symbol, timeframe, limit: 300 });
+  return {
+    symbol,
+    timeframe,
+    bars,
+    loadedAt: Date.now(),
+    origin: "Binance public settled candles · draft context only",
+  };
+}

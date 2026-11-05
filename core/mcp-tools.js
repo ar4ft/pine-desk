@@ -119,6 +119,21 @@ export function toolDefinitions() {
     false,
   );
   tool(
+    "paper_preview",
+    "Validate a proposed simulated order against the current account revision, active Binance market, cash/holding reservations, capacity, bracket rules and entry risk limits. Returns reservation impact without persisting an order, requesting execution quotes or starting monitoring. Recheck with paper_submit to queue; a preview does not reserve funds.",
+    { input: paperOrderSchema, expectedRevision: paperRevision },
+    "paperPreview",
+  );
+  tool(
+    "paper_draft_chart",
+    "Read up to 300 settled public Binance candles for a validated USDT spot symbol. Chart context for a proposed paper order only; no orders, workspace dataset changes or monitoring.",
+    {
+      symbol: z.string().regex(/^[A-Z0-9]{2,20}USDT$/),
+      timeframe: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]).default("1h"),
+    },
+    "paperDraftChart",
+  );
+  tool(
     "paper_order_chart",
     "Read up to 300 settled public Binance candles for a pending limit/stop order's own symbol. Independent chart snapshot; does not change workspace bars, start streaming or process orders.",
     {

@@ -214,3 +214,21 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+#paper-composer .searchbar {
+  padding: 0 16px 16px;
+}
+#paper-composer #paper-compose-bracket {
+  width: auto;
+}
+#paper-compose-chart {
+  height: 420px;
+  position: relative;
+  margin: 0 16px;
+}
+#paper-compose-chart:empty {
+  height: 0;
+}
+#paper-composer .footnote {
+  overflow-wrap: anywhere;
+}

@@ -1,4 +1,5 @@
-import { Vela, registerNativeIndicator } from "@luxalgo/vela";
+import { Vela } from "@luxalgo/vela";
+import { paperLevelsType } from "./paper-chart-levels.js";
 const esc = (v) =>
   String(v ?? "").replace(
     /[&<>"']/g,
@@ -7,47 +8,6 @@ const esc = (v) =>
         c
       ],
   );
-const type = "pine-desk-paper-order-levels";
-registerNativeIndicator({
-  type,
-  title: "Paper order reference levels",
-  overlay: true,
-  paneHint: "price",
-  legend: false,
-  inputsSchema: () => [],
-  defaultInputs: () => ({ levels: "[]" }),
-  create() {
-    let ctx, inputs;
-    const emit = () =>
-      ctx?.emit({
-        priceLines: JSON.parse(inputs.levels).map((l, i) => ({
-          id: `paper-ref-${i}`,
-          paneId: "price",
-          ...l,
-          width: 1,
-          lineStyle: "dashed",
-        })),
-      });
-    return {
-      start(c, i) {
-        ctx = c;
-        inputs = i;
-        emit();
-      },
-      setInputs(i) {
-        inputs = i;
-        emit();
-      },
-      onBars: emit,
-      onViewport() {},
-      suspend() {},
-      resume: emit,
-      stop() {
-        ctx = null;
-      },
-    };
-  },
-});
 export function destroyPaperOrderEditor(s) {
   s.orderEditorController?.dispose();
   s.orderEditorController = null;
@@ -233,7 +193,7 @@ export function bindPaperOrderEditor({
       const instance = chart;
       await instance.ready();
       if (!valid() || generation !== token || chart !== instance) return;
-      native = instance.addNativeIndicator(type);
+      native = instance.addNativeIndicator(paperLevelsType);
       native.setInputs({ levels: JSON.stringify(levels(true)) });
       addLine();
       instance.on("drawing:edited", ({ id }) => {

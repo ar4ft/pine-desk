@@ -34,4 +34,4 @@ Use the actual order ID and current account revision from `paper_account`. No-op
 
 Account archive version 4 retains ordered submit, cancel, process, risk and amend events. Version 1–3 accounts replay without a read-time rewrite and migrate on their next successful mutation. Older app versions cannot read version-4 archives. Export the account before downgrading; export restore/import is not implemented.
 
-This release edits existing pending prices. Chart-based order creation, quantity editing, trailing stops, attaching linked exits to existing holdings, options paper trading and broker execution remain separate work. See [paper account model](paper-trading.md) and [journal/history](paper-journal-history.md).
+This release edits existing pending prices. [Chart-based order creation](paper-chart-orders.md) arrived in v0.26.0. Quantity editing, trailing stops, attaching linked exits to existing holdings, options paper trading and broker execution remain separate work. See [paper account model](paper-trading.md) and [journal/history](paper-journal-history.md).

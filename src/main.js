@@ -1,3 +1,4 @@
+import { destroyPaperComposer } from "./paper-order-composer.js";
 import { destroyPaperOrderEditor } from "./paper-order-editor.js";
 import {
   newPaperState,
@@ -348,6 +349,7 @@ function chartAppearance() {
 }
 function updateAppearance() {
   state.paper.orderEditorController?.appearance();
+  state.paper.composerController?.appearance();
   linkedCharts.updateAppearance();
   applyAppearance(state.appearance);
   if (chart) {
@@ -543,6 +545,7 @@ function render() {
   retainPlanDraft(state.plans);
   retainPaperDraft(state.paper);
   destroyPaperOrderEditor(state.paper);
+  destroyPaperComposer(state.paper);
   retainOptionsDraft(state.options);
   retainResearchDraft(state.research);
   retainWhaleDraft(state.whale);
