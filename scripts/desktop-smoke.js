@@ -307,11 +307,11 @@ try {
   assert.equal(paper.fills.length, 4);
   assert.equal(paper.positions.BTCUSDT.quantity, 1.5);
   assert.equal(paper.cash, 856.48);
-  assert.equal(paper.revision, 14);
+  assert.equal(paper.revision, 17);
   const performance = await reopened.evaluate(() =>
     window.desk.call("paperPerformance"),
   );
-  assert.equal(performance.accountRevision, 14);
+  assert.equal(performance.accountRevision, 17);
   assert.equal(performance.summary.closedCount, 0);
   assert.equal(performance.openTrades.length, 1);
   assert.equal(performance.openTrades[0].fills.length, 4);
@@ -320,12 +320,21 @@ try {
       performance.reconciliation.accountRealizedPnl - paper.realizedPnl,
     ) < 1e-8,
   );
-  assert.equal(paper.orders.at(-2).price, 136);
-  assert.equal(paper.orders.at(-2).quantity, 0.3);
-  assert.equal(paper.orders.at(-1).price, 150);
-  assert.equal(paper.orders.at(-1).quantity, 0.25);
-  assert.equal(paper.orders.at(-2).amendments, 2);
+  assert.equal(paper.orders.at(-3).price, 136);
+  assert.equal(paper.orders.at(-3).quantity, 0.3);
+  assert.equal(paper.orders.at(-3).amendments, 2);
+  assert.equal(paper.orders.at(-2).price, 150);
+  assert.equal(paper.orders.at(-2).quantity, 0.25);
+  assert.equal(paper.orders.at(-2).status, "pending");
+  assert.equal(paper.orders.at(-1).price, 80);
+  assert.equal(paper.orders.at(-1).quantity, 0.3);
   assert.equal(paper.orders.at(-1).status, "pending");
+  assert.equal(paper.orders.at(-1).bracket.stop, 70);
+  assert.deepEqual(paper.orders.at(-1).bracket.targets, [
+    { price: 90, quantity: 0.05 },
+    { price: 100, quantity: 0.1 },
+    { price: 110, quantity: 0.15 },
+  ]);
   assert.equal(paper.risk.pauseBuys, true);
   assert.equal(paper.risk.maxOrderCost, 150);
   assert.equal(paper.risk.maxMarkets, 2);

@@ -59,6 +59,7 @@ export function performanceFixture() {
     fill,
     raw: () => structuredClone(doc),
     writes: () => writes,
+    advance: (ms = 1000) => (at += ms),
   };
 }
 export async function seedPerformance(f) {

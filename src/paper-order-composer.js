@@ -9,6 +9,12 @@ const esc = (v) =>
       ],
   );
 const money = (v) => v.toLocaleString("en-US", { maximumFractionDigits: 8 });
+const targetFields = [
+  ["target", "targetQuantity"],
+  ["target2", "targetQuantity2"],
+  ["target3", "targetQuantity3"],
+];
+const selectedTargets = (d) => targetFields.slice(0, Number(d.targetCount));
 const initial = () => ({
   symbol: "BTCUSDT",
   timeframe: "1h",
@@ -19,6 +25,12 @@ const initial = () => ({
   price: "",
   stop: "",
   target: "",
+  target2: "",
+  target3: "",
+  targetCount: "1",
+  targetQuantity: "",
+  targetQuantity2: "",
+  targetQuantity3: "",
   bracket: false,
   dataset: null,
   preview: null,
@@ -37,7 +49,8 @@ const keys = [
   "slippage",
   "price",
   "stop",
-  "target",
+  "targetCount",
+  ...targetFields.flat(),
   "bracket",
 ];
 const number = (v) =>
@@ -70,7 +83,7 @@ export function paperComposerView(s) {
     )
     .join(
       "",
-    )}</select></label><label>Candles<select id="paper-compose-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${d.timeframe === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>${field("quantity", "Quantity (base asset)")}${field("feePercent", "Fee per fill (%)")}${field("slippage", "Adverse slippage (price units)")}${field("price", "Entry / exit price · amber")}<label id="paper-compose-bracket-label"><span><input id="paper-compose-bracket" type="checkbox" ${d.bracket ? "checked" : ""}> Linked stop and target after entry fills</span></label>${field("stop", "Linked stop · red")}${field("target", "Linked target · green")}</div><div class="searchbar"><button id="paper-compose-load">Load chart · seed blank levels</button><button id="paper-compose-fit">Fit draft levels</button><button id="paper-compose-review">Review order</button><button id="paper-compose-submit">Queue reviewed order</button><button id="paper-compose-check">Check submission</button><button id="paper-compose-new">New draft</button></div><p class="footnote" id="paper-compose-notice" role="status"></p><p class="paper-monitor-error" id="paper-compose-error" role="alert"></p><div id="paper-compose-review-body"></div><p class="footnote" id="paper-compose-chart-status"></p><div id="paper-compose-chart" aria-label="New paper order chart"></div><p class="footnote">Drag the amber price and optional red stop/green target, or type exact values. Loading seeds only blank levels from the last settled close: entry at close, stop 2% below and target 2% above. These are editable starting values. Candles never trigger fills. Review checks current funds, holdings and risk limits without reserving anything; Queue submits the reviewed order. A running monitor can then fill it. Linked exits use the full entry quantity and activate only after its fill. No exchange orders.</p></section>`;
+    )}</select></label><label>Candles<select id="paper-compose-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${d.timeframe === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>${field("quantity", "Quantity (base asset)")}${field("feePercent", "Fee per fill (%)")}${field("slippage", "Adverse slippage (price units)")}${field("price", "Entry / exit price · amber")}<label id="paper-compose-bracket-label"><span><input id="paper-compose-bracket" type="checkbox" ${d.bracket ? "checked" : ""}> Linked stop and targets after entry fills</span></label>${field("stop", "Linked stop · red")}<label id="paper-compose-target-count-label">Targets<select id="paper-compose-targetCount">${[1, 2, 3].map((n) => `<option value="${n}" ${Number(d.targetCount) === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>${targetFields.map(([price, quantity], i) => `${field(price, `Target ${i + 1} price · green`)}${field(quantity, `Target ${i + 1} quantity`)}`).join("")}</div><div class="searchbar"><button id="paper-compose-load">Load chart · seed blank levels</button><button id="paper-compose-fit">Fit draft levels</button><button id="paper-compose-review">Review order</button><button id="paper-compose-submit">Queue reviewed order</button><button id="paper-compose-check">Check submission</button><button id="paper-compose-new">New draft</button></div><p class="footnote" id="paper-compose-notice" role="status"></p><p class="paper-monitor-error" id="paper-compose-error" role="alert"></p><div id="paper-compose-review-body"></div><p class="footnote" id="paper-compose-chart-status"></p><div id="paper-compose-chart" aria-label="New paper order chart"></div><p class="footnote">Drag the amber price and optional red stop/green targets, or type exact values. Loading seeds only blank levels from the last settled close: entry at close, stop 2% below and targets 2%, 4% and 6% above. These are editable starting values. Candles never trigger fills. Review checks current funds, holdings and risk limits without reserving anything; Queue submits the reviewed order. A running monitor can then fill it. A single target uses the full entry quantity. With two or three targets, enter each quantity explicitly; the total must match the entry and prices must increase above it. Each target has its own linked stop slice and activates only after the entry fills. No exchange orders.</p></section>`;
 }
 export function bindPaperComposer({
   s,
@@ -103,9 +116,13 @@ export function bindPaperComposer({
       ? {
           bracket: {
             stop: Number(d.stop),
-            targets: [
-              { price: Number(d.target), quantity: Number(d.quantity) },
-            ],
+            targets: selectedTargets(d).map(([price, quantity]) => ({
+              price: Number(d[price]),
+              quantity:
+                Number(d.targetCount) === 1
+                  ? Number(d.quantity)
+                  : Number(d[quantity]),
+            })),
           },
         }
       : {}),
@@ -115,7 +132,11 @@ export function bindPaperComposer({
     ...(d.mode === "buy-limit" && d.bracket
       ? [
           ["stop", "STOP", "#e27685"],
-          ["target", "TARGET", "#4db994"],
+          ...selectedTargets(d).map(([k], i) => [
+            k,
+            `TARGET ${i + 1}`,
+            "#4db994",
+          ]),
         ]
       : []),
   ];
@@ -133,8 +154,16 @@ export function bindPaperComposer({
       stale = d.preview && d.preview.accountRevision !== s.account?.revision;
     for (const k of keys) el(k).disabled = frozen;
     el("bracket-label").hidden = d.mode !== "buy-limit";
-    for (const k of ["stop", "target"])
-      el(k).parentElement.hidden = d.mode !== "buy-limit" || !d.bracket;
+    const linked = d.mode === "buy-limit" && d.bracket;
+    el("stop").parentElement.hidden = !linked;
+    el("target-count-label").hidden = !linked;
+    targetFields.forEach(([price, quantity], i) => {
+      for (const k of [price, quantity])
+        el(k).parentElement.hidden = !linked || i >= Number(d.targetCount);
+      el(quantity).readOnly = Number(d.targetCount) === 1;
+      el(quantity).value =
+        Number(d.targetCount) === 1 && i === 0 ? d.quantity : d[quantity];
+    });
     for (const k of ["load", "review", "fit"]) el(k).disabled = frozen;
     el("submit").disabled = frozen || !d.preview || stale;
     el("check").disabled = busy || !d.attempt || d.attempt.confirmed;
@@ -156,7 +185,7 @@ export function bindPaperComposer({
         : "Load public candles for this market, or enter prices numerically.");
     const p = d.preview;
     el("review-body").innerHTML = p
-      ? `<p class="footnote"><strong>Reviewed account r${p.accountRevision}</strong> · ${esc(p.input.symbol)} · ${esc(p.input.side)} ${esc(p.input.type)} · ${p.input.quantity} @ ${p.input.price} · fee ${p.input.feePercent}% · slippage ${p.input.slippage}${p.input.bracket ? ` · linked stop ${p.input.bracket.stop}, target ${p.input.bracket.targets[0].price} (full quantity)` : ""}<br>Additional cash reservation: ${money(p.reservedCashAdded)} USDT · additional held quantity reserved: ${p.reservedQuantityAdded}. Available cash: ${money(p.availableCashBefore)} → ${money(p.availableCashAfter)} USDT. No funds are reserved until Queue succeeds.</p>`
+      ? `<p class="footnote"><strong>Reviewed account r${p.accountRevision}</strong> · ${esc(p.input.symbol)} · ${esc(p.input.side)} ${esc(p.input.type)} · ${p.input.quantity} @ ${p.input.price} · fee ${p.input.feePercent}% · slippage ${p.input.slippage}${p.input.bracket ? ` · linked stop ${p.input.bracket.stop}; ${p.input.bracket.targets.map((t, i) => `target ${i + 1}: ${t.quantity} @ ${t.price}`).join("; ")} (one stop/target pair per allocation)` : ""}<br>Additional cash reservation: ${money(p.reservedCashAdded)} USDT · additional held quantity reserved: ${p.reservedQuantityAdded}. Available cash: ${money(p.availableCashBefore)} → ${money(p.availableCashAfter)} USDT. No funds are reserved until Queue succeeds.</p>`
       : "";
     syncing = true;
     try {
@@ -294,8 +323,9 @@ export function bindPaperComposer({
         d.dataset = null;
         d.price = "";
         d.stop = "";
-        d.target = "";
-        for (const v of ["price", "stop", "target"]) el(v).value = "";
+        for (const [k] of targetFields) d[k] = "";
+        for (const v of ["price", "stop", ...targetFields.map(([k]) => k)])
+          el(v).value = "";
         destroyChart();
         d.chartError = "Market changed; load its candles or enter new prices.";
       }
@@ -310,7 +340,7 @@ export function bindPaperComposer({
         el("bracket").checked = false;
       }
       changed();
-      syncLines();
+      syncLines(k === "targetCount");
     };
   el("load").onclick = () =>
     run(async () => {
@@ -328,7 +358,10 @@ export function bindPaperComposer({
         for (const [k, value] of [
           ["price", data.bars.at(-1).close],
           ["stop", data.bars.at(-1).close * 0.98],
-          ["target", data.bars.at(-1).close * 1.02],
+          ...selectedTargets(d).map(([k], i) => [
+            k,
+            data.bars.at(-1).close * (1 + (i + 1) * 0.02),
+          ]),
         ])
           if (!String(d[k]).trim()) {
             d[k] = String(Number(Number(value).toPrecision(12)));

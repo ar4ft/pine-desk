@@ -81,15 +81,22 @@ test("depth ladder updates, preserves inputs and scroll, hides stale prices, and
     await page.locator("#depth-symbol").fill("Unsubmitted");
     await page.locator("#depth-limit").selectOption("50");
     await expect(page.locator(".depth-ladder.bids tbody tr")).toHaveCount(50);
-    await page.locator(".depth-ladder.bids .table-wrap").evaluate((el) => {
-      el.scrollTop = 150;
-    });
+    // Polling replaces the ladder nodes. Resolve and scroll in one browser
+    // task so a detached Playwright element handle cannot swallow the scroll.
+    expect(
+      await page.evaluate(() => {
+        const el = document.querySelector(".depth-ladder.bids .table-wrap");
+        el.scrollTop = 150;
+        return el.scrollTop;
+      }),
+    ).toBe(150);
     send(102);
     await expect(page.locator(".depth-identity")).toContainText("Sequence 102");
     expect(
-      await page
-        .locator(".depth-ladder.bids .table-wrap")
-        .evaluate((el) => el.scrollTop),
+      await page.evaluate(
+        () =>
+          document.querySelector(".depth-ladder.bids .table-wrap").scrollTop,
+      ),
     ).toBe(150);
     await expect(page.locator("#depth-symbol")).toHaveValue("Unsubmitted");
     for (const theme of ["light", "dark"]) {

@@ -6,7 +6,7 @@ Account foundation in v0.19.0; monitoring, linked exits and valuation added in v
 
 [Completed trades and performance](paper-performance.md) were added in v0.25.0, grouping each market from flat to flat and keeping open-cycle realized results separate.
 
-[Chart-based order creation](paper-chart-orders.md) was added in v0.26.0, with draggable drafts, read-only reservation/risk validation and explicit queueing.
+[Chart-based order creation](paper-chart-orders.md) was added in v0.26.0, with draggable drafts, read-only reservation/risk validation and explicit queueing; v0.28.0 adds up to three targets with explicit allocations.
 
 ## Workflow
 
@@ -155,4 +155,4 @@ Example `paper_set_risk` arguments (use the current account revision; all policy
 
 ## Next stage
 
-Per-plan lot attribution, portfolio return statistics, multi-target chart creation, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.
+Per-plan lot attribution, portfolio return statistics, attaching exits to existing holdings, trailing stops, account archival/reset and options paper trading remain separate work. Existing options research/replay is unaffected by this spot-account model.

@@ -331,6 +331,60 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
     assert.equal(account.orders.at(-1).price, 150);
     assert.equal(account.orders.at(-1).quantity, 0.25);
     assert.equal(account.fills.length, 4);
+    account = await call(client, "paper_set_risk", {
+      expectedRevision: account.revision,
+      policy: { ...account.risk, pauseBuys: false },
+    });
+    await page.locator("#paper-compose-new").click();
+    await page.locator("#paper-compose-quantity").fill("0.3");
+    await page.locator("#paper-compose-price").fill("80");
+    await page.locator("#paper-compose-bracket").check();
+    await page.locator("#paper-compose-targetCount").selectOption("3");
+    for (const [key, value] of [
+      ["stop", "70"],
+      ["target", "90"],
+      ["target2", "100"],
+      ["target3", "110"],
+      ["targetQuantity", "0.05"],
+      ["targetQuantity2", "0.1"],
+      ["targetQuantity3", "0.15"],
+    ])
+      await page.locator(`#paper-compose-${key}`).fill(value);
+    await page.locator("#paper-compose-load").click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector("#paper-compose-chart")?.dataset.ready ===
+        "true",
+    );
+    await page.locator("#paper-compose-review").click();
+    await page.waitForFunction(
+      () => !document.querySelector("#paper-compose-submit")?.disabled,
+    );
+    assert.ok(
+      (await page.locator("#paper-compose-review-body").textContent()).includes(
+        "target 3: 0.15 @ 110",
+      ),
+    );
+    assert.equal((await call(client, "paper_account")).revision, 15);
+    await page.locator("#paper-compose-submit").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-compose-notice")
+        ?.textContent.includes("is recorded"),
+    );
+    account = await call(client, "paper_account");
+    assert.equal(account.revision, 16);
+    assert.deepEqual(account.orders.at(-1).bracket.targets, [
+      { price: 90, quantity: 0.05 },
+      { price: 100, quantity: 0.1 },
+      { price: 110, quantity: 0.15 },
+    ]);
+    account = await call(client, "paper_set_risk", {
+      expectedRevision: account.revision,
+      policy: { ...account.risk, pauseBuys: true },
+    });
+    assert.equal(account.revision, 17);
+    assert.equal(account.fills.length, 4);
   } finally {
     await app.evaluate(async () => {
       const f = globalThis.pineDeskPaperSmoke;
