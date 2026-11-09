@@ -14,6 +14,13 @@ const targetFields = [
   ["target2", "targetQuantity2"],
   ["target3", "targetQuantity3"],
 ];
+const percentFields = ["targetPercent", "targetPercent2", "targetPercent3"];
+const sizingKeys = [
+  "riskBudget",
+  "maxNotional",
+  "quantityStep",
+  ...percentFields,
+];
 const selectedTargets = (d) => targetFields.slice(0, Number(d.targetCount));
 const initial = () => ({
   symbol: "BTCUSDT",
@@ -32,6 +39,14 @@ const initial = () => ({
   targetQuantity2: "",
   targetQuantity3: "",
   bracket: false,
+  riskSizing: false,
+  riskBudget: "10",
+  maxNotional: "1000",
+  quantityStep: "0.000001",
+  targetPercent: "",
+  targetPercent2: "",
+  targetPercent3: "",
+  sizing: null,
   dataset: null,
   preview: null,
   attempt: null,
@@ -52,6 +67,8 @@ const keys = [
   "targetCount",
   ...targetFields.flat(),
   "bracket",
+  "riskSizing",
+  ...sizingKeys,
 ];
 const number = (v) =>
   Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 1e12;
@@ -83,7 +100,7 @@ export function paperComposerView(s) {
     )
     .join(
       "",
-    )}</select></label><label>Candles<select id="paper-compose-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${d.timeframe === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>${field("quantity", "Quantity (base asset)")}${field("feePercent", "Fee per fill (%)")}${field("slippage", "Adverse slippage (price units)")}${field("price", "Entry / exit price · amber")}<label id="paper-compose-bracket-label"><span><input id="paper-compose-bracket" type="checkbox" ${d.bracket ? "checked" : ""}> Linked stop and targets after entry fills</span></label>${field("stop", "Linked stop · red")}<label id="paper-compose-target-count-label">Targets<select id="paper-compose-targetCount">${[1, 2, 3].map((n) => `<option value="${n}" ${Number(d.targetCount) === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>${targetFields.map(([price, quantity], i) => `${field(price, `Target ${i + 1} price · green`)}${field(quantity, `Target ${i + 1} quantity`)}`).join("")}</div><div class="searchbar"><button id="paper-compose-load">Load chart · seed blank levels</button><button id="paper-compose-fit">Fit draft levels</button><button id="paper-compose-review">Review order</button><button id="paper-compose-submit">Queue reviewed order</button><button id="paper-compose-check">Check submission</button><button id="paper-compose-new">New draft</button></div><p class="footnote" id="paper-compose-notice" role="status"></p><p class="paper-monitor-error" id="paper-compose-error" role="alert"></p><div id="paper-compose-review-body"></div><p class="footnote" id="paper-compose-chart-status"></p><div id="paper-compose-chart" aria-label="New paper order chart"></div><p class="footnote">Drag the amber price and optional red stop/green targets, or type exact values. Loading seeds only blank levels from the last settled close: entry at close, stop 2% below and targets 2%, 4% and 6% above. These are editable starting values. Candles never trigger fills. Review checks current funds, holdings and risk limits without reserving anything; Queue submits the reviewed order. A running monitor can then fill it. A single target uses the full entry quantity. With two or three targets, enter each quantity explicitly; the total must match the entry and prices must increase above it. Each target has its own linked stop slice and activates only after the entry fills. No exchange orders.</p></section>`;
+    )}</select></label><label>Candles<select id="paper-compose-timeframe">${["1m", "5m", "15m", "1h", "4h", "1d"].map((t) => `<option ${d.timeframe === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>${field("quantity", "Quantity (base asset)")}${field("feePercent", "Fee per fill (%)")}${field("slippage", "Adverse slippage (price units)")}${field("price", "Entry / exit price · amber")}<label id="paper-compose-bracket-label"><span><input id="paper-compose-bracket" type="checkbox" ${d.bracket ? "checked" : ""}> Linked stop and targets after entry fills</span></label>${field("stop", "Linked stop · red")}<label id="paper-compose-target-count-label">Targets<select id="paper-compose-targetCount">${[1, 2, 3].map((n) => `<option value="${n}" ${Number(d.targetCount) === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>${targetFields.map(([price, quantity], i) => `${field(price, `Target ${i + 1} price · green`)}${field(quantity, `Target ${i + 1} quantity`)}`).join("")}</div><div id="paper-compose-sizing-controls"><label><span><input id="paper-compose-riskSizing" type="checkbox" ${d.riskSizing ? "checked" : ""}> Size by cash risk</span></label><div id="paper-compose-sizing-fields"><div class="plan-fields">${field("riskBudget", "Risk budget (USDT)")}${field("maxNotional", "Entry notional cap (USDT, before fees)")}${field("quantityStep", "Quantity increment (base asset)")}${percentFields.map((key, i) => field(key, `Target ${i + 1} allocation (%)`)).join("")}</div><button id="paper-compose-calculate">Calculate quantity</button><p class="footnote">Sizing uses entry plus slippage, stop minus slippage and fees on both fills. Stop risk is a scenario, not a guaranteed loss cap. Choose the quantity increment explicitly; exchange lot sizes are not fetched. Calculate again after changing inputs, then Review order to check account cash and limits.</p></div></div><div id="paper-compose-sizing-result"></div><div class="searchbar"><button id="paper-compose-load">Load chart · seed blank levels</button><button id="paper-compose-fit">Fit draft levels</button><button id="paper-compose-review">Review order</button><button id="paper-compose-submit">Queue reviewed order</button><button id="paper-compose-check">Check submission</button><button id="paper-compose-new">New draft</button></div><p class="footnote" id="paper-compose-notice" role="status"></p><p class="paper-monitor-error" id="paper-compose-error" role="alert"></p><div id="paper-compose-review-body"></div><p class="footnote" id="paper-compose-chart-status"></p><div id="paper-compose-chart" aria-label="New paper order chart"></div><p class="footnote">Drag the amber price and optional red stop/green targets, or type exact values. Loading seeds only blank levels from the last settled close: entry at close, stop 2% below and targets 2%, 4% and 6% above. These are editable starting values. Candles never trigger fills. Review checks current funds, holdings and risk limits without reserving anything; Queue submits the reviewed order. A running monitor can then fill it. A single target uses the full entry quantity. With two or three targets in manual sizing, enter each quantity explicitly; the total must match the entry and prices must increase above it. Each target has its own linked stop slice and activates only after the entry fills. No exchange orders.</p></section>`;
 }
 export function bindPaperComposer({
   s,
@@ -104,6 +121,24 @@ export function bindPaperComposer({
     generation = 0,
     syncing = false,
     lines = new Map();
+  const sizingEnabled = () =>
+    d.mode === "buy-limit" && d.bracket && d.riskSizing;
+  const sizingArgs = () => ({
+    symbol: d.symbol.trim().toUpperCase(),
+    price: Number(d.price),
+    stop: Number(d.stop),
+    riskBudget: Number(d.riskBudget),
+    maxNotional: Number(d.maxNotional),
+    quantityStep: Number(d.quantityStep),
+    feePercent: Number(d.feePercent),
+    slippage: Number(d.slippage),
+    targets: selectedTargets(d).map(([price], i) => ({
+      price: Number(d[price]),
+      percent: Number(d.targetCount) === 1 ? 100 : Number(d[percentFields[i]]),
+    })),
+  });
+  const sized = () =>
+    !sizingEnabled() || d.sizing?.fingerprint === JSON.stringify(sizingArgs());
   const input = () => ({
     symbol: d.symbol.trim().toUpperCase(),
     side: d.mode === "buy-limit" ? "buy" : "sell",
@@ -155,17 +190,32 @@ export function bindPaperComposer({
     for (const k of keys) el(k).disabled = frozen;
     el("bracket-label").hidden = d.mode !== "buy-limit";
     const linked = d.mode === "buy-limit" && d.bracket;
+    el("sizing-controls").hidden = !linked;
+    el("sizing-fields").hidden = !sizingEnabled();
+    el("calculate").disabled = frozen || !sizingEnabled();
+    el("quantity").readOnly = sizingEnabled();
+    percentFields.forEach((key, i) => {
+      el(key).parentElement.hidden = i >= Number(d.targetCount);
+      el(key).readOnly = Number(d.targetCount) === 1;
+      el(key).value = Number(d.targetCount) === 1 && i === 0 ? "100" : d[key];
+    });
+    el("sizing-result").innerHTML = sizingEnabled()
+      ? d.sizing && sized()
+        ? `<p class="footnote"><strong>Calculated quantity ${esc(d.sizing.result.quantity)}</strong> · modeled stop loss ${esc(Number(d.sizing.result.risk.toPrecision(12)))} / ${esc(d.sizing.result.riskBudget)} USDT budget · scenario entry cost including fees ${esc(Number(d.sizing.result.estimatedEntryCost.toPrecision(12)))} USDT. ${d.sizing.result.targets.map((t, i) => `Target ${i + 1}: ${esc(t.quantity)}`).join(" · ")}. ${d.sizing.result.warnings.map(esc).join(" ")}</p>`
+        : '<p class="footnote">Calculate quantity for the current inputs before reviewing. Displayed quantities may be from an earlier draft.</p>'
+      : "";
     el("stop").parentElement.hidden = !linked;
     el("target-count-label").hidden = !linked;
     targetFields.forEach(([price, quantity], i) => {
       for (const k of [price, quantity])
         el(k).parentElement.hidden = !linked || i >= Number(d.targetCount);
-      el(quantity).readOnly = Number(d.targetCount) === 1;
+      el(quantity).readOnly = sizingEnabled() || Number(d.targetCount) === 1;
       el(quantity).value =
         Number(d.targetCount) === 1 && i === 0 ? d.quantity : d[quantity];
     });
     for (const k of ["load", "review", "fit"]) el(k).disabled = frozen;
-    el("submit").disabled = frozen || !d.preview || stale;
+    el("review").disabled = frozen || !sized();
+    el("submit").disabled = frozen || !d.preview || stale || !sized();
     el("check").disabled = busy || !d.attempt || d.attempt.confirmed;
     el("new").disabled = busy || (!!d.attempt && !d.attempt.confirmed);
     el("notice").textContent = d.attempt?.confirmed
@@ -197,6 +247,7 @@ export function bindPaperComposer({
     }
   };
   const changed = () => {
+    d.sizing = null;
     d.preview = null;
     d.error = "";
     d.requestId = crypto.randomUUID();
@@ -318,7 +369,9 @@ export function bindPaperComposer({
     });
   for (const k of keys)
     el(k).oninput = (e) => {
-      d[k] = k === "bracket" ? e.target.checked : e.target.value;
+      d[k] = ["bracket", "riskSizing"].includes(k)
+        ? e.target.checked
+        : e.target.value;
       if (k === "symbol") {
         d.dataset = null;
         d.price = "";
@@ -378,9 +431,32 @@ export function bindPaperComposer({
         throw e;
       }
     });
+  el("calculate").onclick = () =>
+    run(async () => {
+      if (!sizingEnabled())
+        throw Error("Cash-risk sizing requires a limit buy with linked exits.");
+      const args = sizingArgs(),
+        fingerprint = JSON.stringify(args);
+      changed();
+      const result = await call("paperSize", args);
+      if (!valid() || fingerprint !== JSON.stringify(sizingArgs())) return;
+      d.quantity = String(result.order.quantity);
+      el("quantity").value = d.quantity;
+      selectedTargets(d).forEach(([, quantity], i) => {
+        d[quantity] = String(result.order.bracket.targets[i].quantity);
+        el(quantity).value = d[quantity];
+      });
+      d.sizing = { fingerprint, result };
+      s.message =
+        "Quantity calculated. Review the order to validate account cash and limits.";
+    });
   el("fit").onclick = () => syncLines(true);
   el("review").onclick = () =>
     run(async () => {
+      if (!sized())
+        throw Error(
+          "Calculate quantity for the current inputs before reviewing.",
+        );
       const proposed = input(),
         fingerprint = JSON.stringify(proposed);
       d.preview = null;
@@ -397,6 +473,7 @@ export function bindPaperComposer({
     run(async () => {
       if (
         !d.preview ||
+        !sized() ||
         d.attempt ||
         d.preview.accountRevision !== s.account.revision
       )
@@ -449,7 +526,7 @@ export function bindPaperComposer({
     Object.assign(d, initial(), { symbol, timeframe });
     destroyChart();
     for (const k of keys)
-      if (k === "bracket") el(k).checked = d[k];
+      if (["bracket", "riskSizing"].includes(k)) el(k).checked = d[k];
       else el(k).value = d[k];
     paint();
   };

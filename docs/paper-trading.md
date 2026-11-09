@@ -6,7 +6,7 @@ Account foundation in v0.19.0; monitoring, linked exits and valuation added in v
 
 [Completed trades and performance](paper-performance.md) were added in v0.25.0, grouping each market from flat to flat and keeping open-cycle realized results separate.
 
-[Chart-based order creation](paper-chart-orders.md) was added in v0.26.0, with draggable drafts, read-only reservation/risk validation and explicit queueing; v0.28.0 adds up to three targets with explicit allocations.
+[Chart-based order creation](paper-chart-orders.md) was added in v0.26.0, with draggable drafts, read-only reservation/risk validation and explicit queueing; v0.28.0 adds up to three targets with explicit allocations. v0.29.0 adds [cash-risk sizing](paper-risk-sizing.md) before account review.
 
 ## Workflow
 
@@ -99,6 +99,7 @@ Bounds: one account, 50 pending orders, 1,000 retained orders, 5,000 events, ini
 | `paper_account` | Read | Account, reservations, orders, positions, fills, risk policy/usage and full ledger |
 | `paper_create` | Research | Create the one simulated account |
 | `paper_set_risk` | Research | Replace the complete persistent entry policy with `expectedRevision` |
+| `paper_size` | Read | Calculate a limit-buy bracket from a cash-risk scenario, notional cap and quantity increment |
 | `paper_submit` | Research | Queue a simulated order |
 | `paper_submit_plan` | Research | Queue an entry from an exact saved plan revision; optional `linkedExits` |
 | `paper_process` | Research | Fetch a fresh quote and evaluate one pending order |

@@ -356,6 +356,39 @@ export async function desktopPaperSmoke({ app, page, client, call }) {
         document.querySelector("#paper-compose-chart")?.dataset.ready ===
         "true",
     );
+    const sizing = await call(client, "paper_size", {
+      symbol: "BTCUSDT",
+      price: 80,
+      stop: 70,
+      riskBudget: 4,
+      maxNotional: 24.1,
+      quantityStep: 0.05,
+      feePercent: 0.1,
+      slippage: 0,
+      targets: [
+        { price: 90, percent: 20 },
+        { price: 100, percent: 40 },
+        { price: 110, percent: 40 },
+      ],
+    });
+    assert.equal(sizing.quantity, 0.3);
+    assert.equal((await call(client, "paper_account")).revision, 15);
+    await page.locator("#paper-compose-riskSizing").check();
+    for (const [key, value] of [
+      ["riskBudget", "4"],
+      ["maxNotional", "24.1"],
+      ["quantityStep", "0.05"],
+      ["targetPercent", "20"],
+      ["targetPercent2", "40"],
+      ["targetPercent3", "40"],
+    ])
+      await page.locator(`#paper-compose-${key}`).fill(value);
+    await page.locator("#paper-compose-calculate").click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#paper-compose-sizing-result")
+        ?.textContent.includes("Calculated quantity 0.3"),
+    );
     await page.locator("#paper-compose-review").click();
     await page.waitForFunction(
       () => !document.querySelector("#paper-compose-submit")?.disabled,

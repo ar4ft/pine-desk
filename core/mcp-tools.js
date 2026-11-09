@@ -1,3 +1,4 @@
+import { paperSizingSchema } from "./paper-sizing.js";
 import { paperPerformanceFields } from "./paper-performance.js";
 import { journalInput } from "./paper-journal.js";
 import { paperOrderSchema, paperAmendSchema } from "./paper-account.js";
@@ -123,6 +124,12 @@ export function toolDefinitions() {
     paperAmendSchema.shape,
     "paperAmend",
     false,
+  );
+  tool(
+    "paper_size",
+    "Read-only cash-risk sizing for a long USDT spot limit-buy bracket. Uses the trade-plan scenario model, fees on both fills, adverse slippage and downward quantity-increment rounding. Provide 1–3 target percentages totaling 100; the last gets remaining increments. Rejects empty allocations. Returns a paper order plus modeled risk and costs. No quotes, account/market validation or writes: use paper_preview then research-scoped paper_submit. Stop loss is a scenario, not a guaranteed cap; maxNotional excludes fees.",
+    paperSizingSchema.shape,
+    "paperSize",
   );
   tool(
     "paper_preview",

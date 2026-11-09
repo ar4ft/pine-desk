@@ -371,6 +371,7 @@ test("paper MCP separates read from research and rejects injected quotes or real
         "paper_order_chart",
         "paper_preview",
         "paper_amend_preview",
+        "paper_size",
         "paper_draft_chart",
         "paper_performance",
       ].includes(d.name),

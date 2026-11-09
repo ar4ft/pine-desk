@@ -1,3 +1,4 @@
+import { sizePaperOrder } from "./paper-sizing.js";
 import { paperPerformance } from "./paper-performance.js";
 import { paperOrderChart, paperDraftChart } from "./paper-order-chart.js";
 import { paperHistoryStorage } from "./paper-history-storage.js";
@@ -230,6 +231,8 @@ export async function dispatch(action, args = {}) {
         requestId: args.requestId,
         input: args.input,
       });
+    case "paperSize":
+      return sizePaperOrder(args);
     case "paperPreview":
       return paperAccount.preview(args);
     case "paperDraftChart":

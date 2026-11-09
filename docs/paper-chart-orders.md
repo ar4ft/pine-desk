@@ -1,13 +1,15 @@
 # Create paper orders on a chart
 
-Added in v0.26.0 under **Research → Paper trading → Create a paper order on the chart**. v0.28.0 adds up to three target allocations. This is a separate draft from the existing order form and pending-order editor.
+Added in v0.26.0 under **Research → Paper trading → Create a paper order on the chart**. v0.28.0 adds up to three target allocations; v0.29.0 adds [cash-risk sizing](paper-risk-sizing.md). This is a separate draft from the existing order form and pending-order editor.
 
 1. Choose a Binance USDT spot market, order type, quantity, fees and slippage. Supported chart orders are **limit buy**, **limit exit** and **sell stop**. Exits require available held quantity.
-2. Optionally enable linked exits for a limit buy and choose **Targets: 1, 2 or 3**. One target automatically uses the full entry quantity (shown read-only). With two or three targets, enter every allocation explicitly; positive quantities must sum to the entry quantity. Targets must progress upward above the entry price. Each allocation becomes its own stop/target OCO pair after the entry fills.
+2. Optionally enable linked exits for a limit buy and choose **Targets: 1, 2 or 3**. One target automatically uses the full entry quantity (shown read-only). With two or three targets in manual sizing, enter every allocation explicitly; positive quantities must sum to the entry quantity. Targets must progress upward above the entry price. Each allocation becomes its own stop/target OCO pair after the entry fills.
 3. Press **Load chart · seed blank levels**. This fetches up to 300 settled candles for the draft's market and interval. Only blank price fields are seeded: entry at the last settled close, stop 2% below, selected targets 2%, 4% and 6% above. These are editable starting values, not a strategy signal or live execution price.
 4. Drag the amber price, red stop or any green target, or type exact values. **Fit draft levels** includes their prices in the chart scale. Changing markets clears prices and the old chart; changing interval preserves prices but clears the old candles until reloaded. Deleting a drawing recreates its draft level and does not remove a linked exit.
 5. Press **Review order**. The owning service checks the current account revision, active Binance market, available cash/holdings, fees, order capacity, bracket price/quantity rules and entry risk limits using the same submission validation. It returns reservation impact without writing an order or reserving funds.
 6. Inspect the reviewed order, costs and account revision, then press **Queue reviewed order**. A changed draft invalidates the review. A changed account disables Queue until you review again. The backend checks all rules again when queueing.
+
+**Size by cash risk** optionally calculates entry and target quantities from a USDT loss scenario, notional cap, quantity increment and target percentages. Calculate again after changing inputs, then Review and Queue. See [sizing formulas, limitations and MCP](paper-risk-sizing.md).
 
 Changing target count invalidates the review and updates visible chart levels. Hidden target drafts are preserved during the session but excluded from the submitted bracket; returning to one target assigns the full entry quantity. Returning to multiple targets restores their explicit drafts, which must be reviewed again. Changing entry quantity does not rebalance multiple allocations. Changing market clears all draft prices; changing interval preserves them.
 
@@ -59,4 +61,4 @@ Example preview (replace the revision and price assumptions):
 
 The response includes the parsed input, `accountRevision`, available cash before/after, additional cash/quantity reservation, and projected risk usage. These are hypothetical reservations only. Use the existing **research-scoped** `paper_submit` with the reviewed input, revision and a stable `requestId` to queue. Read-only clients can preview but cannot submit. Never use candle highs/lows as evidence of a live fill.
 
-Chart creation introduced no new archive format. Account version 5 applies since v0.27.0; see [quantity editing](paper-order-quantity.md) for migration details. Existing order limits apply. Chart-based sizing by cash risk, trailing stops, retrospective linked exits on existing holdings, and options paper execution remain separate work.
+Chart creation introduced no new archive format. Account version 5 applies since v0.27.0; see [quantity editing](paper-order-quantity.md) for migration details. Existing order limits apply. Trailing stops, retrospective linked exits on existing holdings, and options paper execution remain separate work.

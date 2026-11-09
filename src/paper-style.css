@@ -232,3 +232,14 @@
 #paper-composer .footnote {
   overflow-wrap: anywhere;
 }
+
+#paper-compose-sizing-controls > label {
+  display: block;
+  margin: 0 16px;
+}
+#paper-compose-riskSizing {
+  width: auto;
+}
+#paper-compose-calculate {
+  margin: 0 16px 16px;
+}
